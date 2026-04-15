@@ -158,6 +158,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       "--localhost",
       "--port",
       String(METRO_PORT),
+      "--non-interactive",
     ],
     {
       stdio: ["ignore", "pipe", "pipe"],
