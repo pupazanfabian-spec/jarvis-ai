@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   Platform,
   ScrollView,
@@ -36,6 +37,8 @@ export default function FileUploadModal({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const successAnim = useRef(new Animated.Value(0)).current;
 
   const pickFile = async () => {
     try {
@@ -79,8 +82,15 @@ export default function FileUploadModal({
 
       setStatus('Jarvis studiază documentul...');
       await onAddDocument(name, content);
-      setStatus('');
       setLoading(false);
+      setStatus('');
+      setShowSuccess(true);
+      successAnim.setValue(0);
+      Animated.sequence([
+        Animated.spring(successAnim, { toValue: 1, tension: 120, friction: 8, useNativeDriver: true }),
+        Animated.delay(2000),
+        Animated.timing(successAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start(() => setShowSuccess(false));
     } catch (err: unknown) {
       setLoading(false);
       setStatus('Eroare la citirea fișierului. Încearcă un fișier .txt');
@@ -182,6 +192,16 @@ export default function FileUploadModal({
             ))
           )}
         </ScrollView>
+
+        {showSuccess && (
+          <Animated.View style={[styles.successToast, {
+            opacity: successAnim,
+            transform: [{ scale: successAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+          }]}>
+            <Feather name="check-circle" size={16} color={colors.success} />
+            <Text style={styles.successText}>Document adăugat cu succes!</Text>
+          </Animated.View>
+        )}
       </View>
     </Modal>
   );
@@ -321,5 +341,29 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     padding: 6,
+  },
+  successToast: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.success + '44',
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  successText: {
+    color: colors.success,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

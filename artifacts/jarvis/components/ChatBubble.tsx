@@ -287,6 +287,7 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
     Clipboard.setString(code);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCopied(true);
+    copyAnim.setValue(0);
     Animated.sequence([
       Animated.timing(copyAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.delay(1500),
@@ -326,6 +327,9 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
 
   return (
     <View style={codeStyles.wrapper}>
+      <Animated.View style={[codeStyles.copyFlash, {
+        opacity: copyAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.15, 0] }),
+      }]} pointerEvents="none" />
       <View style={codeStyles.header}>
         <View style={codeStyles.dots}>
           <View style={[codeStyles.dot, { backgroundColor: '#FF5F57' }]} />
@@ -518,11 +522,12 @@ function MessageContextMenu({
   );
 }
 
-function CopyToast({ visible }: { visible: boolean }) {
+function FeedbackToast({ visible, icon, label, color }: { visible: boolean; icon: 'check-circle' | 'share-2' | 'upload'; label: string; color: string }) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
+      anim.setValue(0);
       Animated.sequence([
         Animated.spring(anim, { toValue: 1, tension: 120, friction: 8, useNativeDriver: true }),
         Animated.delay(1200),
@@ -537,9 +542,10 @@ function CopyToast({ visible }: { visible: boolean }) {
     <Animated.View style={[toastStyles.container, {
       opacity: anim,
       transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+      borderColor: color + '44',
     }]}>
-      <Feather name="check-circle" size={14} color={colors.success} />
-      <Text style={toastStyles.text}>Copiat!</Text>
+      <Feather name={icon} size={14} color={color} />
+      <Text style={[toastStyles.text, { color }]}>{label}</Text>
     </Animated.View>
   );
 }
@@ -551,6 +557,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [copied, setCopiedMsg] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [showShareToast, setShowShareToast] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -592,6 +599,8 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
       await writeAsStringAsync(path, message.content);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/plain', dialogTitle: 'Trimite mesajul' });
+      setShowShareToast(true);
+      setTimeout(() => setShowShareToast(false), 2000);
     } catch {
       /* ignore share failures */
     }
@@ -641,7 +650,8 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
           {!isUser && <View style={styles.aiTail} />}
         </TouchableOpacity>
       </Animated.View>
-      <CopyToast visible={showCopyToast} />
+      <FeedbackToast visible={showCopyToast} icon="check-circle" label="Copiat!" color={colors.success} />
+      <FeedbackToast visible={showShareToast} icon="share-2" label="Trimis!" color={colors.accent} />
     </>
   );
 });
@@ -795,4 +805,10 @@ const codeStyles = StyleSheet.create({
   codeLines: { flex: 1 },
   codeLine: { flexDirection: 'row', flexWrap: 'wrap', minHeight: 20 },
   token: { fontSize: 12, fontFamily: 'monospace', lineHeight: 20 },
+  copyFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.success,
+    borderRadius: 10,
+    zIndex: 10,
+  },
 });
