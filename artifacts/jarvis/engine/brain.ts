@@ -1440,7 +1440,7 @@ export function processMessage(
   }
 
   // ── 10. Memorie ───────────────────────────────────────────────────────────
-  if (['memorie_salveaza', 'memorie_citeste', 'memorie_sterge'].includes(intent)) {
+  if (['memorie_salveaza', 'memorie_citeste', 'memorie_sterge', 'memorie_uita_specific', 'folder_acorda_acces', 'folder_listeaza', 'folder_actualizeaza'].includes(intent)) {
     const r = handleMemory(intent as Intent, trimmed, state);
     if (r) {
       selfUpdate(trimmed, r, state.selfKnowledge, messageHistory, intent);

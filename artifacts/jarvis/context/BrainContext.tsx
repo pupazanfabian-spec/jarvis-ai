@@ -189,7 +189,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         memoryRef.current = await loadMemory();
 
         // 8. Inițializează memoria pe fișiere (jarvis_memory/) + migrare one-time
-        initMemoryFolder().then(() => migrateMemoryFolder()).catch(() => {});
+        await initMemoryFolder();
+        migrateMemoryFolder().catch(() => {});
 
         // 9. Sincronizează entitățile din SQLite → entityTracker (non-blocking)
         _syncEntitiesFromDB(brainRef.current);

@@ -72,7 +72,13 @@ export async function removeExternalFolder(uri: string): Promise<void> {
   await saveFolders(folders.filter(f => f.uri !== uri));
 }
 
-const TEXT_EXTENSIONS = ['.txt', '.md', '.json', '.csv', '.log', '.xml', '.html', '.js', '.ts', '.py', '.java', '.c', '.cpp', '.h', '.css', '.sql', '.yaml', '.yml', '.ini', '.cfg', '.env', '.sh', '.bat'];
+const TEXT_EXTENSIONS = ['.txt', '.md', '.json', '.csv', '.log', '.xml', '.html', '.js', '.ts', '.py', '.java', '.c', '.cpp', '.h', '.css', '.sql', '.yaml', '.yml', '.ini', '.cfg', '.sh', '.bat'];
+
+const SENSITIVE_PATTERNS = /^\.env|\.pem$|\.key$|\.secret|password|credentials|\.p12$|\.pfx$|\.jks$/i;
+
+function isSensitiveFile(name: string): boolean {
+  return SENSITIVE_PATTERNS.test(name);
+}
 
 function isTextFile(name: string): boolean {
   const lower = name.toLowerCase();
@@ -120,7 +126,7 @@ export async function scanAndProcessFolder(
     const files = await StorageAccessFramework.readDirectoryAsync(folderUri);
     const textFiles = files.filter(f => {
       const name = decodeURIComponent(f.split('%2F').pop() || f);
-      return isTextFile(name);
+      return isTextFile(name) && !isSensitiveFile(name);
     });
 
     for (let i = 0; i < textFiles.length; i++) {
