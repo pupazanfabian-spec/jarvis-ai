@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "Jarvis AI",
+    "slug": "jarvis",
+    "version": "3.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "jarvis",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.jarvis.ai",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Jarvis poate citi fisiere si imagini din galerie.",
+        "NSCameraUsageDescription": "Jarvis poate fotografia ecranul sau obiecte pentru a citi si memora text.",
+        "NSDocumentsFolderUsageDescription": "Jarvis stocheaza modelul AI local."
+      }
+    },
+    "android": {
+      "backgroundColor": "#0A0A0F",
+      "package": "com.jarvis.ai",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ],
+      "usesCleartextTraffic": false
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
