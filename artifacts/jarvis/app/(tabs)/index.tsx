@@ -29,7 +29,6 @@ import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
 import { useBrain } from '@/context/BrainContext';
-import { getMemoryStats } from '@/engine/memoryFolder';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
 import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';

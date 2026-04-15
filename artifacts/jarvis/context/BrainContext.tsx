@@ -517,7 +517,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         .slice(0, 10)
         .map(x => x.f);
       const memFacts = getRelevantMemories(memoryRef.current, text, 10);
-      const folderFacts = searchMemoryFolder(text, 10, true);
+      const folderFacts = searchMemoryFolder(text, 10);
       const combinedFacts = [...new Set([...rankedFacts, ...memFacts, ...folderFacts])].slice(0, 20);
       const ctx: JarvisContext = {
         userName: brain.userName ?? undefined,
