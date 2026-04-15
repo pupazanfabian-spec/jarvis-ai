@@ -110,7 +110,7 @@ class Stiva<T> {
   size(): number { return this.items.length; }
 }
 
-const user = creeazaUtilizator(1, "Jarvis", "axon@ai.ro");
+const user = creeazaUtilizator(1, "Jarvis", "jarvis@ai.ro");
 console.log("Utilizator:", user);
 const stiva = new Stiva<number>();
 [1, 2, 3].forEach(n => stiva.push(n));
