@@ -267,7 +267,7 @@ export async function callChatGPT(
     messages.push({ role: 'user', content: prompt });
 
     const openaiBody = {
-      model: 'gpt-4o',
+      model: 'gpt-4.1-mini',
       messages,
       max_tokens: 1200,
       temperature: 0.7,

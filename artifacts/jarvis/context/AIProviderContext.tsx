@@ -129,7 +129,7 @@ export function useAIProvider() {
 // Helper: icon și label pentru provider
 export function providerLabel(provider: AIProvider): string {
   if (provider === 'gemini') return 'Gemini 1.5 Flash';
-  if (provider === 'openai') return 'ChatGPT (GPT-4o mini)';
+  if (provider === 'openai') return 'ChatGPT (GPT-4.1 mini)';
   return 'Fără AI cloud';
 }
 

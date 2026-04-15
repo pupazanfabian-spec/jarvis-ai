@@ -42,6 +42,7 @@ import {
   getActiveProject, buildProjectContext, formatProjectSummary,
   createProject, addProjectStep, saveProjectFile,
 } from '@/engine/projectMemory';
+import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, type MemoryStore } from '@/engine/memory';
 import { useDevMode } from '@/context/DevModeContext';
 
 interface BrainContextType {
@@ -109,6 +110,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [dbReady, setDbReady] = useState(false);
   const brainRef = useRef<BrainState>(createInitialBrainState());
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
+  const memoryRef = useRef<MemoryStore>({ entries: [] });
   const loaded = useRef(false);
   const { generate: llmGenerate, status: llmStatus } = useLLM();
   const { generate: aiGenerate, settings: aiSettings } = useAIProvider();
@@ -179,13 +181,17 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
 
-        // 7. Sincronizează entitățile din SQLite → entityTracker (non-blocking)
+        // 7. Încarcă memoria JSON persistentă
+        memoryRef.current = await loadMemory();
+
+        // 8. Sincronizează entitățile din SQLite → entityTracker (non-blocking)
         _syncEntitiesFromDB(brainRef.current);
 
       } catch (e) {
         // Fallback la AsyncStorage dacă SQLite nu funcționează
         if (__DEV__) console.warn('[Jarvis] SQLite init failed, falling back to AsyncStorage:', e);
         setDbReady(false);
+        memoryRef.current = await loadMemory();
         try {
           const [asMsgs, asState] = await Promise.all([
             AsyncStorage.getItem(MESSAGES_KEY),
@@ -410,12 +416,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         .sort((a, b) => b.score - a.score)
         .slice(0, 10)
         .map(x => x.f);
+      const memFacts = getRelevantMemories(memoryRef.current, text, 10);
+      const combinedFacts = [...new Set([...rankedFacts, ...memFacts])].slice(0, 15);
       const ctx: JarvisContext = {
         userName: brain.userName ?? undefined,
         preferredStyle: brain.selfKnowledge.preferredStyle,
         topTopics: Object.entries(brain.selfKnowledge.topicFrequency)
           .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
-        learnedFacts: rankedFacts,
+        learnedFacts: combinedFacts,
         inferenceRules: brain.inferenceEngine.rules
           .filter(r => r.confidence > 0.7).slice(-5).map(r => r.subject + ' ' + r.predicate),
         entities: brain.entityTracker.entities
@@ -431,6 +439,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       autoLearnFromWeb(cloudResult.text, cloudResult.provider, text);
       const STRUCTURED_FACT = /\b(este|sunt|are|poate|reprezintă|înseamnă|conține|produce|provoacă|implică)\b/i;
       const brain = brainRef.current;
+      let memoryChanged = false;
       cloudResult.text.split(/[.!\n]/).map(s => s.trim())
         .filter(s => s.length > 25 && s.length < 220 && STRUCTURED_FACT.test(s) && !brain.selfKnowledge.learnedFacts.includes(s))
         .slice(0, 3)
@@ -438,7 +447,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           if (brain.selfKnowledge.learnedFacts.length < 200) brain.selfKnowledge.learnedFacts.push(sent);
           const bestRule = extractRulesFromFact(sent, 'deduced').find(r => r.confidence >= 0.75);
           if (bestRule) addFact(brain.inferenceEngine, sent, 'deduced');
+          const updated = addMemoryEntry(memoryRef.current, sent, cloudResult.provider);
+          if (updated !== memoryRef.current) {
+            memoryRef.current = updated;
+            memoryChanged = true;
+          }
         });
+      if (memoryChanged) saveMemory(memoryRef.current);
     };
 
     // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
