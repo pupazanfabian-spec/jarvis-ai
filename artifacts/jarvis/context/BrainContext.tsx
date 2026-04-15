@@ -43,7 +43,7 @@ import {
   createProject, addProjectStep, saveProjectFile,
 } from '@/engine/projectMemory';
 import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, type MemoryStore } from '@/engine/memory';
-import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats } from '@/engine/memoryFolder';
+import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
@@ -471,6 +471,40 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Interceptează acțiunile de memorie și folosește memoryFolder (canonic)
+    if (response.startsWith('JARVIS_MEM_ACTION:')) {
+      const parts = response.slice('JARVIS_MEM_ACTION:'.length).split('||');
+      const action = parts[0];
+      const param = parts[1] ?? '';
+      try {
+        if (action === 'salveaza') {
+          await writeMemoryEntry(param, 'user', 'general');
+          response = `Reținut: **"${param}"** ✅`;
+        } else if (action === 'citeste') {
+          const allMems = listAllMemories(100);
+          if (allMems.length === 0) {
+            response = 'Nu am notițe salvate. Spune "Reține că..." pentru a adăuga.';
+          } else {
+            const stats = getMemoryStats();
+            const lines = allMems.map((m, i) => `${i + 1}. ${m.fact} *(${m.category})*`);
+            response = `**Memorie (${stats.total} notițe):**\n\n${lines.join('\n')}`;
+          }
+        } else if (action === 'sterge_tot') {
+          const count = await clearAllMemory();
+          response = `Am șters ${count} notițe din memoria permanentă.`;
+        } else if (action === 'uita_specific') {
+          const removed = await deleteMemoryByKeyword(param);
+          if (removed === 0) {
+            response = `Nu am găsit nimic despre "${param}" în memorie.`;
+          } else {
+            response = `Am șters ${removed} notiță/notițe despre "${param}" ✅`;
+          }
+        }
+      } catch {
+        response = '⚠️ Eroare la accesarea memoriei. Încearcă din nou.';
+      }
+    }
+
     // Detectează dacă utilizatorul vrea explicit căutare online
     const wantsOnline = isOnlineIntent(text);
 
@@ -483,7 +517,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         .slice(0, 10)
         .map(x => x.f);
       const memFacts = getRelevantMemories(memoryRef.current, text, 10);
-      const folderFacts = searchMemoryFolder(text, 10);
+      const folderFacts = searchMemoryFolder(text, 10, true);
       const combinedFacts = [...new Set([...rankedFacts, ...memFacts, ...folderFacts])].slice(0, 20);
       const ctx: JarvisContext = {
         userName: brain.userName ?? undefined,
@@ -519,6 +553,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             memoryRef.current = updated;
             memoryChanged = true;
           }
+          writeMemoryEntry(sent, cloudResult.provider, 'fapt').catch(() => {});
         });
       if (memoryChanged) saveMemory(memoryRef.current);
     };

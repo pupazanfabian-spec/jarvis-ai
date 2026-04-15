@@ -35,8 +35,16 @@ export interface MemoryFileEntry {
   fromFile?: string;
 }
 
+interface MemoryIndexEntry {
+  id: string;
+  fact: string;
+  category: MemoryCategory;
+  createdAt: string;
+  source?: string;
+}
+
 interface MemoryIndex {
-  entries: Array<{ id: string; fact: string; category: MemoryCategory; createdAt: string }>;
+  entries: MemoryIndexEntry[];
   lastUpdated: string;
 }
 
@@ -125,6 +133,7 @@ export async function writeMemoryEntry(
     fact: entry.fact,
     category: entry.category,
     createdAt: entry.createdAt,
+    source,
   });
   await saveIndexToDisk(_cachedIndex);
 
@@ -171,12 +180,20 @@ export async function clearAllMemory(): Promise<number> {
   return count;
 }
 
-export function searchMemory(query: string, maxResults = 15): string[] {
-  if (!_cachedIndex || !query.trim()) return [];
-  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  if (words.length === 0) return _cachedIndex.entries.slice(-maxResults).map(e => e.fact);
+const EXTERNAL_FOLDER_SOURCE = 'external-folder';
 
-  const scored = _cachedIndex.entries.map(e => {
+export function searchMemory(query: string, maxResults = 15, excludeExternalFolder = false): string[] {
+  if (!_cachedIndex || !query.trim()) return [];
+
+  let entries = _cachedIndex.entries;
+  if (excludeExternalFolder) {
+    entries = entries.filter(e => e.source !== EXTERNAL_FOLDER_SOURCE);
+  }
+
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  if (words.length === 0) return entries.slice(-maxResults).map(e => e.fact);
+
+  const scored = entries.map(e => {
     const lower = e.fact.toLowerCase();
     let score = 0;
     for (const w of words) {

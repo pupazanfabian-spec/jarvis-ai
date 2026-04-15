@@ -144,7 +144,7 @@ export async function scanAndProcessFolder(
 
         for (const sentence of sentences) {
           const category = categorizeContent(sentence);
-          const written = await writeMemoryEntry(sentence, `fișier: ${fileName}`, category, fileName);
+          const written = await writeMemoryEntry(sentence, 'external-folder', category, fileName);
           if (written) factsExtracted++;
         }
 

@@ -984,28 +984,23 @@ function handleMemory(intent: Intent, text: string, state: BrainState): string |
     if (!m) return 'Spune "Reține că [informație]" și voi memora.';
     const info = m[1].trim();
     state.memory[`mem_${Date.now()}`] = info;
-    return `Reținut: **"${info}"** ✅`;
+    return `JARVIS_MEM_ACTION:salveaza||${info}`;
   }
   if (intent === 'memorie_citeste') {
-    const mems = Object.entries(state.memory).filter(([k]) => k.startsWith('mem_')).map(([, v]) => v);
-    if (mems.length === 0) return 'Nu am notițe salvate. Spune "Reține că..." pentru a adăuga.';
-    return `**Notițe salvate:**\n\n${mems.map((m, i) => `${i + 1}. ${m}`).join('\n')}`;
+    return 'JARVIS_MEM_ACTION:citeste';
   }
   if (intent === 'memorie_sterge') {
-    const count = Object.keys(state.memory).filter(k => k.startsWith('mem_')).length;
     Object.keys(state.memory).filter(k => k.startsWith('mem_')).forEach(k => delete state.memory[k]);
-    return `Am șters ${count} notițe din memoria internă.`;
+    return 'JARVIS_MEM_ACTION:sterge_tot';
   }
   if (intent === 'memorie_uita_specific') {
     const m = text.match(/(?:uita ca|uita despre|sterge despre|nu mai retine|elimina din memorie)\s+(.+)/i);
     if (!m) return 'Spune "Uită despre [subiect]" și voi șterge informația.';
-    const subject = m[1].trim().toLowerCase();
-    let removed = 0;
+    const subject = m[1].trim();
     Object.entries(state.memory).filter(([k]) => k.startsWith('mem_')).forEach(([k, v]) => {
-      if (v.toLowerCase().includes(subject)) { delete state.memory[k]; removed++; }
+      if (v.toLowerCase().includes(subject.toLowerCase())) { delete state.memory[k]; }
     });
-    if (removed === 0) return `Nu am găsit nimic despre "${subject}" în notițe.`;
-    return `Am șters ${removed} notiță/notițe despre "${subject}" ✅`;
+    return `JARVIS_MEM_ACTION:uita_specific||${subject}`;
   }
   if (intent === 'folder_acorda_acces') {
     return 'JARVIS_FOLDER_ACTION:acorda_acces';
