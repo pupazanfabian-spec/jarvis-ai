@@ -1,6 +1,6 @@
 
-// Jarvis — AI Providers: Gemini + ChatGPT direct calls de pe telefon
-// Fără server intermediar — apeluri directe din aplicație
+// Jarvis — AI Providers: Gemini, ChatGPT, Groq, OpenRouter
+// Apeluri directe din aplicație — fără server intermediar
 // Cheile sunt stocate în Keychain (iOS) / Keystore (Android) via expo-secure-store
 
 import * as SecureStore from 'expo-secure-store';
@@ -11,20 +11,22 @@ import { Platform } from 'react-native';
 
 const GEMINI_KEY_STORAGE = 'jarvis_gemini_api_key';
 const OPENAI_KEY_STORAGE = 'jarvis_openai_api_key';
-// Provider activ nu este sensibil — AsyncStorage e suficient
+const GROQ_KEY_STORAGE = 'jarvis_groq_api_key';
+const OPENROUTER_KEY_STORAGE = 'jarvis_openrouter_api_key';
 const ACTIVE_PROVIDER_STORAGE = '@jarvis_active_provider';
 
-export type AIProvider = 'none' | 'gemini' | 'openai';
+export type AIProvider = 'none' | 'gemini' | 'openai' | 'groq' | 'openrouter';
 
 export interface AIProviderSettings {
   activeProvider: AIProvider;
   geminiKey: string;
   openaiKey: string;
+  groqKey: string;
+  openrouterKey: string;
 }
 
 // ─── Helper SecureStore cu fallback AsyncStorage (web / simulatoare) ────────
 
-// Tracked so UI can surface a warning when secure storage is unavailable
 let _secureStoreFailed = false;
 export function isSecureStoreFallbackActive(): boolean {
   return _secureStoreFailed;
@@ -50,7 +52,6 @@ async function secureSet(key: string, value: string): Promise<void> {
     } else {
       await SecureStore.deleteItemAsync(key);
     }
-    // Clear flag if SecureStore starts working again
     _secureStoreFailed = false;
   } catch (err) {
     _secureStoreFailed = true;
@@ -67,11 +68,13 @@ export async function saveProviderSettings(settings: AIProviderSettings): Promis
   await Promise.all([
     secureSet(GEMINI_KEY_STORAGE, settings.geminiKey),
     secureSet(OPENAI_KEY_STORAGE, settings.openaiKey),
+    secureSet(GROQ_KEY_STORAGE, settings.groqKey),
+    secureSet(OPENROUTER_KEY_STORAGE, settings.openrouterKey),
     AsyncStorage.setItem(ACTIVE_PROVIDER_STORAGE, settings.activeProvider),
   ]);
 }
 
-const VALID_PROVIDERS: AIProvider[] = ['none', 'gemini', 'openai'];
+const VALID_PROVIDERS: AIProvider[] = ['none', 'gemini', 'openai', 'groq', 'openrouter'];
 
 function normalizeProvider(raw: string | null): AIProvider {
   if (raw && (VALID_PROVIDERS as string[]).includes(raw)) return raw as AIProvider;
@@ -79,17 +82,33 @@ function normalizeProvider(raw: string | null): AIProvider {
 }
 
 export async function loadProviderSettings(): Promise<AIProviderSettings> {
-  const [geminiKey, openaiKey, activeProvider] = await Promise.all([
+  const [geminiKey, openaiKey, groqKey, openrouterKey, activeProvider] = await Promise.all([
     secureGet(GEMINI_KEY_STORAGE),
     secureGet(OPENAI_KEY_STORAGE),
+    secureGet(GROQ_KEY_STORAGE),
+    secureGet(OPENROUTER_KEY_STORAGE),
     AsyncStorage.getItem(ACTIVE_PROVIDER_STORAGE),
   ]);
   return {
     geminiKey: geminiKey ?? '',
     openaiKey: openaiKey ?? '',
+    groqKey: groqKey ?? '',
+    openrouterKey: openrouterKey ?? '',
     activeProvider: normalizeProvider(activeProvider),
   };
 }
+
+// ─── Utilitar fetch cu timeout ──────────────────────────────────────────────
+
+const TIMEOUT_MS = 30000;
+
+function fetchTimeout(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
+export type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 
 // ─── Gemini (2.0 Flash → 1.5 Flash fallback chain) ──────────────────────────
 
@@ -101,26 +120,6 @@ const GEMINI_MODELS = [
   'gemini-1.5-flash-latest',
   'gemini-1.5-pro-latest',
 ];
-
-const TIMEOUT_MS = 30000;
-
-const isWeb = Platform.OS === 'web';
-
-function getProxyBase(): string {
-  if (!isWeb) return '';
-  if (typeof window !== 'undefined' && window.location) {
-    return `${window.location.origin}/api`;
-  }
-  return '/api';
-}
-
-function fetchTimeout(url: string, init: RequestInit): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
-
-export type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 
 interface GeminiResult { text: string | null; error: string | null; }
 
@@ -154,22 +153,12 @@ async function callGeminiModel(
     ],
   };
 
-  let resp: Response;
-  if (isWeb) {
-    const proxyUrl = `${getProxyBase()}/ai-proxy/gemini`;
-    resp = await fetchTimeout(proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, apiKey, body: geminiBody }),
-    });
-  } else {
-    const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
-    resp = await fetchTimeout(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(geminiBody),
-    });
-  }
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+  const resp = await fetchTimeout(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(geminiBody),
+  });
 
   const data = await resp.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -249,6 +238,59 @@ export async function testGeminiKeyDetailed(apiKey: string): Promise<{ ok: boole
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
+async function callOpenAICompatible(
+  url: string,
+  apiKey: string,
+  model: string,
+  prompt: string,
+  systemInstruction?: string,
+  history?: ConversationTurn[],
+  extraHeaders?: Record<string, string>,
+): Promise<string | null> {
+  const messages: Array<{ role: string; content: string }> = [];
+  if (systemInstruction) {
+    messages.push({ role: 'system', content: systemInstruction });
+  }
+  for (const turn of (history ?? []).slice(-20)) {
+    messages.push({ role: turn.role, content: turn.content });
+  }
+  messages.push({ role: 'user', content: prompt });
+
+  const body = {
+    model,
+    messages,
+    max_tokens: 1200,
+    temperature: 0.7,
+    top_p: 0.9,
+  };
+
+  const resp = await fetchTimeout(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      ...extraHeaders,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({})) as { error?: { message?: string } };
+    const errMsg = errData?.error?.message ?? `HTTP ${resp.status}`;
+    throw new Error(`${resp.status}::${errMsg}`);
+  }
+
+  const data = await resp.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message?: string };
+  };
+
+  if (data.error) return null;
+
+  const text = data.choices?.[0]?.message?.content?.trim();
+  return text && text.length > 1 ? text : null;
+}
+
 export async function callChatGPT(
   prompt: string,
   apiKey: string,
@@ -257,67 +299,138 @@ export async function callChatGPT(
 ): Promise<string | null> {
   if (!apiKey || apiKey.length < 10) return null;
   try {
-    const messages: Array<{ role: string; content: string }> = [];
-    if (systemInstruction) {
-      messages.push({ role: 'system', content: systemInstruction });
-    }
-    for (const turn of (history ?? []).slice(-20)) {
-      messages.push({ role: turn.role, content: turn.content });
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    const openaiBody = {
-      model: 'gpt-4.1-mini',
-      messages,
-      max_tokens: 1200,
-      temperature: 0.7,
-      top_p: 0.9,
-    };
-
-    let resp: Response;
-    if (isWeb) {
-      const proxyUrl = `${getProxyBase()}/ai-proxy/openai`;
-      resp = await fetchTimeout(proxyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, body: openaiBody }),
-      });
-    } else {
-      resp = await fetchTimeout(OPENAI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(openaiBody),
-      });
-    }
-
-    if (!resp.ok) {
-      if (__DEV__) console.warn('[Jarvis ChatGPT] HTTP error:', resp.status);
-      // Returnează eroarea specifică pentru diagnosticare
-      const errData = await resp.json().catch(() => ({})) as { error?: { message?: string } };
-      const errMsg = errData?.error?.message ?? `HTTP ${resp.status}`;
-      throw new Error(`${resp.status}::${errMsg}`);
-    }
-
-    const data = await resp.json() as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string };
-    };
-
-    if (data.error) {
-      if (__DEV__) console.warn('[Jarvis ChatGPT] API error:', data.error.message);
-      return null;
-    }
-
-    const text = data.choices?.[0]?.message?.content?.trim();
-    return text && text.length > 1 ? text : null;
+    return await callOpenAICompatible(
+      OPENAI_API_URL, apiKey, 'gpt-4.1-mini',
+      prompt, systemInstruction, history,
+    );
   } catch (e) {
-    // Re-throw HTTP errors (cu codul statusului) — prind în testOpenAIKeyDetailed
     if (e instanceof Error && /^\d{3}::/.test(e.message)) throw e;
-    if (__DEV__) console.warn('[Jarvis ChatGPT] callChatGPT failed:', e);
     return null;
+  }
+}
+
+export async function testOpenAIKeyDetailed(apiKey: string): Promise<{ ok: boolean; error: string }> {
+  if (!apiKey || apiKey.trim().length < 15) {
+    return { ok: false, error: 'Cheia este prea scurtă (minim 15 caractere).' };
+  }
+  try {
+    const result = await callChatGPT('Say: ok', apiKey.trim());
+    if (result) return { ok: true, error: '' };
+    return { ok: false, error: 'Cheia nu a returnat răspuns. Verifică creditul contului OpenAI.' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith('401::')) {
+      return { ok: false, error: 'Cheie OpenAI invalidă sau expirată. Obține una nouă din platform.openai.com/api-keys' };
+    }
+    if (msg.startsWith('429::')) {
+      return { ok: false, error: 'Limită de rată depășită. Încearcă din nou în câteva secunde.' };
+    }
+    if (msg.startsWith('402::') || msg.includes('insufficient_quota') || msg.includes('credit')) {
+      return { ok: false, error: 'Cont OpenAI fără credit. Adaugă credit pe platform.openai.com/account/billing' };
+    }
+    if (msg.includes('abort') || msg.includes('timeout')) {
+      return { ok: false, error: 'Timeout — verifică conexiunea la internet.' };
+    }
+    return { ok: false, error: `Eroare conexiune: ${msg.slice(0, 80)}` };
+  }
+}
+
+// ─── Groq (gratuit — Llama 3 / Mixtral) ─────────────────────────────────────
+
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+
+export async function callGroq(
+  prompt: string,
+  apiKey: string,
+  systemInstruction?: string,
+  history?: ConversationTurn[],
+): Promise<string | null> {
+  if (!apiKey || apiKey.length < 10) return null;
+  for (const model of GROQ_MODELS) {
+    try {
+      const result = await callOpenAICompatible(
+        GROQ_API_URL, apiKey, model,
+        prompt, systemInstruction, history,
+      );
+      if (result) return result;
+    } catch (e) {
+      if (e instanceof Error && /^(401|403)::/.test(e.message)) throw e;
+      continue;
+    }
+  }
+  return null;
+}
+
+export async function testGroqKeyDetailed(apiKey: string): Promise<{ ok: boolean; error: string }> {
+  if (!apiKey || apiKey.trim().length < 10) {
+    return { ok: false, error: 'Cheia este prea scurtă.' };
+  }
+  try {
+    const result = await callGroq('Say: ok', apiKey.trim());
+    if (result) return { ok: true, error: '' };
+    return { ok: false, error: 'Niciun model Groq disponibil. Verifică cheia.' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith('401::') || msg.startsWith('403::')) {
+      return { ok: false, error: 'Cheie Groq invalidă. Obține una nouă din console.groq.com/keys' };
+    }
+    if (msg.includes('abort') || msg.includes('timeout')) {
+      return { ok: false, error: 'Timeout — verifică conexiunea la internet.' };
+    }
+    return { ok: false, error: `Eroare: ${msg.slice(0, 80)}` };
+  }
+}
+
+// ─── OpenRouter (modele gratuite: Llama, Mistral, Gemma) ─────────────────────
+
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODELS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'google/gemma-2-9b-it:free',
+];
+
+export async function callOpenRouter(
+  prompt: string,
+  apiKey: string,
+  systemInstruction?: string,
+  history?: ConversationTurn[],
+): Promise<string | null> {
+  if (!apiKey || apiKey.length < 10) return null;
+  for (const model of OPENROUTER_MODELS) {
+    try {
+      const result = await callOpenAICompatible(
+        OPENROUTER_API_URL, apiKey, model,
+        prompt, systemInstruction, history,
+        { 'HTTP-Referer': 'https://jarvis-ai.app', 'X-Title': 'Jarvis AI' },
+      );
+      if (result) return result;
+    } catch (e) {
+      if (e instanceof Error && /^(401|403)::/.test(e.message)) throw e;
+      continue;
+    }
+  }
+  return null;
+}
+
+export async function testOpenRouterKeyDetailed(apiKey: string): Promise<{ ok: boolean; error: string }> {
+  if (!apiKey || apiKey.trim().length < 10) {
+    return { ok: false, error: 'Cheia este prea scurtă.' };
+  }
+  try {
+    const result = await callOpenRouter('Say: ok', apiKey.trim());
+    if (result) return { ok: true, error: '' };
+    return { ok: false, error: 'Niciun model OpenRouter disponibil. Verifică cheia.' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith('401::') || msg.startsWith('403::')) {
+      return { ok: false, error: 'Cheie OpenRouter invalidă. Obține una din openrouter.ai/keys' };
+    }
+    if (msg.includes('abort') || msg.includes('timeout')) {
+      return { ok: false, error: 'Timeout — verifică conexiunea la internet.' };
+    }
+    return { ok: false, error: `Eroare: ${msg.slice(0, 80)}` };
   }
 }
 
@@ -376,7 +489,6 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
   }
 
   if (ctx.entities && ctx.entities.length > 0) {
-    // Entitățile vin pre-filtrate de apelant (rel !== 'eu' = persoane/lucruri menționate)
     const entList = ctx.entities
       .slice(0, 8)
       .map(e => `${e.value} (${e.relation})`)
@@ -421,33 +533,29 @@ export async function callActiveProvider(
 ): Promise<{ text: string; provider: AIProvider } | null> {
   const sys = system ?? JARVIS_SYSTEM_PROMPT;
 
-  // Încearcă providerul activ mai întâi
-  if (settings.activeProvider === 'gemini' && settings.geminiKey) {
+  type ProviderCall = { key: string; call: () => Promise<string | null>; name: AIProvider };
+
+  const providers: ProviderCall[] = [
+    { key: settings.geminiKey, call: () => callGemini(prompt, settings.geminiKey, sys, history), name: 'gemini' },
+    { key: settings.openaiKey, call: () => callChatGPT(prompt, settings.openaiKey, sys, history), name: 'openai' },
+    { key: settings.groqKey, call: () => callGroq(prompt, settings.groqKey, sys, history), name: 'groq' },
+    { key: settings.openrouterKey, call: () => callOpenRouter(prompt, settings.openrouterKey, sys, history), name: 'openrouter' },
+  ];
+
+  const active = providers.find(p => p.name === settings.activeProvider);
+  if (active?.key) {
     try {
-      const text = await callGemini(prompt, settings.geminiKey, sys, history);
-      if (text) return { text, provider: 'gemini' };
+      const text = await active.call();
+      if (text) return { text, provider: active.name };
     } catch {}
-    // Auto-fallback: dacă Gemini eșuează și există cheie OpenAI, încearcă OpenAI
-    if (settings.openaiKey) {
-      try {
-        const text = await callChatGPT(prompt, settings.openaiKey, sys, history);
-        if (text) return { text, provider: 'openai' };
-      } catch {}
-    }
   }
 
-  if (settings.activeProvider === 'openai' && settings.openaiKey) {
+  for (const p of providers) {
+    if (p.name === settings.activeProvider || !p.key) continue;
     try {
-      const text = await callChatGPT(prompt, settings.openaiKey, sys, history);
-      if (text) return { text, provider: 'openai' };
+      const text = await p.call();
+      if (text) return { text, provider: p.name };
     } catch {}
-    // Auto-fallback: dacă OpenAI eșuează și există cheie Gemini, încearcă Gemini
-    if (settings.geminiKey) {
-      try {
-        const text = await callGemini(prompt, settings.geminiKey, sys, history);
-        if (text) return { text, provider: 'gemini' };
-      } catch {}
-    }
   }
 
   return null;
@@ -465,28 +573,12 @@ export async function testOpenAIKey(apiKey: string): Promise<boolean> {
   return ok;
 }
 
-export async function testOpenAIKeyDetailed(apiKey: string): Promise<{ ok: boolean; error: string }> {
-  if (!apiKey || apiKey.trim().length < 15) {
-    return { ok: false, error: 'Cheia este prea scurtă (minim 15 caractere).' };
-  }
-  try {
-    const result = await callChatGPT('Say: ok', apiKey.trim());
-    if (result) return { ok: true, error: '' };
-    return { ok: false, error: 'Cheia nu a returnat răspuns. Verifică creditul contului OpenAI.' };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.startsWith('401::')) {
-      return { ok: false, error: 'Cheie OpenAI invalidă sau expirată. Obține o cheie nouă din platform.openai.com/api-keys' };
-    }
-    if (msg.startsWith('429::')) {
-      return { ok: false, error: 'Limită de rată depășită (Rate limit). Încearcă din nou în câteva secunde.' };
-    }
-    if (msg.startsWith('402::') || msg.includes('insufficient_quota') || msg.includes('credit')) {
-      return { ok: false, error: 'Cont OpenAI fără credit. Adaugă credit pe platform.openai.com/account/billing' };
-    }
-    if (msg.includes('abort') || msg.includes('timeout')) {
-      return { ok: false, error: 'Timeout — verifică conexiunea la internet.' };
-    }
-    return { ok: false, error: `Eroare conexiune: ${msg.slice(0, 80)}` };
-  }
+export async function testGroqKey(apiKey: string): Promise<boolean> {
+  const { ok } = await testGroqKeyDetailed(apiKey);
+  return ok;
+}
+
+export async function testOpenRouterKey(apiKey: string): Promise<boolean> {
+  const { ok } = await testOpenRouterKeyDetailed(apiKey);
+  return ok;
 }

@@ -1,7 +1,4 @@
 
-// Jarvis — Modal configurare Gemini / ChatGPT
-// Cheile se salvează local pe telefon, niciodată pe server
-
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -32,63 +29,122 @@ const PROVIDER_OPTIONS: { id: AIProvider; label: string; icon: FeatherIconName; 
   {
     id: 'none',
     label: 'Fără AI cloud',
-    icon: 'cpu',
+    icon: 'slash',
     desc: 'Jarvis folosește doar cunoașterea locală și căutarea web.',
   },
   {
     id: 'gemini',
     label: 'Gemini Flash (Google)',
     icon: 'zap',
-    desc: 'Gemini 1.5 Flash — gratuit cu cheie din Google AI Studio. Alege automat cel mai bun model disponibil.',
+    desc: 'Gemini 2.0 Flash — gratuit cu cheie din Google AI Studio.',
   },
   {
     id: 'openai',
-    label: 'ChatGPT (GPT-4o)',
+    label: 'ChatGPT (GPT-4.1 mini)',
     icon: 'message-circle',
-    desc: 'Model OpenAI avansat. Necesită cheie API și cont cu credit activ.',
+    desc: 'Model OpenAI avansat. Necesită cheie API cu credit activ.',
+  },
+  {
+    id: 'groq',
+    label: 'Groq (Llama 3.3 / Mixtral)',
+    icon: 'cpu',
+    desc: 'Ultra-rapid și GRATUIT. Llama 3.3 70B. Cheie de la console.groq.com',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter (modele gratuite)',
+    icon: 'globe',
+    desc: 'Acces la modele gratuite: Llama, Mistral, Gemma. Cheie de la openrouter.ai',
   },
 ];
+
+interface KeySectionProps {
+  title: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  showKey: boolean;
+  toggleShow: () => void;
+  onTest: () => void;
+  isTesting: boolean;
+  clearError: () => void;
+}
+
+function KeySection({ title, hint, value, onChange, placeholder, showKey, toggleShow, onTest, isTesting, clearError }: KeySectionProps) {
+  return (
+    <>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardHint}>{hint}</Text>
+        <View style={styles.keyRow}>
+          <View style={styles.keyInputWrapper}>
+            <TextInput
+              style={styles.keyInput}
+              value={value}
+              onChangeText={v => { onChange(v); clearError(); }}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!showKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={toggleShow}>
+              <Feather name={showKey ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.testBtn, (!value.trim() || isTesting) && styles.testBtnDisabled]}
+            onPress={onTest}
+            disabled={!value.trim() || isTesting}
+          >
+            {isTesting
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.testBtnText}>Testează</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+}
 
 export default function AIProviderModal({ visible, onClose }: Props) {
   const {
     settings, isTesting, testError, secureStoreFallback,
-    setActiveProvider, saveGeminiKey, saveOpenAIKey, testKey, clearError,
+    setActiveProvider, saveGeminiKey, saveOpenAIKey, saveGroqKey, saveOpenRouterKey,
+    testKey, clearError,
   } = useAIProvider();
 
   const [geminiInput, setGeminiInput] = useState(settings.geminiKey);
   const [openaiInput, setOpenaiInput] = useState(settings.openaiKey);
+  const [groqInput, setGroqInput] = useState(settings.groqKey);
+  const [openrouterInput, setOpenrouterInput] = useState(settings.openrouterKey);
   const [savingProvider, setSavingProvider] = useState<AIProvider | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [localError, setLocalError] = useState('');
 
-  // Sincronizează inputurile cu setările persitate la fiecare deschidere a modalului
   useEffect(() => {
     if (visible) {
       setGeminiInput(settings.geminiKey);
       setOpenaiInput(settings.openaiKey);
+      setGroqInput(settings.groqKey);
+      setOpenrouterInput(settings.openrouterKey);
       setSuccessMsg('');
       setLocalError('');
     }
-  }, [visible, settings.geminiKey, settings.openaiKey]);
+  }, [visible, settings.geminiKey, settings.openaiKey, settings.groqKey, settings.openrouterKey]);
 
   const handleSelectProvider = async (provider: AIProvider) => {
-    // Gemini/OpenAI require a stored key before activation
-    if (provider === 'gemini' && !settings.geminiKey) {
-      Alert.alert(
-        'Cheie lipsă',
-        'Adaugă și validează o cheie API Gemini mai întâi, apoi poți activa providerul.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-    if (provider === 'openai' && !settings.openaiKey) {
-      Alert.alert(
-        'Cheie lipsă',
-        'Adaugă și validează o cheie API ChatGPT mai întâi, apoi poți activa providerul.',
-        [{ text: 'OK' }]
-      );
+    const keyMap: Record<string, string> = {
+      gemini: settings.geminiKey,
+      openai: settings.openaiKey,
+      groq: settings.groqKey,
+      openrouter: settings.openrouterKey,
+    };
+    if (provider !== 'none' && !keyMap[provider]) {
+      Alert.alert('Cheie lipsă', 'Adaugă și validează o cheie API mai întâi, apoi poți activa providerul.', [{ text: 'OK' }]);
       return;
     }
     setSavingProvider(provider);
@@ -102,41 +158,29 @@ export default function AIProviderModal({ visible, onClose }: Props) {
     }
   };
 
-  const handleTestGemini = async () => {
+  const handleTest = async (
+    provider: 'gemini' | 'openai' | 'groq' | 'openrouter',
+    input: string,
+    saveFn: (k: string) => Promise<void>,
+  ) => {
     clearError();
     setLocalError('');
     setSuccessMsg('');
-    const trimmed = geminiInput.trim();
-    if (trimmed.length < 15) {
-      setLocalError('Cheia este prea scurtă. Lipește cheia completă din Google AI Studio.');
+    const trimmed = input.trim();
+    if (trimmed.length < 10) {
+      setLocalError('Cheia este prea scurtă. Lipește cheia completă.');
       return;
     }
-    const ok = await testKey('gemini', trimmed);
+    const ok = await testKey(provider, trimmed);
     if (ok) {
-      await saveGeminiKey(trimmed);
-      await setActiveProvider('gemini');
-      setSuccessMsg('✅ Gemini activat și funcționează!');
+      await saveFn(trimmed);
+      await setActiveProvider(provider);
+      setSuccessMsg(`✅ ${providerLabel(provider)} activat și funcționează!`);
       setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
 
-  const handleTestOpenAI = async () => {
-    clearError();
-    setLocalError('');
-    setSuccessMsg('');
-    const trimmed = openaiInput.trim();
-    if (trimmed.length < 15) {
-      setLocalError('Cheia este prea scurtă. Lipește cheia completă din platform.openai.com/api-keys');
-      return;
-    }
-    const ok = await testKey('openai', trimmed);
-    if (ok) {
-      await saveOpenAIKey(trimmed);
-      await setActiveProvider('openai');
-      setSuccessMsg('✅ ChatGPT activat și funcționează!');
-      setTimeout(() => setSuccessMsg(''), 3000);
-    }
-  };
+  const toggleKey = (k: string) => setShowKeys(prev => ({ ...prev, [k]: !prev[k] }));
 
   const handleClose = () => {
     clearError();
@@ -148,12 +192,7 @@ export default function AIProviderModal({ visible, onClose }: Props) {
   const displayError = localError || testError;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>AI Cloud Provider</Text>
@@ -164,7 +203,7 @@ export default function AIProviderModal({ visible, onClose }: Props) {
 
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
           <Text style={styles.desc}>
-            Jarvis funcționează complet offline. Dacă adaugi o cheie API, va folosi și AI cloud
+            Jarvis funcționează complet offline. Dacă adaugi o cheie API, va folosi AI cloud
             pentru întrebări complexe. Cheile sunt stocate LOCAL, doar pe telefonul tău.
           </Text>
 
@@ -186,93 +225,66 @@ export default function AIProviderModal({ visible, onClose }: Props) {
                   }
                 </View>
                 <View style={styles.providerInfo}>
-                  <Text style={[styles.providerLabel, isActive && styles.providerLabelActive]}>
-                    {opt.label}
-                  </Text>
+                  <Text style={[styles.providerLabel, isActive && styles.providerLabelActive]}>{opt.label}</Text>
                   <Text style={styles.providerDesc}>{opt.desc}</Text>
                 </View>
-                {isActive && (
-                  <Feather name="check-circle" size={18} color={colors.primary} />
-                )}
+                {isActive && <Feather name="check-circle" size={18} color={colors.primary} />}
               </TouchableOpacity>
             );
           })}
 
-          {/* Gemini Key */}
-          <Text style={styles.sectionTitle}>Cheie API Gemini</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardHint}>
-              Obține gratuit de la{' '}
-              <Text style={styles.link}>aistudio.google.com</Text>
-              {' '}· Apasă 👁 pentru a lipi cheia
-            </Text>
-            <View style={styles.keyRow}>
-              <View style={styles.keyInputWrapper}>
-                <TextInput
-                  style={styles.keyInput}
-                  value={geminiInput}
-                  onChangeText={v => { setGeminiInput(v); setLocalError(''); clearError(); }}
-                  placeholder="AIzaSy... (lipește sau scrie)"
-                  placeholderTextColor={colors.textMuted}
-                  secureTextEntry={!showGeminiKey}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowGeminiKey(v => !v)}>
-                  <Feather name={showGeminiKey ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[styles.testBtn, (!geminiInput.trim() || isTesting) && styles.testBtnDisabled]}
-                onPress={handleTestGemini}
-                disabled={!geminiInput.trim() || isTesting}
-              >
-                {isTesting
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.testBtnText}>Testează</Text>
-                }
-              </TouchableOpacity>
-            </View>
-          </View>
+          <KeySection
+            title="Cheie API Gemini"
+            hint="Obține gratuit de la aistudio.google.com"
+            value={geminiInput}
+            onChange={setGeminiInput}
+            placeholder="AIzaSy... (lipește cheia)"
+            showKey={!!showKeys.gemini}
+            toggleShow={() => toggleKey('gemini')}
+            onTest={() => handleTest('gemini', geminiInput, saveGeminiKey)}
+            isTesting={isTesting}
+            clearError={() => { setLocalError(''); clearError(); }}
+          />
 
-          {/* OpenAI Key */}
-          <Text style={styles.sectionTitle}>Cheie API ChatGPT</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardHint}>
-              Obține de la{' '}
-              <Text style={styles.link}>platform.openai.com/api-keys</Text>
-              {' '}· Apasă 👁 pentru a lipi cheia
-            </Text>
-            <View style={styles.keyRow}>
-              <View style={styles.keyInputWrapper}>
-                <TextInput
-                  style={styles.keyInput}
-                  value={openaiInput}
-                  onChangeText={v => { setOpenaiInput(v); setLocalError(''); clearError(); }}
-                  placeholder="sk-... (lipește sau scrie)"
-                  placeholderTextColor={colors.textMuted}
-                  secureTextEntry={!showOpenAIKey}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowOpenAIKey(v => !v)}>
-                  <Feather name={showOpenAIKey ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[styles.testBtn, (!openaiInput.trim() || isTesting) && styles.testBtnDisabled]}
-                onPress={handleTestOpenAI}
-                disabled={!openaiInput.trim() || isTesting}
-              >
-                {isTesting
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.testBtnText}>Testează</Text>
-                }
-              </TouchableOpacity>
-            </View>
-          </View>
+          <KeySection
+            title="Cheie API ChatGPT"
+            hint="Obține de la platform.openai.com/api-keys"
+            value={openaiInput}
+            onChange={setOpenaiInput}
+            placeholder="sk-... (lipește cheia)"
+            showKey={!!showKeys.openai}
+            toggleShow={() => toggleKey('openai')}
+            onTest={() => handleTest('openai', openaiInput, saveOpenAIKey)}
+            isTesting={isTesting}
+            clearError={() => { setLocalError(''); clearError(); }}
+          />
 
-          {/* Feedback */}
+          <KeySection
+            title="Cheie API Groq (GRATUIT)"
+            hint="Obține gratuit de la console.groq.com/keys — ultra-rapid!"
+            value={groqInput}
+            onChange={setGroqInput}
+            placeholder="gsk_... (lipește cheia)"
+            showKey={!!showKeys.groq}
+            toggleShow={() => toggleKey('groq')}
+            onTest={() => handleTest('groq', groqInput, saveGroqKey)}
+            isTesting={isTesting}
+            clearError={() => { setLocalError(''); clearError(); }}
+          />
+
+          <KeySection
+            title="Cheie API OpenRouter (GRATUIT)"
+            hint="Obține gratuit de la openrouter.ai/keys — modele Llama, Mistral, Gemma"
+            value={openrouterInput}
+            onChange={setOpenrouterInput}
+            placeholder="sk-or-... (lipește cheia)"
+            showKey={!!showKeys.openrouter}
+            toggleShow={() => toggleKey('openrouter')}
+            onTest={() => handleTest('openrouter', openrouterInput, saveOpenRouterKey)}
+            isTesting={isTesting}
+            clearError={() => { setLocalError(''); clearError(); }}
+          />
+
           {displayError ? (
             <View style={styles.errorBox}>
               <Feather name="alert-circle" size={14} color={colors.error} />
@@ -290,14 +302,14 @@ export default function AIProviderModal({ visible, onClose }: Props) {
             <View style={[styles.infoBox, { borderColor: colors.warning + '55', backgroundColor: colors.warning + '18' }]}>
               <Feather name="alert-triangle" size={14} color={colors.warning} />
               <Text style={[styles.infoText, { color: colors.warning }]}>
-                Stocarea securizată (Keychain/Keystore) nu este disponibilă pe acest dispozitiv. Cheile sunt salvate în stocarea locală standard — mai puțin securizată.
+                Stocarea securizată (Keychain/Keystore) nu este disponibilă. Cheile sunt salvate în stocarea locală standard.
               </Text>
             </View>
           )}
           <View style={styles.infoBox}>
             <Feather name="shield" size={14} color={colors.textMuted} />
             <Text style={styles.infoText}>
-              Pe Android/iOS cheile sunt stocate în Keystore/Keychain (zona securizată a sistemului). Pe simulatoare sau web, se folosește stocarea locală standard. Jarvis nu trimite cheile pe niciun server propriu.
+              Pe Android/iOS cheile sunt stocate în Keystore/Keychain (zona securizată). Jarvis nu trimite cheile pe niciun server propriu — toate apelurile merg direct de pe telefonul tău.
             </Text>
           </View>
         </ScrollView>
@@ -351,24 +363,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   cardHint: { fontSize: 12, color: colors.textMuted, fontFamily: 'Inter_400Regular', marginBottom: 10 },
-  link: { color: colors.accent },
   keyRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   keyInputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surfaceHigh,
-    borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.border,
   },
   keyInput: {
-    flex: 1,
-    paddingHorizontal: 12, paddingVertical: 10,
+    flex: 1, paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 13, color: colors.text, fontFamily: 'Inter_400Regular',
   },
-  eyeBtn: {
-    paddingHorizontal: 10, paddingVertical: 10,
-  },
+  eyeBtn: { paddingHorizontal: 10, paddingVertical: 10 },
   testBtn: {
     backgroundColor: colors.primary,
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,

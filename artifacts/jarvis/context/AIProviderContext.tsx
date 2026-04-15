@@ -1,6 +1,6 @@
 
 // Jarvis — Context AI Provider
-// Gestionează setările Gemini / ChatGPT stocate local pe telefon
+// Gestionează setările Gemini / ChatGPT / Groq / OpenRouter stocate local pe telefon
 
 import React, {
   createContext, useCallback, useContext, useEffect, useRef, useState,
@@ -11,6 +11,7 @@ import {
   callActiveProvider,
   loadProviderSettings, saveProviderSettings,
   testGeminiKeyDetailed, testOpenAIKeyDetailed,
+  testGroqKeyDetailed, testOpenRouterKeyDetailed,
   isSecureStoreFallbackActive,
   JARVIS_SYSTEM_PROMPT,
   type ConversationTurn,
@@ -28,7 +29,9 @@ interface AIProviderContextType {
   setActiveProvider: (provider: AIProvider) => Promise<void>;
   saveGeminiKey: (key: string) => Promise<void>;
   saveOpenAIKey: (key: string) => Promise<void>;
-  testKey: (provider: 'gemini' | 'openai', key: string) => Promise<boolean>;
+  saveGroqKey: (key: string) => Promise<void>;
+  saveOpenRouterKey: (key: string) => Promise<void>;
+  testKey: (provider: 'gemini' | 'openai' | 'groq' | 'openrouter', key: string) => Promise<boolean>;
   generate: (prompt: string, system?: string, history?: ConversationTurn[]) => Promise<{ text: string; provider: AIProvider } | null>;
   clearError: () => void;
 }
@@ -40,6 +43,8 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     activeProvider: 'none',
     geminiKey: '',
     openaiKey: '',
+    groqKey: '',
+    openrouterKey: '',
   });
   const [isReady, setIsReady] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -59,7 +64,6 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const persist = useCallback(async (updater: (prev: AIProviderSettings) => AIProviderSettings) => {
-    // Compute next from the latest snapshot — no stale closure, no race
     const next = updater(settingsRef.current);
     settingsRef.current = next;
     setSettings(next);
@@ -78,15 +82,27 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     await persist(prev => ({ ...prev, openaiKey: key.trim() }));
   }, [persist]);
 
-  const testKey = useCallback(async (provider: 'gemini' | 'openai', key: string): Promise<boolean> => {
+  const saveGroqKey = useCallback(async (key: string) => {
+    await persist(prev => ({ ...prev, groqKey: key.trim() }));
+  }, [persist]);
+
+  const saveOpenRouterKey = useCallback(async (key: string) => {
+    await persist(prev => ({ ...prev, openrouterKey: key.trim() }));
+  }, [persist]);
+
+  const testKey = useCallback(async (provider: 'gemini' | 'openai' | 'groq' | 'openrouter', key: string): Promise<boolean> => {
     setIsTesting(true);
     setTestError('');
     try {
-      const { ok, error } = provider === 'gemini'
-        ? await testGeminiKeyDetailed(key.trim())
-        : await testOpenAIKeyDetailed(key.trim());
-      if (!ok) setTestError(error || 'Cheia nu este validă sau nu există conexiune la internet.');
-      return ok;
+      let result: { ok: boolean; error: string };
+      switch (provider) {
+        case 'gemini': result = await testGeminiKeyDetailed(key.trim()); break;
+        case 'openai': result = await testOpenAIKeyDetailed(key.trim()); break;
+        case 'groq': result = await testGroqKeyDetailed(key.trim()); break;
+        case 'openrouter': result = await testOpenRouterKeyDetailed(key.trim()); break;
+      }
+      if (!result.ok) setTestError(result.error || 'Cheia nu este validă sau nu există conexiune la internet.');
+      return result.ok;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setTestError(`Eroare la testare: ${msg.slice(0, 100)}`);
@@ -107,13 +123,13 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
 
   const clearError = useCallback(() => setTestError(''), []);
 
-  // Check SecureStore fallback status after settings load
   const secureStoreFallback = isReady ? isSecureStoreFallbackActive() : false;
 
   return (
     <AIProviderContext.Provider value={{
       settings, isReady, isTesting, testError, secureStoreFallback,
-      setActiveProvider, saveGeminiKey, saveOpenAIKey, testKey, generate, clearError,
+      setActiveProvider, saveGeminiKey, saveOpenAIKey, saveGroqKey, saveOpenRouterKey,
+      testKey, generate, clearError,
     }}>
       {children}
     </AIProviderContext.Provider>
@@ -126,15 +142,18 @@ export function useAIProvider() {
   return ctx;
 }
 
-// Helper: icon și label pentru provider
 export function providerLabel(provider: AIProvider): string {
-  if (provider === 'gemini') return 'Gemini 1.5 Flash';
+  if (provider === 'gemini') return 'Gemini 2.0 Flash';
   if (provider === 'openai') return 'ChatGPT (GPT-4.1 mini)';
+  if (provider === 'groq') return 'Groq (Llama 3.3 70B)';
+  if (provider === 'openrouter') return 'OpenRouter (gratuit)';
   return 'Fără AI cloud';
 }
 
 export function providerIcon(provider: AIProvider): FeatherIconName {
   if (provider === 'gemini') return 'zap';
   if (provider === 'openai') return 'message-circle';
-  return 'cpu';
+  if (provider === 'groq') return 'cpu';
+  if (provider === 'openrouter') return 'globe';
+  return 'slash';
 }
