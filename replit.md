@@ -22,16 +22,19 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### Jarvis AI (`artifacts/jarvis`)
 Expo/React Native mobile AI assistant app (rebranded from Axon AI). Features:
 - **Brain Engine v6**: Knowledge base with 270+ Romanian topics, inference engine, entity tracker, temporal memory, constitution/security system, self-learning, semantic similarity with Romanian stemming
-- **Multi-AI Provider**: Gemini + OpenAI direct API calls with secure key storage (expo-secure-store)
+- **Multi-AI Provider**: Gemini + OpenAI + Groq + OpenRouter direct API calls with secure key storage (expo-secure-store)
 - **On-device LLM**: Phi-3 via llama.rn for offline use (native build only)
 - **Web Search**: Wikipedia RO/EN, DuckDuckGo with 48h SQLite cache
 - **Code Generation**: Dev knowledge and code sandbox features
 - **Local Database**: SQLite via expo-sqlite for all persistent data
+- **Unlimited File Memory**: `engine/memoryFolder.ts` — unlimited CRUD on `jarvis_memory/` folder with `_index.json` index, categories, deduplication, migration from AsyncStorage
+- **External Folder Access**: `engine/externalFolders.ts` — SAF Android folder access, scan/extract text from external files, sensitive file filtering
+- **Auto-Detection**: `autoDetectFacts()` in brain.ts — 18 patterns detect personal info, preferences, relations, plans, opinions from user messages and save automatically
 - **Security**: PIN lock, constitution system, manipulation detection
-- **UI**: Dark theme chat interface with quick actions, memory modal, file upload, AI provider selector, knowledge browser
+- **UI**: Dark theme chat interface with quick actions, memory modal, file upload, AI provider selector, knowledge browser, folder access menu button
 
 Key directories:
-- `engine/` — AI brain, knowledge, inference, entities, temporal memory, web search, code generation
+- `engine/` — AI brain, knowledge, inference, entities, temporal memory, web search, code generation, memoryFolder, externalFolders
 - `context/` — React context providers (Brain, LLM, PIN, AIProvider, DevMode)
 - `components/` — Chat UI components (ChatBubble, QuickActions, modals, etc.)
 - `constants/colors.ts` — Dark theme color palette
