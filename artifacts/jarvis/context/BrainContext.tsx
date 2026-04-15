@@ -58,7 +58,6 @@ interface BrainContextType {
   clearConversation: () => void;
   addDocument: (name: string, content: string) => Promise<void>;
   removeDocument: (id: string) => void;
-  requestFolderAccessAction: () => Promise<string>;
 }
 
 const BrainContext = createContext<BrainContextType | null>(null);
@@ -693,17 +692,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     setIsThinking(false);
   }, [persist]);
 
-  const requestFolderAccessAction = useCallback(async (): Promise<string> => {
-    try {
-      const folder = await requestFolderAccess();
-      if (!folder) return 'Nu s-a acordat acces.';
-      scanAllFolders().catch(() => {});
-      return `Acces acordat la "${folder.name}"! Scanarea a început.`;
-    } catch {
-      return 'Eroare la acordarea accesului.';
-    }
-  }, []);
-
   const removeDocument = useCallback((id: string) => {
     brainRef.current.learnedDocuments = brainRef.current.learnedDocuments.filter(d => d.id !== id);
     setBrainState({ ...brainRef.current });
@@ -754,7 +742,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     <BrainContext.Provider value={{
       messages, isThinking, webSearching, brainState, dbReady,
       sendMessage, clearConversation, addDocument, removeDocument,
-      requestFolderAccessAction,
     }}>
       {children}
     </BrainContext.Provider>

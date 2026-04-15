@@ -100,7 +100,6 @@ export default function ChatScreen() {
   const {
     messages, isThinking, webSearching, brainState,
     sendMessage, clearConversation, addDocument, removeDocument,
-    requestFolderAccessAction,
   } = useBrain();
 
   const { isLocked, hasPin, pinLoaded, unlock, setPin, removePin, lock } = usePin();
@@ -402,17 +401,21 @@ export default function ChatScreen() {
               <Text style={styles.menuItemText}>Consolă cod</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMoreMenu(false);
-                sendMessage('acordă acces la folder').catch(() => {});
-              }}
-            >
-              <Feather name="folder-plus" size={18} color="#FFA500" />
-              <Text style={styles.menuItemText}>Acordă acces la folder</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
+            {Platform.OS === 'android' && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMoreMenu(false);
+                    sendMessage('acordă acces la folder').catch(() => {});
+                  }}
+                >
+                  <Feather name="folder-plus" size={18} color="#FFA500" />
+                  <Text style={styles.menuItemText}>Acordă acces la folder</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            )}
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => { setShowMoreMenu(false); handlePinButton(); }}
