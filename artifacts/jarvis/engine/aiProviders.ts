@@ -102,7 +102,17 @@ const GEMINI_MODELS = [
   'gemini-1.5-pro-latest',
 ];
 
-const TIMEOUT_MS = 25000;
+const TIMEOUT_MS = 30000;
+
+const isWeb = Platform.OS === 'web';
+
+function getProxyBase(): string {
+  if (!isWeb) return '';
+  if (typeof window !== 'undefined' && window.location) {
+    return `${window.location.origin}/api`;
+  }
+  return '/api';
+}
 
 function fetchTimeout(url: string, init: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
@@ -121,9 +131,6 @@ async function callGeminiModel(
   systemInstruction?: string,
   history?: ConversationTurn[],
 ): Promise<GeminiResult> {
-  const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
-
-  // Build multi-turn contents array (max 20 turns)
   const turns = (history ?? []).slice(-20);
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
     ...turns.map(t => ({
@@ -133,7 +140,7 @@ async function callGeminiModel(
     { role: 'user', parts: [{ text: prompt }] },
   ];
 
-  const body = {
+  const geminiBody = {
     contents,
     ...(systemInstruction
       ? { systemInstruction: { parts: [{ text: systemInstruction }] } }
@@ -147,11 +154,22 @@ async function callGeminiModel(
     ],
   };
 
-  const resp = await fetchTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let resp: Response;
+  if (isWeb) {
+    const proxyUrl = `${getProxyBase()}/ai-proxy/gemini`;
+    resp = await fetchTimeout(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, apiKey, body: geminiBody }),
+    });
+  } else {
+    const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+    resp = await fetchTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiBody),
+    });
+  }
 
   const data = await resp.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -243,13 +261,12 @@ export async function callChatGPT(
     if (systemInstruction) {
       messages.push({ role: 'system', content: systemInstruction });
     }
-    // Adaugă istoricul conversației (max 20 turn-uri)
     for (const turn of (history ?? []).slice(-20)) {
       messages.push({ role: turn.role, content: turn.content });
     }
     messages.push({ role: 'user', content: prompt });
 
-    const body = {
+    const openaiBody = {
       model: 'gpt-4o',
       messages,
       max_tokens: 1200,
@@ -257,14 +274,24 @@ export async function callChatGPT(
       top_p: 0.9,
     };
 
-    const resp = await fetchTimeout(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    let resp: Response;
+    if (isWeb) {
+      const proxyUrl = `${getProxyBase()}/ai-proxy/openai`;
+      resp = await fetchTimeout(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, body: openaiBody }),
+      });
+    } else {
+      resp = await fetchTimeout(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(openaiBody),
+      });
+    }
 
     if (!resp.ok) {
       if (__DEV__) console.warn('[Jarvis ChatGPT] HTTP error:', resp.status);
