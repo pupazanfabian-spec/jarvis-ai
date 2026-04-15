@@ -59,10 +59,11 @@ const CSS_PROPERTIES = new Set([
 ]);
 
 function tokenizeLine(line: string, lang: string): Token[] {
-  if (lang === 'bash' || lang === 'sh' || lang === 'shell') return tokenizeBash(line);
-  if (lang === 'python' || lang === 'py') return tokenizePython(line);
-  if (lang === 'html' || lang === 'xml' || lang === 'jsx' || lang === 'tsx') return tokenizeHTML(line);
-  if (lang === 'css' || lang === 'scss' || lang === 'less') return tokenizeCSS(line);
+  const l = lang.toLowerCase();
+  if (l === 'bash' || l === 'sh' || l === 'shell') return tokenizeBash(line);
+  if (l === 'python' || l === 'py') return tokenizePython(line);
+  if (l === 'html' || l === 'xml' || l === 'jsx' || l === 'tsx') return tokenizeHTML(line);
+  if (l === 'css' || l === 'scss' || l === 'less') return tokenizeCSS(line);
   return tokenizeCode(line);
 }
 
