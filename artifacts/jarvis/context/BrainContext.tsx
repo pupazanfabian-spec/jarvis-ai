@@ -230,14 +230,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const stateJson = JSON.stringify(state);
     const msgsJson = JSON.stringify(msgsSliced);
     try {
-      // Primar: SQLite
       await Promise.all([
         saveBrainStateFull(stateJson),
         saveMessagesFull(msgsJson),
       ]);
     } catch (sqlErr) {
       if (__DEV__) console.warn('[Jarvis] SQLite persist failed, trying AsyncStorage:', sqlErr);
-      // Fallback: AsyncStorage
       try {
         await Promise.all([
           AsyncStorage.setItem(MESSAGES_KEY, msgsJson),
@@ -247,6 +245,24 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         if (__DEV__) console.warn('[Jarvis] AsyncStorage persist also failed:', asErr);
       }
     }
+
+    let memChanged = false;
+    for (const fact of state.selfKnowledge.learnedFacts) {
+      const updated = addMemoryEntry(memoryRef.current, fact, 'brain');
+      if (updated !== memoryRef.current) {
+        memoryRef.current = updated;
+        memChanged = true;
+      }
+    }
+    if (state.userName) {
+      const nameFact = `Utilizatorul se numește ${state.userName}`;
+      const updated = addMemoryEntry(memoryRef.current, nameFact, 'user');
+      if (updated !== memoryRef.current) {
+        memoryRef.current = updated;
+        memChanged = true;
+      }
+    }
+    if (memChanged) saveMemory(memoryRef.current);
   }, []);
 
   // ─── Sincronizare entități din EntityTracker → SQLite ─────────────────────
