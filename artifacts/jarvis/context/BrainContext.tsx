@@ -262,7 +262,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         memChanged = true;
       }
     }
-    if (memChanged) saveMemory(memoryRef.current);
+    if (memChanged) await saveMemory(memoryRef.current);
   }, []);
 
   // ─── Sincronizare entități din EntityTracker → SQLite ─────────────────────
