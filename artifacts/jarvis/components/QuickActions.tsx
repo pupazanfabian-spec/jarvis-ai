@@ -1,15 +1,23 @@
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  LayoutAnimation,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
 import Colors from '@/constants/colors';
 
 const { colors } = Colors;
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const QUICK_ACTIONS = [
   { label: 'Ce poți face?', icon: '💡' },
@@ -42,13 +50,47 @@ const DEV_QUICK_ACTIONS = [
 interface Props {
   onPress: (text: string) => void;
   devMode?: boolean;
+  visible?: boolean;
 }
 
-export default function QuickActions({ onPress, devMode = false }: Props) {
+export default function QuickActions({ onPress, devMode = false, visible = true }: Props) {
   const actions = devMode ? DEV_QUICK_ACTIONS : QUICK_ACTIONS;
+  const [mounted, setMounted] = useState(visible);
+  const fadeAnim = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const slideAnim = useRef(new Animated.Value(visible ? 0 : 30)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, tension: 100, friction: 15, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: 30, duration: 150, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      ]).start(() => {
+        setMounted(false);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      });
+    }
+  }, [visible, slideAnim, fadeAnim]);
+
+  if (!mounted) return null;
 
   return (
-    <View style={[styles.wrapper, devMode && styles.devWrapper]}>
+    <Animated.View
+      style={[
+        styles.wrapper,
+        devMode && styles.devWrapper,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -66,7 +108,7 @@ export default function QuickActions({ onPress, devMode = false }: Props) {
           </TouchableOpacity>
         ))}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

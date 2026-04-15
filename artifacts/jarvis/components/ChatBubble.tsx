@@ -18,11 +18,9 @@ interface Props {
   index: number;
 }
 
-// ─── Syntax Highlighting ──────────────────────────────────────────────────────
-
 interface Token {
   text: string;
-  type: 'keyword' | 'string' | 'comment' | 'number' | 'type' | 'function' | 'operator' | 'plain';
+  type: 'keyword' | 'string' | 'comment' | 'number' | 'type' | 'function' | 'operator' | 'plain' | 'tag' | 'attr' | 'selector' | 'property' | 'value' | 'decorator' | 'builtin';
 }
 
 const TS_KEYWORDS = new Set([
@@ -39,10 +37,32 @@ const TS_TYPES = new Set([
   'Map', 'Set', 'Date', 'Error', 'React', 'ReactNode', 'JSX', 'FC',
 ]);
 
+const PY_KEYWORDS = new Set([
+  'def', 'class', 'if', 'elif', 'else', 'for', 'while', 'return', 'import', 'from',
+  'as', 'try', 'except', 'finally', 'raise', 'with', 'yield', 'lambda', 'pass',
+  'break', 'continue', 'and', 'or', 'not', 'is', 'in', 'True', 'False', 'None',
+  'async', 'await', 'del', 'global', 'nonlocal', 'assert',
+]);
+
+const PY_BUILTINS = new Set([
+  'print', 'len', 'range', 'int', 'str', 'float', 'list', 'dict', 'set', 'tuple',
+  'type', 'isinstance', 'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed',
+  'input', 'open', 'super', 'property', 'staticmethod', 'classmethod', 'abs', 'max', 'min',
+]);
+
+const CSS_PROPERTIES = new Set([
+  'color', 'background', 'background-color', 'margin', 'padding', 'border', 'width',
+  'height', 'display', 'position', 'top', 'left', 'right', 'bottom', 'flex',
+  'font-size', 'font-weight', 'font-family', 'text-align', 'line-height', 'opacity',
+  'z-index', 'overflow', 'transition', 'transform', 'animation', 'box-shadow',
+  'border-radius', 'justify-content', 'align-items', 'gap', 'grid',
+]);
+
 function tokenizeLine(line: string, lang: string): Token[] {
-  if (lang === 'bash' || lang === 'sh') {
-    return tokenizeBash(line);
-  }
+  if (lang === 'bash' || lang === 'sh' || lang === 'shell') return tokenizeBash(line);
+  if (lang === 'python' || lang === 'py') return tokenizePython(line);
+  if (lang === 'html' || lang === 'xml' || lang === 'jsx' || lang === 'tsx') return tokenizeHTML(line);
+  if (lang === 'css' || lang === 'scss' || lang === 'less') return tokenizeCSS(line);
   return tokenizeCode(line);
 }
 
@@ -54,12 +74,14 @@ function tokenizeBash(line: string): Token[] {
   }
   const parts = line.split(/(\s+)/);
   parts.forEach((part, i) => {
-    if (i === 0 && ['npm', 'pnpm', 'yarn', 'npx', 'git', 'cd', 'ls', 'mkdir', 'echo', 'export', 'node', 'expo', 'eas'].includes(part)) {
+    if (i === 0 && ['npm', 'pnpm', 'yarn', 'npx', 'git', 'cd', 'ls', 'mkdir', 'echo', 'export', 'node', 'expo', 'eas', 'pip', 'python', 'python3', 'curl', 'wget', 'sudo', 'apt', 'brew'].includes(part)) {
       tokens.push({ text: part, type: 'keyword' });
     } else if (part.startsWith('-')) {
       tokens.push({ text: part, type: 'operator' });
     } else if (part.startsWith('"') || part.startsWith("'")) {
       tokens.push({ text: part, type: 'string' });
+    } else if (part.startsWith('$')) {
+      tokens.push({ text: part, type: 'type' });
     } else {
       tokens.push({ text: part, type: 'plain' });
     }
@@ -67,10 +89,118 @@ function tokenizeBash(line: string): Token[] {
   return tokens;
 }
 
+function tokenizePython(line: string): Token[] {
+  const tokens: Token[] = [];
+  const trimmed = line.trimStart();
+
+  if (trimmed.startsWith('#')) {
+    const indent = line.length - trimmed.length;
+    if (indent > 0) tokens.push({ text: line.slice(0, indent), type: 'plain' });
+    tokens.push({ text: trimmed, type: 'comment' });
+    return tokens;
+  }
+
+  if (trimmed.startsWith('@')) {
+    const indent = line.length - trimmed.length;
+    if (indent > 0) tokens.push({ text: line.slice(0, indent), type: 'plain' });
+    tokens.push({ text: trimmed, type: 'decorator' });
+    return tokens;
+  }
+
+  const regex = /("""[^]*?"""|'''[^]*?'''|f"[^"]*"|f'[^']*'|"[^"]*"|'[^']*'|\d+\.?\d*|[a-zA-Z_][a-zA-Z0-9_]*|[=><!&|+\-*\/%.:,;{}()[\]@#~^]|\s+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(line)) !== null) {
+    const text = match[0];
+    let type: Token['type'] = 'plain';
+
+    if (text.startsWith('"""') || text.startsWith("'''") || text.startsWith('"') || text.startsWith("'") || text.startsWith('f"') || text.startsWith("f'")) {
+      type = 'string';
+    } else if (/^\d/.test(text)) {
+      type = 'number';
+    } else if (/^[a-zA-Z_]/.test(text)) {
+      if (PY_KEYWORDS.has(text)) type = 'keyword';
+      else if (PY_BUILTINS.has(text)) type = 'builtin';
+      else if (line[match.index + text.length] === '(') type = 'function';
+      else type = 'plain';
+    } else if (/[=><!&|+\-*\/]/.test(text)) {
+      type = 'operator';
+    }
+
+    tokens.push({ text, type });
+  }
+
+  return tokens;
+}
+
+function tokenizeHTML(line: string): Token[] {
+  const tokens: Token[] = [];
+  const regex = /(<\/?[a-zA-Z][a-zA-Z0-9-]*|\/?>|[a-zA-Z-]+=|"[^"]*"|'[^']*'|<!--.*?-->|\{[^}]*\}|[^<>"'=\s{}]+|\s+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(line)) !== null) {
+    const text = match[0];
+    if (text.startsWith('<!--')) {
+      tokens.push({ text, type: 'comment' });
+    } else if (text.startsWith('<') && !text.startsWith('</')) {
+      tokens.push({ text, type: 'tag' });
+    } else if (text.startsWith('</')) {
+      tokens.push({ text, type: 'tag' });
+    } else if (text === '/>' || text === '>') {
+      tokens.push({ text, type: 'tag' });
+    } else if (text.endsWith('=')) {
+      tokens.push({ text, type: 'attr' });
+    } else if (text.startsWith('"') || text.startsWith("'")) {
+      tokens.push({ text, type: 'string' });
+    } else if (text.startsWith('{')) {
+      tokens.push({ text, type: 'type' });
+    } else {
+      tokens.push({ text, type: 'plain' });
+    }
+  }
+  return tokens;
+}
+
+function tokenizeCSS(line: string): Token[] {
+  const tokens: Token[] = [];
+  const trimmed = line.trim();
+
+  if (trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('//')) {
+    tokens.push({ text: line, type: 'comment' });
+    return tokens;
+  }
+
+  if (trimmed.startsWith('.') || trimmed.startsWith('#') || trimmed.startsWith('@') || trimmed.match(/^[a-z]+\s*[{,]/)) {
+    tokens.push({ text: line, type: 'selector' });
+    return tokens;
+  }
+
+  const colonIdx = line.indexOf(':');
+  if (colonIdx > 0 && !line.trim().startsWith('{') && !line.trim().startsWith('}')) {
+    const prop = line.slice(0, colonIdx);
+    const rest = line.slice(colonIdx);
+    const propName = prop.trim().toLowerCase();
+    tokens.push({ text: prop, type: CSS_PROPERTIES.has(propName) ? 'property' : 'plain' });
+
+    const valueParts = rest.split(/(;|!important|#[0-9a-fA-F]{3,8}|\d+\.?\d*(px|em|rem|%|vh|vw|s|ms)?|"[^"]*"|'[^']*')/g);
+    valueParts.forEach(part => {
+      if (!part) return;
+      if (part === ';') tokens.push({ text: part, type: 'operator' });
+      else if (part === '!important') tokens.push({ text: part, type: 'keyword' });
+      else if (part.startsWith('#')) tokens.push({ text: part, type: 'number' });
+      else if (/^\d/.test(part)) tokens.push({ text: part, type: 'number' });
+      else if (part.startsWith('"') || part.startsWith("'")) tokens.push({ text: part, type: 'string' });
+      else tokens.push({ text: part, type: 'value' });
+    });
+    return tokens;
+  }
+
+  tokens.push({ text: line, type: 'plain' });
+  return tokens;
+}
+
 function tokenizeCode(line: string): Token[] {
   const tokens: Token[] = [];
-
-  // Comment de linie
   const commentIdx = line.indexOf('//');
   if (commentIdx !== -1 && !isInString(line, commentIdx)) {
     if (commentIdx > 0) {
@@ -79,7 +209,6 @@ function tokenizeCode(line: string): Token[] {
     tokens.push({ text: line.slice(commentIdx), type: 'comment' });
     return tokens;
   }
-
   tokens.push(...tokenizeSegment(line));
   return tokens;
 }
@@ -100,7 +229,6 @@ function isInString(line: string, pos: number): boolean {
 
 function tokenizeSegment(segment: string): Token[] {
   const tokens: Token[] = [];
-  // Regex pentru: strings, numbers, words, operators, whitespace
   const regex = /(`[^`]*`|"[^"]*"|'[^']*'|\d+\.?\d*|[a-zA-Z_$][a-zA-Z0-9_$]*|[=><!&|+\-*\/%.,:;{}()[\]?@#~^]|\s+)/g;
   let match: RegExpExecArray | null;
 
@@ -136,11 +264,19 @@ const SYNTAX_COLORS: Record<Token['type'], string> = {
   function: '#DCDCAA',
   operator: '#D4D4D4',
   plain: '#D4D4D4',
+  tag: '#569CD6',
+  attr: '#9CDCFE',
+  selector: '#D7BA7D',
+  property: '#9CDCFE',
+  value: '#CE9178',
+  decorator: '#DCDCAA',
+  builtin: '#4EC9B0',
 };
 
 const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const copyAnim = useRef(new Animated.Value(0)).current;
   const lines = useMemo(() => code.split('\n'), [code]);
   const tokenizedLines = useMemo(
     () => lines.map(line => tokenizeLine(line, language)),
@@ -151,19 +287,21 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
     Clipboard.setString(code);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    Animated.sequence([
+      Animated.timing(copyAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(copyAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setCopied(false));
   };
 
   const extractSemanticFilename = (src: string, lang: string): string => {
-    const ext = lang === 'typescript' ? 'ts' : lang === 'javascript' ? 'js' : lang === 'bash' ? 'sh' : lang || 'txt';
+    const ext = lang === 'typescript' ? 'ts' : lang === 'javascript' ? 'js' : lang === 'python' ? 'py' : lang === 'html' ? 'html' : lang === 'css' ? 'css' : lang === 'bash' ? 'sh' : lang || 'txt';
     const firstLines = src.split('\n').slice(0, 3).join('\n');
-    // Match patterns: // App.tsx  or  // src/components/Header.tsx  or  /* index.ts */
-    const match = firstLines.match(/(?:\/\/|\/\*)\s*([\w\-./]+\.\w{1,5})/);
+    const match = firstLines.match(/(?:\/\/|\/\*|#)\s*([\w\-./]+\.\w{1,5})/);
     if (match) {
       const name = match[1].replace(/[^a-zA-Z0-9._\-]/g, '_');
       return name;
     }
-    // Fallback: timestamped generic name
     return `jarvis_code_${Date.now()}.${ext}`;
   };
 
@@ -188,7 +326,6 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
 
   return (
     <View style={codeStyles.wrapper}>
-      {/* Header */}
       <View style={codeStyles.header}>
         <View style={codeStyles.dots}>
           <View style={[codeStyles.dot, { backgroundColor: '#FF5F57' }]} />
@@ -212,16 +349,13 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
         </View>
       </View>
 
-      {/* Code body */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={codeStyles.body}>
-          {/* Numere de linie */}
           <View style={codeStyles.lineNumbers}>
             {lines.map((_, i) => (
               <Text key={i} style={codeStyles.lineNum}>{i + 1}</Text>
             ))}
           </View>
-          {/* Cod cu highlighting */}
           <View style={codeStyles.codeLines}>
             {tokenizedLines.map((tokens, i) => (
               <View key={i} style={codeStyles.codeLine}>
@@ -239,8 +373,6 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
   );
 });
 
-// ─── Markdown Renderer ────────────────────────────────────────────────────────
-
 interface Segment {
   type: 'text' | 'code_block' | 'inline_code' | 'heading' | 'bold' | 'bullet';
   content: string;
@@ -256,7 +388,6 @@ function parseMarkdown(text: string): Segment[] {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Bloc de cod ```lang\n...```
     if (line.startsWith('```')) {
       const lang = line.slice(3).trim() || 'typescript';
       const codeLines: string[] = [];
@@ -265,12 +396,15 @@ function parseMarkdown(text: string): Segment[] {
         codeLines.push(lines[i]);
         i++;
       }
-      i++; // skip closing ```
+      i++;
       segments.push({ type: 'code_block', content: codeLines.join('\n'), language: lang });
       continue;
     }
 
-    // Headings
+    if (line.startsWith('### ')) {
+      segments.push({ type: 'heading', content: line.slice(4), level: 3 });
+      i++; continue;
+    }
     if (line.startsWith('## ')) {
       segments.push({ type: 'heading', content: line.slice(3), level: 2 });
       i++; continue;
@@ -279,19 +413,13 @@ function parseMarkdown(text: string): Segment[] {
       segments.push({ type: 'heading', content: line.slice(2), level: 1 });
       i++; continue;
     }
-    if (line.startsWith('### ')) {
-      segments.push({ type: 'heading', content: line.slice(4), level: 3 });
-      i++; continue;
-    }
 
-    // Bullet points
     if (line.match(/^[*•\-]\s/) || line.match(/^\d+\.\s/)) {
       const content = line.replace(/^[*•\-]\s/, '').replace(/^\d+\.\s/, '');
       segments.push({ type: 'bullet', content });
       i++; continue;
     }
 
-    // Linie normală cu bold/inline-code
     if (line.trim()) {
       segments.push({ type: 'text', content: line });
     }
@@ -302,7 +430,6 @@ function parseMarkdown(text: string): Segment[] {
 }
 
 function renderInline(text: string): React.ReactNode[] {
-  // Detectează **bold** și `inline code`
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -361,8 +488,6 @@ const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: 
   );
 });
 
-// ─── Context Menu (long-press) ────────────────────────────────────────────────
-
 function MessageContextMenu({
   visible, onClose, onCopy, onShare,
 }: {
@@ -393,7 +518,31 @@ function MessageContextMenu({
   );
 }
 
-// ─── ChatBubble ───────────────────────────────────────────────────────────────
+function CopyToast({ visible }: { visible: boolean }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.sequence([
+        Animated.spring(anim, { toValue: 1, tension: 120, friction: 8, useNativeDriver: true }),
+        Animated.delay(1200),
+        Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible, anim]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View style={[toastStyles.container, {
+      opacity: anim,
+      transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+    }]}>
+      <Feather name="check-circle" size={14} color={colors.success} />
+      <Text style={toastStyles.text}>Copiat!</Text>
+    </Animated.View>
+  );
+}
 
 const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const isUser = message.role === 'user';
@@ -401,6 +550,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
   const [menuVisible, setMenuVisible] = useState(false);
   const [copied, setCopiedMsg] = useState(false);
+  const [showCopyToast, setShowCopyToast] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -411,7 +561,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
         toValue: 0, tension: 80, friction: 12, useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   const timeStr = message.timestamp.toLocaleTimeString('ro-RO', {
     hour: '2-digit', minute: '2-digit',
@@ -428,7 +578,11 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
     Clipboard.setString(message.content);
     setMenuVisible(false);
     setCopiedMsg(true);
-    setTimeout(() => setCopiedMsg(false), 2000);
+    setShowCopyToast(true);
+    setTimeout(() => {
+      setCopiedMsg(false);
+      setShowCopyToast(false);
+    }, 2000);
   };
 
   const handleShareMsg = async () => {
@@ -438,7 +592,9 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
       await writeAsStringAsync(path, message.content);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/plain', dialogTitle: 'Trimite mesajul' });
-    } catch {}
+    } catch {
+      /* ignore share failures */
+    }
   };
 
   return (
@@ -458,7 +614,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
       >
         {!isUser && (
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>A</Text>
+            <Text style={styles.avatarText}>J</Text>
           </View>
         )}
         <TouchableOpacity
@@ -470,7 +626,6 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
             styles.bubble,
             isUser ? styles.userBubble : styles.aiBubble,
             hasCode && !isUser && styles.codeBubble,
-            copied && styles.copiedBubble,
           ]}>
             <MarkdownContent text={message.content} isUser={isUser} />
             <View style={styles.footer}>
@@ -482,13 +637,38 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
               )}
             </View>
           </View>
+          {isUser && <View style={styles.userTail} />}
+          {!isUser && <View style={styles.aiTail} />}
         </TouchableOpacity>
       </Animated.View>
+      <CopyToast visible={showCopyToast} />
     </>
   );
 });
 
 export default ChatBubble;
+
+const toastStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.success + '44',
+  },
+  text: {
+    color: colors.success,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+  },
+});
 
 const menuStyles = StyleSheet.create({
   overlay: {
@@ -510,8 +690,6 @@ const menuStyles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border },
 });
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row', marginVertical: 4, paddingHorizontal: 12, alignItems: 'flex-end',
@@ -530,10 +708,42 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingBottom: 6,
   },
   codeBubble: { maxWidth: '95%', paddingHorizontal: 8 },
-  userBubble: { backgroundColor: colors.userBubble, borderBottomRightRadius: 4 },
+  userBubble: {
+    backgroundColor: colors.userBubble,
+    borderBottomRightRadius: 4,
+  },
   aiBubble: {
-    backgroundColor: colors.aiBubble, borderBottomLeftRadius: 4,
+    backgroundColor: colors.aiBubble,
+    borderBottomLeftRadius: 4,
     borderWidth: 1, borderColor: colors.border,
+  },
+  userTail: {
+    position: 'absolute',
+    bottom: 0,
+    right: -5,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderLeftColor: colors.userBubble,
+    borderTopWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    borderRightWidth: 0,
+  },
+  aiTail: {
+    position: 'absolute',
+    bottom: 0,
+    left: -5,
+    width: 0,
+    height: 0,
+    borderRightWidth: 8,
+    borderRightColor: colors.aiBubble,
+    borderTopWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    borderLeftWidth: 0,
   },
   text: { fontSize: 15, lineHeight: 22 },
   userText: { color: colors.userBubbleText, fontFamily: 'Inter_400Regular' },
@@ -556,7 +766,6 @@ const styles = StyleSheet.create({
   time: { fontSize: 10, fontFamily: 'Inter_400Regular' },
   userTime: { color: 'rgba(255,255,255,0.6)' },
   aiTime: { color: colors.textMuted },
-  copiedBubble: { opacity: 0.85 },
   copiedLabel: { fontSize: 10, color: colors.success, fontFamily: 'Inter_500Medium' },
 });
 

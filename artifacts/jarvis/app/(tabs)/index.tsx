@@ -1,6 +1,7 @@
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   FlatList,
   Modal,
   Platform,
@@ -39,6 +40,62 @@ const { colors } = Colors;
 
 type PinMode = 'unlock' | 'set' | 'confirm' | 'verify_old' | null;
 
+function EmptyState() {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.15)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1, duration: 600, useNativeDriver: true,
+    }).start();
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+      ])
+    );
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.35, duration: 2000, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.15, duration: 2000, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    glow.start();
+    return () => { pulse.stop(); glow.stop(); };
+  }, [pulseAnim, glowAnim, fadeAnim]);
+
+  return (
+    <Animated.View style={[emptyStyles.container, { opacity: fadeAnim }]}>
+      <Animated.View style={[emptyStyles.logoRing, {
+        transform: [{ scale: pulseAnim }],
+        opacity: glowAnim,
+      }]} />
+      <Animated.View style={[emptyStyles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <Text style={emptyStyles.logoText}>J</Text>
+      </Animated.View>
+      <Text style={emptyStyles.title}>Jarvis AI</Text>
+      <Text style={emptyStyles.subtitle}>Asistentul tău personal cu inteligență artificială</Text>
+      <View style={emptyStyles.features}>
+        <View style={emptyStyles.featureRow}>
+          <Feather name="zap" size={14} color={colors.primary} />
+          <Text style={emptyStyles.featureText}>270+ subiecte din memorie</Text>
+        </View>
+        <View style={emptyStyles.featureRow}>
+          <Feather name="globe" size={14} color={colors.accent} />
+          <Text style={emptyStyles.featureText}>Căutare online automată</Text>
+        </View>
+        <View style={emptyStyles.featureRow}>
+          <Feather name="code" size={14} color="#00FF88" />
+          <Text style={emptyStyles.featureText}>Generare cod și proiecte</Text>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function ChatScreen() {
   const {
     messages, isThinking, webSearching, brainState,
@@ -59,8 +116,8 @@ export default function ChatScreen() {
   const [showProjectSwitcher, setShowProjectSwitcher] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [showSandbox, setShowSandbox] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // PIN flow state
   const [pinMode, setPinMode] = useState<PinMode>(null);
   const [pendingNewPin, setPendingNewPin] = useState('');
   const [pinError, setPinError] = useState('');
@@ -78,7 +135,9 @@ export default function ChatScreen() {
       const projects = await getAllProjects();
       setAllProjects(projects);
       setShowProjectSwitcher(true);
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const handleSelectProject = useCallback(async (projectId: string) => {
@@ -86,7 +145,9 @@ export default function ChatScreen() {
       await switchActiveProject(projectId);
       await refreshProject();
       setShowProjectSwitcher(false);
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }, [refreshProject]);
 
   const handleSend = useCallback(async () => {
@@ -121,15 +182,10 @@ export default function ChatScreen() {
   const bottomInset = isWeb ? 34 : 0;
   const docCount = brainState.learnedDocuments.length;
 
-  // ── PIN handlers ────────────────────────────────────────────────────────────
-
   const handlePinButton = useCallback(() => {
     if (hasPin) {
-      // Are PIN — arata meniu: lock / change / remove
-      // Simplu: prima data lock, tine apasat pentru optiuni
       lock();
     } else {
-      // Nu are PIN — seteaza
       setPinMode('set');
       setPendingNewPin('');
       setPinError('');
@@ -190,15 +246,12 @@ export default function ChatScreen() {
     setPinMode(null);
   }, [removePin]);
 
-  // ── Asteapta incarcarea PIN ─────────────────────────────────────────────────
   if (!pinLoaded) return null;
 
-  // ── Configurare model LLM (doar în native build, când modelul nu e descărcat) ──
   if (llmStatus === 'not_downloaded' && !llmSkipped) {
     return <ModelSetupScreen />;
   }
 
-  // ── Ecran deblocare PIN ─────────────────────────────────────────────────────
   if (isLocked) {
     return (
       <PinScreen
@@ -212,7 +265,6 @@ export default function ChatScreen() {
     );
   }
 
-  // ── Flux setare PIN ─────────────────────────────────────────────────────────
   if (pinMode === 'set') {
     return (
       <PinScreen
@@ -244,10 +296,10 @@ export default function ChatScreen() {
     );
   }
 
-  // ── UI principal ─────────────────────────────────────────────────────────────
+  const isEmpty = messages.length === 0;
+
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.statusDot} />
@@ -255,12 +307,12 @@ export default function ChatScreen() {
             <Text style={styles.headerTitle}>Jarvis</Text>
             <Text style={styles.headerSub}>
               {llmStatus === 'ready'
-                ? '🧠 Neural • Offline'
+                ? '🧠 Neural • Fără net'
                 : aiProviderSettings.activeProvider !== 'none'
                   ? `✨ ${aiProviderSettings.activeProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} • Hibrid`
                   : docCount > 0
-                    ? `${docCount} doc. • Offline`
-                    : `v3.1 • Offline`}
+                    ? `${docCount} doc. • Fără net`
+                    : `v3.1 • Fără net`}
             </Text>
           </View>
         </View>
@@ -275,27 +327,8 @@ export default function ChatScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setShowKnowledge(true)}>
-            <Feather name="database" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowMemory(true)}>
             <Feather name="cpu" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.headerBtn, aiProviderSettings.activeProvider !== 'none' && styles.headerBtnActive]}
-            onPress={() => setShowAIProvider(true)}
-          >
-            <Feather
-              name={providerIcon(aiProviderSettings.activeProvider)}
-              size={20}
-              color={aiProviderSettings.activeProvider !== 'none' ? colors.accent : colors.textSecondary}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.headerBtn, styles.sandboxBtn]}
-            onPress={() => setShowSandbox(true)}
-          >
-            <Feather name="terminal" size={20} color="#00FF88" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerBtn, isDevMode && styles.devModeBtn]}
@@ -309,30 +342,92 @@ export default function ChatScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={handlePinButton}
-            onLongPress={hasPin ? handleChangPin : undefined}
+            onPress={() => setShowMoreMenu(true)}
           >
-            <Feather
-              name={hasPin ? 'lock' : 'unlock'}
-              size={20}
-              color={hasPin ? colors.primary : colors.textMuted}
-            />
+            <Feather name="more-vertical" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Dev Mode Banner */}
       {isDevMode && (
         <TouchableOpacity style={styles.devBanner} onPress={openProjectSwitcher} activeOpacity={0.75}>
           <Feather name="code" size={13} color="#00D4FF" />
           <Text style={styles.devBannerText} numberOfLines={1}>
-            {activeProject ? `Dev Mode • ${activeProject.name}` : 'Dev Mode activ • atinge pentru proiecte'}
+            {activeProject ? `Mod dezvoltator • ${activeProject.name}` : 'Mod dezvoltator • atinge pentru proiecte'}
           </Text>
           <Feather name="chevron-down" size={13} color="#00D4FF" />
         </TouchableOpacity>
       )}
 
-      {/* Project Switcher Modal */}
+      <Modal
+        visible={showMoreMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMoreMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMoreMenu(false)}
+        >
+          <View style={[styles.moreMenu, { top: topInset + 50, right: 12 }]}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setShowMoreMenu(false); setShowKnowledge(true); }}
+            >
+              <Feather name="database" size={18} color={colors.textSecondary} />
+              <Text style={styles.menuItemText}>Bază de cunoștințe</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setShowMoreMenu(false); setShowAIProvider(true); }}
+            >
+              <Feather
+                name={providerIcon(aiProviderSettings.activeProvider)}
+                size={18}
+                color={aiProviderSettings.activeProvider !== 'none' ? colors.accent : colors.textSecondary}
+              />
+              <Text style={[styles.menuItemText, aiProviderSettings.activeProvider !== 'none' && { color: colors.accent }]}>
+                Furnizor AI {aiProviderSettings.activeProvider !== 'none' ? `(${aiProviderSettings.activeProvider === 'gemini' ? 'Gemini' : 'ChatGPT'})` : ''}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setShowMoreMenu(false); setShowSandbox(true); }}
+            >
+              <Feather name="terminal" size={18} color="#00FF88" />
+              <Text style={styles.menuItemText}>Consolă cod</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setShowMoreMenu(false); handlePinButton(); }}
+            >
+              <Feather
+                name={hasPin ? 'lock' : 'unlock'}
+                size={18}
+                color={hasPin ? colors.primary : colors.textMuted}
+              />
+              <Text style={styles.menuItemText}>{hasPin ? 'Blochează cu PIN' : 'Setează PIN'}</Text>
+            </TouchableOpacity>
+            {hasPin && (
+              <>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => { setShowMoreMenu(false); handleChangPin(); }}
+                >
+                  <Feather name="edit-3" size={18} color={colors.textSecondary} />
+                  <Text style={styles.menuItemText}>Modifică PIN</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal
         visible={showProjectSwitcher}
         transparent
@@ -369,34 +464,39 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Messages + Input */}
       <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.messageList}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-          scrollEnabled={!!messages.length}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          initialNumToRender={15}
-          maxToRenderPerBatch={8}
-          windowSize={8}
-          removeClippedSubviews={true}
-          updateCellsBatchingPeriod={50}
-          ListFooterComponent={
-            webSearching
-              ? <ThinkingIndicator webSearch={true} />
-              : isThinking
-                ? <ThinkingIndicator />
-                : null
-          }
-        />
+        {isEmpty && !isThinking && !webSearching ? (
+          <View style={styles.flex}>
+            <EmptyState />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.messageList}
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={!!messages.length}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            initialNumToRender={15}
+            maxToRenderPerBatch={8}
+            windowSize={8}
+            removeClippedSubviews={true}
+            updateCellsBatchingPeriod={50}
+            ListFooterComponent={
+              webSearching
+                ? <ThinkingIndicator webSearch={true} />
+                : isThinking
+                  ? <ThinkingIndicator />
+                  : null
+            }
+          />
+        )}
 
-        {showQuick && !isThinking && !webSearching && <QuickActions onPress={handleQuickAction} devMode={isDevMode} />}
+        <QuickActions onPress={handleQuickAction} devMode={isDevMode} visible={showQuick && !isThinking && !webSearching} />
 
         <View style={[styles.inputContainer, { paddingBottom: bottomInset + 8 }]}>
           <TouchableOpacity style={styles.attachBtn} onPress={() => setShowFiles(true)}>
@@ -431,7 +531,6 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* PIN tip */}
       {!hasPin && (
         <TouchableOpacity style={styles.pinTip} onPress={() => setPinMode('set')}>
           <Feather name="lock" size={13} color={colors.textMuted} />
@@ -441,11 +540,10 @@ export default function ChatScreen() {
       {hasPin && (
         <TouchableOpacity style={styles.pinTip} onLongPress={handleRemovePin}>
           <Feather name="shield" size={13} color={colors.success} />
-          <Text style={[styles.pinTipText, { color: colors.success }]}>Protejat cu PIN • ține apăsat pentru schimbare</Text>
+          <Text style={[styles.pinTipText, { color: colors.success }]}>Protejat cu PIN</Text>
         </TouchableOpacity>
       )}
 
-      {/* Modals */}
       <MemoryModal
         visible={showMemory}
         brainState={brainState}
@@ -473,7 +571,6 @@ export default function ChatScreen() {
         onClose={() => setShowSandbox(false)}
       />
 
-      {/* Bulina flotantă Jarvis */}
       <FloatingBubble
         onSendToChat={(text) => {
           sendMessage(text);
@@ -487,6 +584,67 @@ export default function ChatScreen() {
     </View>
   );
 }
+
+const emptyStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  logoRing: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.primary,
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  logoText: {
+    color: '#fff',
+    fontSize: 36,
+    fontFamily: 'Inter_700Bold',
+  },
+  title: {
+    fontSize: 24,
+    fontFamily: 'Inter_700Bold',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  features: {
+    gap: 12,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  featureText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: colors.textSecondary,
+  },
+});
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -557,10 +715,6 @@ const styles = StyleSheet.create({
   pinTipText: {
     fontSize: 11, color: colors.textMuted, fontFamily: 'Inter_400Regular',
   },
-  sandboxBtn: {
-    backgroundColor: 'rgba(0, 255, 136, 0.1)',
-    borderRadius: 8,
-  },
   devModeBtn: {
     backgroundColor: 'rgba(0, 212, 255, 0.12)',
     borderRadius: 8,
@@ -573,6 +727,40 @@ const styles = StyleSheet.create({
   },
   devBannerText: {
     fontSize: 11, color: '#00D4FF', fontFamily: 'Inter_500Medium', flex: 1,
+  },
+  menuOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  moreMenu: {
+    position: 'absolute',
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuItemText: {
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: 12,
   },
   modalOverlay: {
     flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)',
