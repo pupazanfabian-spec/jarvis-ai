@@ -29,6 +29,7 @@ import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
 import { useBrain } from '@/context/BrainContext';
+import { getMemoryStats } from '@/engine/memoryFolder';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
 import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';
@@ -100,6 +101,7 @@ export default function ChatScreen() {
   const {
     messages, isThinking, webSearching, brainState,
     sendMessage, clearConversation, addDocument, removeDocument,
+    requestFolderAccessAction,
   } = useBrain();
 
   const { isLocked, hasPin, pinLoaded, unlock, setPin, removePin, lock } = usePin();
@@ -399,6 +401,17 @@ export default function ChatScreen() {
             >
               <Feather name="terminal" size={18} color="#00FF88" />
               <Text style={styles.menuItemText}>Consolă cod</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMoreMenu(false);
+                sendMessage('acordă acces la folder').catch(() => {});
+              }}
+            >
+              <Feather name="folder-plus" size={18} color="#FFA500" />
+              <Text style={styles.menuItemText}>Acordă acces la folder</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity

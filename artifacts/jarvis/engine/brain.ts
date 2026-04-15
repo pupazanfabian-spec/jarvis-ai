@@ -422,7 +422,8 @@ type Intent =
   | 'salut' | 'ramas_bun' | 'multumesc' | 'ajutor' | 'ce_poti'
   | 'identitate_jarvis' | 'da' | 'nu' | 'gluma' | 'motivatie' | 'sfat'
   | 'data_ora' | 'matematica' | 'conversie_unitati'
-  | 'memorie_salveaza' | 'memorie_citeste' | 'memorie_sterge'
+  | 'memorie_salveaza' | 'memorie_citeste' | 'memorie_sterge' | 'memorie_uita_specific'
+  | 'folder_acorda_acces' | 'folder_listeaza' | 'folder_actualizeaza'
   | 'documente_lista' | 'introducere_utilizator'
   | 'creator_declare' | 'creator_verify' | 'raport_invatare'
   | 'definitie' | 'opinie' | 'gandire_profunda'
@@ -582,8 +583,28 @@ const INTENT_PATTERNS: IntentPattern[] = [
   },
   {
     intent: 'memorie_sterge',
-    patterns: [/(sterge memoria|uita totul|reset|curata memoria)/],
-    weight: 7,
+    patterns: [/(sterge (toata )?memoria|uita totul|reset(eaza)? memoria|curata memoria|sterge tot ce ai retinut)/],
+    weight: 8,
+  },
+  {
+    intent: 'memorie_uita_specific',
+    patterns: [/(uita ca|uita despre|sterge despre|nu mai retine|elimina din memorie)/],
+    weight: 9,
+  },
+  {
+    intent: 'folder_acorda_acces',
+    patterns: [/(acorda acces|permite acces|deschide folder|acces la foldere|acceseaza folder)/],
+    weight: 8,
+  },
+  {
+    intent: 'folder_listeaza',
+    patterns: [/(ce fisiere ai|la ce foldere|ce foldere|listeaza folder|ce acces ai)/],
+    weight: 8,
+  },
+  {
+    intent: 'folder_actualizeaza',
+    patterns: [/(actualizeaza din foldere|re-scaneaza|scaneaza foldere|citeste folderele|actualizeaza memoria din foldere)/],
+    weight: 8,
   },
   {
     intent: 'documente_lista',
@@ -679,6 +700,10 @@ const INTENT_SEMANTIC_LABELS: Partial<Record<Intent, string>> = {
   opinie: 'crezi parerea opinia cum vede gandesti',
   matematica: 'calcul cat face rezultat suma diferenta produs impart',
   memorie_salveaza: 'retine memoreaza noteaza tine minte salveaza',
+  memorie_uita_specific: 'uita sterge elimina nu mai retine despre',
+  folder_acorda_acces: 'acorda permite acces folder deschide foldere',
+  folder_listeaza: 'ce fisiere foldere acces listeaza',
+  folder_actualizeaza: 'actualizeaza scaneaza foldere citeste re-scaneaza',
   conversatie_anterioara: 'am discutat am zis am vorbit ti-am spus inainte anterior amintesti',
   follow_up: 'continua mai mult explica mai bine aprofundeaza si asta',
   motivatie: 'motiveaza inspiratie curaj citat incurajeaza',
@@ -969,7 +994,27 @@ function handleMemory(intent: Intent, text: string, state: BrainState): string |
   if (intent === 'memorie_sterge') {
     const count = Object.keys(state.memory).filter(k => k.startsWith('mem_')).length;
     Object.keys(state.memory).filter(k => k.startsWith('mem_')).forEach(k => delete state.memory[k]);
-    return `Am șters ${count} notițe.`;
+    return `Am șters ${count} notițe din memoria internă.`;
+  }
+  if (intent === 'memorie_uita_specific') {
+    const m = text.match(/(?:uita ca|uita despre|sterge despre|nu mai retine|elimina din memorie)\s+(.+)/i);
+    if (!m) return 'Spune "Uită despre [subiect]" și voi șterge informația.';
+    const subject = m[1].trim().toLowerCase();
+    let removed = 0;
+    Object.entries(state.memory).filter(([k]) => k.startsWith('mem_')).forEach(([k, v]) => {
+      if (v.toLowerCase().includes(subject)) { delete state.memory[k]; removed++; }
+    });
+    if (removed === 0) return `Nu am găsit nimic despre "${subject}" în notițe.`;
+    return `Am șters ${removed} notiță/notițe despre "${subject}" ✅`;
+  }
+  if (intent === 'folder_acorda_acces') {
+    return 'JARVIS_FOLDER_ACTION:acorda_acces';
+  }
+  if (intent === 'folder_listeaza') {
+    return 'JARVIS_FOLDER_ACTION:listeaza';
+  }
+  if (intent === 'folder_actualizeaza') {
+    return 'JARVIS_FOLDER_ACTION:actualizeaza';
   }
   return null;
 }
@@ -1756,4 +1801,50 @@ export function archiveCurrentSession(
 
 export function getProactiveThought(_state: BrainState): string | null {
   return null;
+}
+
+// ─── Auto-detecție informații utile din mesajele utilizatorului ────────────────
+
+export interface DetectedFact {
+  fact: string;
+  category: 'personal' | 'preferinta' | 'relatie' | 'fapt' | 'plan' | 'opinie' | 'tehnic' | 'idee' | 'locatie' | 'munca' | 'general';
+}
+
+const AUTO_DETECT_PATTERNS: Array<{ pattern: RegExp; category: DetectedFact['category']; extract: (m: RegExpMatchArray, full: string) => string | null }> = [
+  { pattern: /(?:ma|me) (?:numesc|cheama)\s+(.+)/i, category: 'personal', extract: (m) => `Utilizatorul se numește ${m[1].trim()}` },
+  { pattern: /am\s+(\d{1,3})\s+(?:de\s+)?ani/i, category: 'personal', extract: (m) => `Utilizatorul are ${m[1]} ani` },
+  { pattern: /(?:lucrez|muncesc)\s+(?:la|in|ca|pe)\s+(.+)/i, category: 'munca', extract: (m) => `Utilizatorul lucrează ${m[1].trim()}` },
+  { pattern: /(?:sunt|is)\s+(?:programator|developer|inginer|student|elev|profesor|doctor|avocat|designer|manager|antreprenor|freelancer|economist)\b/i, category: 'munca', extract: (_m, full) => { const match = full.match(/(?:sunt|is)\s+(programator|developer|inginer|student|elev|profesor|doctor|avocat|designer|manager|antreprenor|freelancer|economist)/i); return match ? `Utilizatorul este ${match[1]}` : null; } },
+  { pattern: /(?:locuiesc|stau|traiesc)\s+(?:in|la)\s+(.+)/i, category: 'locatie', extract: (m) => `Utilizatorul locuiește în ${m[1].trim()}` },
+  { pattern: /(?:sunt din|vin din)\s+(.+)/i, category: 'locatie', extract: (m) => `Utilizatorul e din ${m[1].trim()}` },
+  { pattern: /(?:imi place|ador|iubesc|prefer)\s+(.{3,60})/i, category: 'preferinta', extract: (m) => `Utilizatorului îi place ${m[1].trim()}` },
+  { pattern: /(?:nu-mi place|urasc|detest|nu suport)\s+(.{3,60})/i, category: 'preferinta', extract: (m) => `Utilizatorul nu agreează ${m[1].trim()}` },
+  { pattern: /(?:fratele|sora|mama|tata|sotia|sotul|iubita|iubitul|prietenul|prietena|colegul|colega|seful|bunicul|bunica)\s+(?:meu|mea|lui)?\s+(?:se numeste|e|este|se cheama)\s+(.+)/i, category: 'relatie', extract: (m, full) => { const rel = full.match(/(fratele|sora|mama|tata|sotia|sotul|iubita|iubitul|prietenul|prietena|colegul|colega|seful|bunicul|bunica)/i); return rel ? `${rel[1]} utilizatorului: ${m[1].trim()}` : null; } },
+  { pattern: /(?:am un|am o)\s+(frate|sora|caine|pisica|copil|fiica|fiu|masina|casa)\b/i, category: 'relatie', extract: (m, full) => full.length < 100 ? `Utilizatorul are un/o ${m[1]}` : null },
+  { pattern: /(?:trebuie sa|vreau sa|planuiesc sa|intentionez sa|o sa)\s+(.{5,80})/i, category: 'plan', extract: (m) => `Plan: ${m[1].trim()}` },
+  { pattern: /(?:cred ca|parerea mea e|consider ca|eu zic ca)\s+(.{5,80})/i, category: 'opinie', extract: (m) => `Opinie utilizator: ${m[1].trim()}` },
+  { pattern: /(?:am o idee|m-am gandit|ce-ar fi sa|ar fi misto sa)\s+(.{5,80})/i, category: 'idee', extract: (m) => `Idee: ${m[1].trim()}` },
+  { pattern: /(?:stiai ca|un fapt interesant|de fapt)\s+(.{10,120})/i, category: 'fapt', extract: (m) => m[1].trim() },
+  { pattern: /(?:ziua mea|m-am nascut)\s+(?:e|este|pe|in)?\s*(.{3,40})/i, category: 'personal', extract: (m) => `Ziua de naștere a utilizatorului: ${m[1].trim()}` },
+  { pattern: /(?:hobby-ul|pasiunea|hobbyul)\s+(?:meu|mea)\s+(?:e|este|sunt)\s+(.{3,60})/i, category: 'preferinta', extract: (m) => `Hobby: ${m[1].trim()}` },
+  { pattern: /(?:email-ul|emailul|mail-ul)\s+(?:meu)\s+(?:e|este)\s+(\S+@\S+)/i, category: 'personal', extract: (m) => `Email utilizator: ${m[1]}` },
+  { pattern: /(?:numarul|nr|telefonul)\s+(?:meu)\s+(?:e|este)\s+(.{6,20})/i, category: 'personal', extract: (m) => `Telefon utilizator: ${m[1].trim()}` },
+];
+
+export function autoDetectFacts(userMessage: string): DetectedFact[] {
+  const facts: DetectedFact[] = [];
+  const trimmed = userMessage.trim();
+  if (trimmed.length < 5 || trimmed.length > 500) return facts;
+
+  for (const { pattern, category, extract } of AUTO_DETECT_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      const fact = extract(match, trimmed);
+      if (fact && fact.length > 3 && !facts.some(f => f.fact === fact)) {
+        facts.push({ fact, category });
+      }
+    }
+  }
+
+  return facts;
 }

@@ -43,6 +43,9 @@ import {
   createProject, addProjectStep, saveProjectFile,
 } from '@/engine/projectMemory';
 import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, type MemoryStore } from '@/engine/memory';
+import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats } from '@/engine/memoryFolder';
+import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
+import { autoDetectFacts } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
 
 interface BrainContextType {
@@ -55,6 +58,7 @@ interface BrainContextType {
   clearConversation: () => void;
   addDocument: (name: string, content: string) => Promise<void>;
   removeDocument: (id: string) => void;
+  requestFolderAccessAction: () => Promise<string>;
 }
 
 const BrainContext = createContext<BrainContextType | null>(null);
@@ -184,7 +188,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         // 7. Încarcă memoria JSON persistentă
         memoryRef.current = await loadMemory();
 
-        // 8. Sincronizează entitățile din SQLite → entityTracker (non-blocking)
+        // 8. Inițializează memoria pe fișiere (jarvis_memory/) + migrare one-time
+        initMemoryFolder().then(() => migrateMemoryFolder()).catch(() => {});
+
+        // 9. Sincronizează entitățile din SQLite → entityTracker (non-blocking)
         _syncEntitiesFromDB(brainRef.current);
 
       } catch (e) {
@@ -419,7 +426,49 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     }
     // ─── End Dev Mode Chain ───────────────────────────────────────────────────
 
+    // Auto-detect fapte din mesajul utilizatorului și salvează în memoryFolder (non-blocking)
+    const detectedFacts = autoDetectFacts(text);
+    if (detectedFacts.length > 0) {
+      Promise.all(detectedFacts.map(f =>
+        writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => {})
+      )).catch(() => {});
+    }
+
     let response = processMessage(text, brainRef.current, history);
+
+    // Interceptează acțiunile pentru foldere externe
+    if (response.startsWith('JARVIS_FOLDER_ACTION:')) {
+      const action = response.slice('JARVIS_FOLDER_ACTION:'.length);
+      try {
+        if (action === 'acorda_acces') {
+          const folder = await requestFolderAccess();
+          if (folder) {
+            response = `📂 Acces acordat la folderul **"${folder.name}"**!\n\nVoi scana automat fișierele text din acest folder și le voi memora.\n\nSpune "actualizează din foldere" pentru a re-scana oricând.`;
+            scanAllFolders().catch(() => {});
+          } else {
+            response = 'Nu s-a acordat acces la niciun folder. Poți încerca din nou oricând.';
+          }
+        } else if (action === 'listeaza') {
+          const folders = await getExternalFolders();
+          if (folders.length === 0) {
+            response = 'Nu am acces la niciun folder extern.\n\nSpune **"acordă acces la folder"** pentru a adăuga unul.';
+          } else {
+            const lines = folders.map((f, i) => `${i + 1}. **${f.name}** — ${f.fileCount ?? '?'} fișiere${f.lastScanned ? ` (scanat: ${new Date(f.lastScanned).toLocaleDateString('ro-RO')})` : ''}`);
+            response = `📂 **Foldere cu acces:**\n\n${lines.join('\n')}`;
+          }
+        } else if (action === 'actualizeaza') {
+          const folders = await getExternalFolders();
+          if (folders.length === 0) {
+            response = 'Nu am foldere de scanat. Spune **"acordă acces la folder"** pentru a adăuga unul.';
+          } else {
+            const results = await scanAllFolders();
+            response = `🔄 Scanare completă!\n\n• **${results.totalFiles}** fișiere procesate din **${folders.length}** foldere\n• **${results.totalFacts}** informații noi adăugate în memorie`;
+          }
+        }
+      } catch {
+        response = '⚠️ Eroare la accesarea folderelor. Încearcă din nou.';
+      }
+    }
 
     // Detectează dacă utilizatorul vrea explicit căutare online
     const wantsOnline = isOnlineIntent(text);
@@ -433,7 +482,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         .slice(0, 10)
         .map(x => x.f);
       const memFacts = getRelevantMemories(memoryRef.current, text, 10);
-      const combinedFacts = [...new Set([...rankedFacts, ...memFacts])].slice(0, 15);
+      const folderFacts = searchMemoryFolder(text, 10);
+      const combinedFacts = [...new Set([...rankedFacts, ...memFacts, ...folderFacts])].slice(0, 20);
       const ctx: JarvisContext = {
         userName: brain.userName ?? undefined,
         preferredStyle: brain.selfKnowledge.preferredStyle,
@@ -607,6 +657,17 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     setIsThinking(false);
   }, [persist]);
 
+  const requestFolderAccessAction = useCallback(async (): Promise<string> => {
+    try {
+      const folder = await requestFolderAccess();
+      if (!folder) return 'Nu s-a acordat acces.';
+      scanAllFolders().catch(() => {});
+      return `Acces acordat la "${folder.name}"! Scanarea a început.`;
+    } catch {
+      return 'Eroare la acordarea accesului.';
+    }
+  }, []);
+
   const removeDocument = useCallback((id: string) => {
     brainRef.current.learnedDocuments = brainRef.current.learnedDocuments.filter(d => d.id !== id);
     setBrainState({ ...brainRef.current });
@@ -657,6 +718,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     <BrainContext.Provider value={{
       messages, isThinking, webSearching, brainState, dbReady,
       sendMessage, clearConversation, addDocument, removeDocument,
+      requestFolderAccessAction,
     }}>
       {children}
     </BrainContext.Provider>
