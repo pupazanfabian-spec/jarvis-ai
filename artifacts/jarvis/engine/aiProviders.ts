@@ -95,10 +95,10 @@ export async function loadProviderSettings(): Promise<AIProviderSettings> {
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
   'gemini-1.5-pro-latest',
 ];
 
@@ -205,7 +205,7 @@ export async function testGeminiKeyDetailed(apiKey: string): Promise<{ ok: boole
       const { text, error } = await callGeminiModel(model, 'Say: ok', apiKey);
       if (text) return { ok: true, error: '' };
       if (error) {
-        if (error.includes('API_KEY_INVALID') || error.includes('API_KEY_INVALID') ||
+        if (error.includes('API_KEY_INVALID') || error.includes('INVALID_ARGUMENT') ||
             (error.includes('400') && !error.includes('quota'))) {
           return { ok: false, error: `Cheie invalidă: ${error.slice(0, 120)}` };
         }
