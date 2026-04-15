@@ -297,7 +297,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const domain = detectTopicCategory(query);
       const label = `${query.slice(0, 48)} [${provider.slice(0, 20)}]`.slice(0, 80);
       // Păstrăm sursa exactă: 'web', 'gemini', 'openai' etc.
-      const canonicalSource = (['web', 'gemini', 'openai'] as string[]).includes(provider)
+      const canonicalSource = (['web', 'gemini', 'openai', 'groq', 'openrouter'] as string[]).includes(provider)
         ? provider
         : 'web';
       await insertKnowledgeEntry({

@@ -31,7 +31,7 @@ import CodeSandboxScreen from '@/components/CodeSandboxScreen';
 import { useBrain } from '@/context/BrainContext';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
-import { useAIProvider, providerIcon } from '@/context/AIProviderContext';
+import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';
 import { useDevMode } from '@/context/DevModeContext';
 import { Message } from '@/engine/brain';
 import Colors from '@/constants/colors';
@@ -309,7 +309,7 @@ export default function ChatScreen() {
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'
                 : aiProviderSettings.activeProvider !== 'none'
-                  ? `✨ ${aiProviderSettings.activeProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} • Hibrid`
+                  ? `✨ ${providerLabel(aiProviderSettings.activeProvider)} • Hibrid`
                   : docCount > 0
                     ? `${docCount} doc. • Fără net`
                     : `v3.1 • Fără net`}
@@ -389,7 +389,7 @@ export default function ChatScreen() {
                 color={aiProviderSettings.activeProvider !== 'none' ? colors.accent : colors.textSecondary}
               />
               <Text style={[styles.menuItemText, aiProviderSettings.activeProvider !== 'none' && { color: colors.accent }]}>
-                Furnizor AI {aiProviderSettings.activeProvider !== 'none' ? `(${aiProviderSettings.activeProvider === 'gemini' ? 'Gemini' : 'ChatGPT'})` : ''}
+                Furnizor AI {aiProviderSettings.activeProvider !== 'none' ? `(${providerLabel(aiProviderSettings.activeProvider)})` : ''}
               </Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />

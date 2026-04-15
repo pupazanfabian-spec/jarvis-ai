@@ -143,10 +143,10 @@ export function useAIProvider() {
 }
 
 export function providerLabel(provider: AIProvider): string {
-  if (provider === 'gemini') return 'Gemini 2.0 Flash';
-  if (provider === 'openai') return 'ChatGPT (GPT-4.1 mini)';
-  if (provider === 'groq') return 'Groq (Llama 3.3 70B)';
-  if (provider === 'openrouter') return 'OpenRouter (gratuit)';
+  if (provider === 'gemini') return 'Gemini';
+  if (provider === 'openai') return 'ChatGPT';
+  if (provider === 'groq') return 'Groq';
+  if (provider === 'openrouter') return 'OpenRouter';
   return 'Fără AI cloud';
 }
 
