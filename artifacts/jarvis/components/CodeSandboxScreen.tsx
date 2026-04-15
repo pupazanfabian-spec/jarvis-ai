@@ -156,8 +156,8 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
     try {
       const res = await executeCode(selectedLang.id, code, stdinText || undefined);
       setResult(res);
-    } catch (e: any) {
-      setResult({ stdout: '', stderr: e?.message ?? 'Eroare necunoscută', exitCode: -1, duration: 0 });
+    } catch (e: unknown) {
+      setResult({ stdout: '', stderr: e instanceof Error ? e.message : 'Eroare necunoscută', exitCode: -1, duration: 0 });
     } finally {
       setRunning(false);
     }

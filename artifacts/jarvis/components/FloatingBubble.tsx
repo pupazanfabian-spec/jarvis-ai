@@ -18,7 +18,7 @@ const { colors } = Colors;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // Import condiționat ML Kit (necesită native build)
-let TextRecognition: any = null;
+let TextRecognition: { recognize: (uri: string) => Promise<{ text: string }> } | null = null;
 try {
   TextRecognition = require('@react-native-ml-kit/text-recognition').default;
 } catch {
@@ -353,7 +353,7 @@ export default function FloatingBubble({ onSendToChat, onMemorize }: FloatingBub
 function MenuButton({
   icon, label, color, onPress,
 }: {
-  icon: any; label: string; color: string; onPress: () => void;
+  icon: React.ComponentProps<typeof Feather>['name']; label: string; color: string; onPress: () => void;
 }) {
   return (
     <TouchableOpacity style={styles.menuBtn} onPress={onPress} activeOpacity={0.8}>

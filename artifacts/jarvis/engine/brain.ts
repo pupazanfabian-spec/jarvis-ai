@@ -1415,7 +1415,7 @@ export function processMessage(
   }
 
   // ── 10b. Comenzi imperative → marker special pentru Cloud AI ─────────────
-  if (COMMAND_INTENTS.has(intent as any)) {
+  if (COMMAND_INTENTS.has(intent as Intent)) {
     const cmdLabels: Record<string, string> = {
       cmd_scriere:  'scriere / redactare text',
       cmd_traducere:'traducere',

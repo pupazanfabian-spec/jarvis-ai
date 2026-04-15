@@ -103,7 +103,7 @@ export default function ModelSetupScreen() {
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: any; label: string; value: string }) {
+function InfoRow({ icon, label, value }: { icon: React.ComponentProps<typeof Feather>['name']; label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
       <Feather name={icon} size={14} color={colors.primary} />

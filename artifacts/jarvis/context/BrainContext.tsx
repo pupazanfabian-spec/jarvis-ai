@@ -6,7 +6,7 @@ import {
   createInitialBrainState, archiveCurrentSession,
 } from '@/engine/brain';
 import { createMindState } from '@/engine/mind';
-import { createSelfKnowledge } from '@/engine/learning';
+import { createSelfKnowledge, type CorrectionRecord } from '@/engine/learning';
 import { createEntityTracker } from '@/engine/entities';
 import { createInferenceEngine, extractRulesFromFact, addFact } from '@/engine/inference';
 import { createTemporalMemory } from '@/engine/temporal';
@@ -90,9 +90,10 @@ function migrateParsedState(parsed: BrainState): BrainState {
   if (parsed.selfKnowledge.totalMessages === undefined) {
     parsed.selfKnowledge.totalMessages = 0;
   }
-  parsed.selfKnowledge.corrections = (parsed.selfKnowledge.corrections || []).map((c: any) => {
-    if (typeof c === 'object' && 'wrong' in c) {
-      return { wrongResponse: c.wrong, correction: c.correct, intent: 'unknown', at: Date.now() };
+  parsed.selfKnowledge.corrections = (parsed.selfKnowledge.corrections || []).map((c) => {
+    const record = c as CorrectionRecord & { wrong?: string; correct?: string };
+    if ('wrong' in record && record.wrong) {
+      return { wrongResponse: record.wrong, correction: record.correct ?? '', intent: 'unknown', at: Date.now() };
     }
     return c;
   });

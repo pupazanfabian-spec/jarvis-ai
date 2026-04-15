@@ -81,7 +81,7 @@ export default function FileUploadModal({
       await onAddDocument(name, content);
       setStatus('');
       setLoading(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false);
       setStatus('Eroare la citirea fișierului. Încearcă un fișier .txt');
     }

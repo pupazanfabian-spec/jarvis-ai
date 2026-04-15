@@ -12,8 +12,20 @@ import {
   writeAsStringAsync,
 } from 'expo-file-system/legacy';
 
-// Import condiționat — nu crăpă dacă llama.rn nu e disponibil (Expo Go)
-let initLlama: any = null;
+interface LlamaContext {
+  completion(params: {
+    messages: { role: string; content: string }[];
+    n_predict: number;
+    temperature: number;
+    top_p: number;
+    top_k: number;
+    repeat_penalty: number;
+    stop: string[];
+  }): Promise<{ text?: string }>;
+  release(): Promise<void>;
+}
+
+let initLlama: ((params: Record<string, unknown>) => Promise<LlamaContext>) | null = null;
 let llamaAvailable = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -102,14 +114,14 @@ export async function downloadModel(
     } else {
       onError(`Download eșuat. Status: ${result?.status}`);
     }
-  } catch (e: any) {
-    onError(e?.message || 'Eroare necunoscută la descărcare');
+  } catch (e: unknown) {
+    onError(e instanceof Error ? e.message : 'Eroare necunoscută la descărcare');
   }
 }
 
 // ─── Context LLM global ───────────────────────────────────────────────────────
 
-let _llamaContext: any = null;
+let _llamaContext: LlamaContext | null = null;
 let _isLoading = false;
 
 export async function loadModel(): Promise<boolean> {
