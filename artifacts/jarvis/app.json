@@ -58,6 +58,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "56580016-ff53-4005-8a0a-875213e6050e"
+      }
+    },
+    "owner": "pfabianq"
   }
 }
