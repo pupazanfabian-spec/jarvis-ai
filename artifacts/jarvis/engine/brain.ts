@@ -420,7 +420,7 @@ function searchDictionary(text: string): string | null {
 
 type Intent =
   | 'salut' | 'ramas_bun' | 'multumesc' | 'ajutor' | 'ce_poti'
-  | 'identitate_axon' | 'da' | 'nu' | 'gluma' | 'motivatie' | 'sfat'
+  | 'identitate_jarvis' | 'da' | 'nu' | 'gluma' | 'motivatie' | 'sfat'
   | 'data_ora' | 'matematica' | 'conversie_unitati'
   | 'memorie_salveaza' | 'memorie_citeste' | 'memorie_sterge'
   | 'documente_lista' | 'introducere_utilizator'
@@ -481,8 +481,8 @@ const INTENT_PATTERNS: IntentPattern[] = [
     weight: 9,
   },
   {
-    intent: 'identitate_axon',
-    patterns: [/(cum (te|il|va|iti) cheama|care (e|este) numele|ce nume (ai|are)|cum (te|iti) numesti|cine esti|prezinta-te|esti axon|ce esti tu)/],
+    intent: 'identitate_jarvis',
+    patterns: [/(cum (te|il|va|iti) cheama|care (e|este) numele|ce nume (ai|are)|cum (te|iti) numesti|cine esti|prezinta-te|esti jarvis|ce esti tu)/],
     weight: 9,
   },
   {
@@ -902,7 +902,7 @@ function handleFollowUp(
   const concept = findRelevantConceptExtended(lastRealTopic);
   if (concept) {
     const extraFact = concept.facts[Math.floor(Math.random() * concept.facts.length)];
-    return `**Aprofundare — ${concept.label}:**\n\n${extraFact}${concept.axonOpinion ? `\n\n💭 *${concept.axonOpinion}*` : ''}`;
+    return `**Aprofundare — ${concept.label}:**\n\n${extraFact}${concept.jarvisOpinion ? `\n\n💭 *${concept.jarvisOpinion}*` : ''}`;
   }
 
   return `Continui pe subiectul "${lastRealTopic.slice(0, 50)}" — poți fi mai specific ce aspect vrei să aprofundezi?`;
@@ -1291,7 +1291,7 @@ export function processMessage(
   }
 
   // ── 4. Identitate Jarvis ────────────────────────────────────────────────────
-  if (intent === 'identitate_axon') {
+  if (intent === 'identitate_jarvis') {
     const creatorInfo = state.creatorId
       ? ` Creatorul meu: **${state.memory['__creator__'] || 'înregistrat'}**.` : '';
     const memCount = Object.keys(state.memory).filter(k => k.startsWith('mem_')).length;
@@ -1509,8 +1509,8 @@ export function processMessage(
     const qType = detectQuestionType(trimmed);
     const topicCat = detectTopicCategory(concept.id);
 
-    if (intent === 'opinie' && concept.axonOpinion) {
-      response = concept.axonOpinion;
+    if (intent === 'opinie' && concept.jarvisOpinion) {
+      response = concept.jarvisOpinion;
     } else {
       // Construiește conținut bogat
       const fact = concept.facts[Math.floor(Math.random() * concept.facts.length)];
@@ -1521,8 +1521,8 @@ export function processMessage(
       if (relConcept) {
         rawContent += `\n\n🔗 **Legat de ${relConcept.label}:** ${relConcept.description}`;
       }
-      if (concept.axonOpinion) {
-        rawContent += `\n\n💭 *Opinia mea:* ${concept.axonOpinion}`;
+      if (concept.jarvisOpinion) {
+        rawContent += `\n\n💭 *Opinia mea:* ${concept.jarvisOpinion}`;
       }
 
       const rCtx: ResponseCtx = {

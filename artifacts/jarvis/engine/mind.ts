@@ -53,8 +53,8 @@ export function generateChainOfThought(topic: string, concept: Concept | null): 
   }
   
   // Pasul 4: Opinia lui Jarvis (dacă există)
-  if (concept.axonOpinion) {
-    chain.push(concept.axonOpinion);
+  if (concept.jarvisOpinion) {
+    chain.push(concept.jarvisOpinion);
   }
   
   return chain;
@@ -154,8 +154,8 @@ export function generateDeepResponse(
   }
   
   // Strat 4: Opinia lui Jarvis
-  if (concept.axonOpinion) {
-    parts.push(`\n*Opinia mea:* ${concept.axonOpinion}`);
+  if (concept.jarvisOpinion) {
+    parts.push(`\n*Opinia mea:* ${concept.jarvisOpinion}`);
   }
   
   // Strat 5: Intrebare de intoarcere (curiozitate)
@@ -200,7 +200,7 @@ export function generateProactiveMessage(mindState: MindState, userName: string 
   const randomConcept = CONCEPTS[randomId];
   
   const spontaneous = [
-    `*[Mă gândeam singur...]* ${randomConcept.axonOpinion || randomConcept.facts[0]}\n\nCe crezi tu${name}?`,
+    `*[Mă gândeam singur...]* ${randomConcept.jarvisOpinion || randomConcept.facts[0]}\n\nCe crezi tu${name}?`,
     `*[Întrebare care îmi vine...]* ${generateCuriousQuestion('', randomConcept, mindState)}`,
     `*[Asociere liberă...]* Știai că ${randomConcept.facts[Math.floor(Math.random() * randomConcept.facts.length)]}?\n\nMă fascinează asta.`,
   ];

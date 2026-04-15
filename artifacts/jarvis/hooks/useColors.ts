@@ -1,24 +1,27 @@
-import { useColorScheme } from "react-native";
+import Colors from "@/constants/colors";
 
-import colors from "@/constants/colors";
+const { colors } = Colors;
 
-/**
- * Returns the design tokens for the current color scheme.
- *
- * The returned object contains all color tokens for the active palette
- * plus scheme-independent values like `radius`.
- *
- * Falls back to the light palette when no dark key is defined in
- * constants/colors.ts (the scaffold ships light-only by default).
- * When a sibling web artifact's dark tokens are synced into a `dark`
- * key, this hook will automatically switch palettes based on the
- * device's appearance setting.
- */
 export function useColors() {
-  const scheme = useColorScheme();
-  const palette =
-    scheme === "dark" && "dark" in colors
-      ? (colors as Record<string, typeof colors.light>).dark
-      : colors.light;
-  return { ...palette, radius: colors.radius };
+  return {
+    background: colors.background,
+    foreground: colors.text,
+    card: colors.surface,
+    cardForeground: colors.text,
+    primary: colors.primary,
+    primaryForeground: colors.userBubbleText,
+    secondary: colors.surfaceElevated,
+    secondaryForeground: colors.text,
+    muted: colors.surfaceHigh,
+    mutedForeground: colors.textSecondary,
+    accent: colors.accent,
+    accentForeground: colors.text,
+    destructive: colors.error,
+    destructiveForeground: '#FFFFFF',
+    border: colors.border,
+    input: colors.border,
+    text: colors.text,
+    tint: colors.primary,
+    radius: 8,
+  };
 }

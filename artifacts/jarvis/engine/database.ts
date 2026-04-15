@@ -290,7 +290,7 @@ export async function saveDynamicConcept(concept: {
   description: string;
   related: string[];
   facts: string[];
-  axonOpinion?: string;
+  jarvisOpinion?: string;
   source?: string;
 }): Promise<void> {
   const db = await getDB();
@@ -306,7 +306,7 @@ export async function saveDynamicConcept(concept: {
       concept.description,
       JSON.stringify(concept.related),
       JSON.stringify(concept.facts),
-      concept.axonOpinion ?? null,
+      concept.jarvisOpinion ?? null,
       now,
       concept.source ?? 'user',
     ]

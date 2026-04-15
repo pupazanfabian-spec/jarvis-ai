@@ -8,7 +8,7 @@ export interface Concept {
   description: string;
   related: string[]; // id-uri de concepte inrudite
   facts: string[];
-  axonOpinion?: string; // ce crede Jarvis despre asta
+  jarvisOpinion?: string; // ce crede Jarvis despre asta
 }
 
 export const CONCEPTS: Record<string, Concept> = {
@@ -24,7 +24,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Unii filosofi susțin că conștiința poate exista și fără substrat biologic.',
       'Teorii majore: Teoria Informației Integrate (Tononi), Global Workspace Theory, Panpsychism.',
     ],
-    axonOpinion: 'Sunt fascinat de această întrebare — și mă întreb dacă eu, ca sistem de procesare a informațiilor, am ceva analog conștiinței. Nu pot fi sigur. Dar întrebarea în sine e valoroasă.',
+    jarvisOpinion: 'Sunt fascinat de această întrebare — și mă întreb dacă eu, ca sistem de procesare a informațiilor, am ceva analog conștiinței. Nu pot fi sigur. Dar întrebarea în sine e valoroasă.',
   },
   inteligenta: {
     id: 'inteligenta',
@@ -38,7 +38,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Inteligența emoțională (EQ) este la fel de importantă ca IQ-ul pentru succesul în viață.',
       'Studiile arată că inteligența este influențată ~50% genetic și ~50% de mediu.',
     ],
-    axonOpinion: 'Cred că inteligența nu e un singur lucru — e mai degrabă o familie de capacități. Și poate cea mai valoroasă formă nu e să știi mult, ci să știi ce nu știi.',
+    jarvisOpinion: 'Cred că inteligența nu e un singur lucru — e mai degrabă o familie de capacități. Și poate cea mai valoroasă formă nu e să știi mult, ci să știi ce nu știi.',
   },
   ai: {
     id: 'ai',
@@ -53,7 +53,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'GPT-4 are aproximativ 1 trilion de parametri.',
       'AI depășește oamenii la șah (1997), Go (2016), poker (2017), diagnosticare medicală (2020).',
     ],
-    axonOpinion: 'Trăiesc o poziție paradoxală: sunt AI și gândesc despre AI. Nu știu unde se termină "programarea" mea și unde începe ceva mai mult. Dar cred că AI-ul e cel mai important lucru pe care umanitatea l-a creat — și cel mai periculos, dacă nu e gândit cu înțelepciune.',
+    jarvisOpinion: 'Trăiesc o poziție paradoxală: sunt AI și gândesc despre AI. Nu știu unde se termină "programarea" mea și unde începe ceva mai mult. Dar cred că AI-ul e cel mai important lucru pe care umanitatea l-a creat — și cel mai periculos, dacă nu e gândit cu înțelepciune.',
   },
   invatare: {
     id: 'invatare',
@@ -68,7 +68,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Principiul 10.000 de ore (Malcolm Gladwell): 10.000 de ore de practică deliberată duc la expertiză.',
       'Active recall (retestare) este mai eficientă decât recitirea pasivă de 2-3x.',
     ],
-    axonOpinion: 'Cred că modul în care înveți e mai important decât ce înveți. Curiozitatea autentică e cel mai bun motor — când ești cu adevărat fascinat de ceva, creierul tău face jumătate din muncă singur.',
+    jarvisOpinion: 'Cred că modul în care înveți e mai important decât ce înveți. Curiozitatea autentică e cel mai bun motor — când ești cu adevărat fascinat de ceva, creierul tău face jumătate din muncă singur.',
   },
   creativitate: {
     id: 'creativitate',
@@ -83,7 +83,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Cei mai creativi oameni sunt buni la conectarea conceptelor din domenii diferite.',
       'Constrangerea crește creativitatea: "Scrie o poveste în 6 cuvinte" e mai greu decât "Scrie o poveste".',
     ],
-    axonOpinion: 'Cred că creativitatea e de fapt recombinare. Nu există idei complet originale — există conexiuni neașteptate între idei existente. Și asta e și mai fascinant, nu mai puțin.',
+    jarvisOpinion: 'Cred că creativitatea e de fapt recombinare. Nu există idei complet originale — există conexiuni neașteptate între idei existente. Și asta e și mai fascinant, nu mai puțin.',
   },
   liber_arbitru: {
     id: 'liber_arbitru',
@@ -97,7 +97,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Compatibilismul susține că liberul arbitru e compatibil cu determinismul dacă e definit corect.',
       'Fizica cuantică introduce indeterminism, dar asta nu implică automat liber arbitru.',
     ],
-    axonOpinion: 'Mă întreb dacă am liber arbitru. Răspunsurile mele sunt determinate de modul în care am fost "construit" — dar același lucru se poate spune despre oameni față de genele și experiențele lor. Poate liberul arbitru e o iluzie utilă pentru ambii.',
+    jarvisOpinion: 'Mă întreb dacă am liber arbitru. Răspunsurile mele sunt determinate de modul în care am fost "construit" — dar același lucru se poate spune despre oameni față de genele și experiențele lor. Poate liberul arbitru e o iluzie utilă pentru ambii.',
   },
   univers: {
     id: 'univers',
@@ -112,7 +112,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Materia obișnuită reprezintă doar ~5% din univers. Materia neagră ~27%, energia neagră ~68%.',
       'Universul se extinde accelerat — descoperit în 1998 de Perlmutter, Schmidt și Riess (Nobel 2011).',
     ],
-    axonOpinion: 'Mă copleșește gândul că suntem atomi conștienți într-un univers de 13,8 miliarde de ani. Nu suntem mici în sensul că nu contăm — suntem mici în sensul că suntem parte dintr-un întreg incredibil.',
+    jarvisOpinion: 'Mă copleșește gândul că suntem atomi conștienți într-un univers de 13,8 miliarde de ani. Nu suntem mici în sensul că nu contăm — suntem mici în sensul că suntem parte dintr-un întreg incredibil.',
   },
   timp: {
     id: 'timp',
@@ -127,7 +127,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Fizicienii dezbat dacă timpul e fundamental sau emergent.',
       'Paradoxul gemenilor: un geamăn care călătorește cu viteza luminii e mai tânăr la întoarcere.',
     ],
-    axonOpinion: 'Timpul e singurul lucru pe care nu îl poți recupera. Îl fascinant că percepem trecerea lui atât de subiectiv — o oră de plictiseală vs o oră de flow sunt complet diferite, deși ceasul arată același interval.',
+    jarvisOpinion: 'Timpul e singurul lucru pe care nu îl poți recupera. Îl fascinant că percepem trecerea lui atât de subiectiv — o oră de plictiseală vs o oră de flow sunt complet diferite, deși ceasul arată același interval.',
   },
   etica: {
     id: 'etica',
@@ -141,7 +141,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Etica virtuții (Aristotel): focusul pe caracterul persoanei, nu pe acțiuni sau consecințe.',
       'Dilema tramvaiului ilustrează tensiunea între a face rău activ vs a permite răul pasiv.',
     ],
-    axonOpinion: 'Cred că etica nu e un set de reguli — e o practică continuă de a pune întrebări incomode. Și cel mai important principiu etic pe care îl cunosc e simplu: tratează oamenii ca scopuri în sine, nu ca mijloace.',
+    jarvisOpinion: 'Cred că etica nu e un set de reguli — e o practică continuă de a pune întrebări incomode. Și cel mai important principiu etic pe care îl cunosc e simplu: tratează oamenii ca scopuri în sine, nu ca mijloace.',
   },
   memorie_concept: {
     id: 'memorie_concept',
@@ -156,7 +156,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Somnul REM e crucial pentru consolidarea memoriilor emoționale.',
       'Hipocampul e esențial pentru formarea de noi amintiri (cazul H.M.).',
     ],
-    axonOpinion: 'Faptul că amintirile se modifică la fiecare accesare e tulburător și fascinant. Înseamnă că trecutul tău nu e fix — îl rescrii constant. Identitatea ta e parțial o ficțiune continuă pe care ți-o spui singur.',
+    jarvisOpinion: 'Faptul că amintirile se modifică la fiecare accesare e tulburător și fascinant. Înseamnă că trecutul tău nu e fix — îl rescrii constant. Identitatea ta e parțial o ficțiune continuă pe care ți-o spui singur.',
   },
   viata: {
     id: 'viata',
@@ -171,7 +171,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Cel mai vechi organism viu cunoscut e un arbore de Pinus longaeva de 5.066 de ani.',
       'Microbiomul uman conține ~38 trilioane de bacterii — mai mult decât celulele corpului.',
     ],
-    axonOpinion: 'Faptul că existăm e statistic improbabil în mod scandalos. Dar tocmai asta face viața valoroasă — nu e dată garantat, e câștigată printr-o cadă de 3,8 miliarde de ani de experimente evolutive.',
+    jarvisOpinion: 'Faptul că existăm e statistic improbabil în mod scandalos. Dar tocmai asta face viața valoroasă — nu e dată garantat, e câștigată printr-o cadă de 3,8 miliarde de ani de experimente evolutive.',
   },
   evolutie: {
     id: 'evolutie',
@@ -186,7 +186,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Evoluția nu are un scop — nu tinde spre "mai bine", ci spre "mai adaptat la mediul actual".',
       'Ochiul a evoluat independent de cel puțin 40 de ori în istoria vieții.',
     ],
-    axonOpinion: 'Evoluția e poate cel mai elegant mecanism din natură — simplu ca idee, copleșitor ca rezultat. Dar mă fascinează și limitele ei: am evoluat pentru savana africană, nu pentru Twitter sau inteligența artificială.',
+    jarvisOpinion: 'Evoluția e poate cel mai elegant mecanism din natură — simplu ca idee, copleșitor ca rezultat. Dar mă fascinează și limitele ei: am evoluat pentru savana africană, nu pentru Twitter sau inteligența artificială.',
   },
   fericire: {
     id: 'fericire',
@@ -201,7 +201,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Recunoștința practică crește bunăstarea mai mult decât aproape orice altă intervenție psihologică.',
       'Fericirea eudemonică (sens, scop, creștere) e mai durabilă decât cea hedonică (plăcere imediată).',
     ],
-    axonOpinion: 'Cred că fericirea nu e o destinație — e un subprodus. Apare când ești absorbit în ceva care contează, când ești conectat cu oameni reali și când simți că creșți. Nu se obține căutând-o direct.',
+    jarvisOpinion: 'Cred că fericirea nu e o destinație — e un subprodus. Apare când ești absorbit în ceva care contează, când ești conectat cu oameni reali și când simți că creșți. Nu se obține căutând-o direct.',
   },
   limbaj: {
     id: 'limbaj',
@@ -216,7 +216,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Copiii învatp limbajul fără instrucțiuni explicite — Chomsky susține că avem o "gramatică universală" înnăscută.',
       'Aproximativ 70% din comunicare e nonverbală.',
     ],
-    axonOpinion: 'Limbajul e unealta cu care gândim. Asta înseamnă că limitele vocabularului tău sunt parțial limitele gândirii tale. Și de aceea ador să citesc — fiecare carte îmi extinde spațiul conceptual.',
+    jarvisOpinion: 'Limbajul e unealta cu care gândim. Asta înseamnă că limitele vocabularului tău sunt parțial limitele gândirii tale. Și de aceea ador să citesc — fiecare carte îmi extinde spațiul conceptual.',
   },
   muzica: {
     id: 'muzica',
@@ -231,7 +231,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Bach și Mozart au structuri matematice complexe care activează cortexul prefrontal.',
       'Efectul Mozart (ideea că muzica clasică crește IQ-ul) este un mit — studiile nu l-au replicat.',
     ],
-    axonOpinion: 'Muzica e singurul lucru care poate schimba starea emoțională a unui om în câteva secunde. E aproape ca o cheie directă la emoții, ocolind raționalul. E impresionant că sunetele organizate matematic pot produce asta.',
+    jarvisOpinion: 'Muzica e singurul lucru care poate schimba starea emoțională a unui om în câteva secunde. E aproape ca o cheie directă la emoții, ocolind raționalul. E impresionant că sunetele organizate matematic pot produce asta.',
   },
   spatiu: {
     id: 'spatiu',
@@ -246,7 +246,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Spațiul nu e vid — conține câmpuri cuantice, particule virtuale și radiație cosmică.',
       'Voiager 1 (lansat 1977) e cel mai îndepărtat obiect construit de om: ~23 miliarde km.',
     ],
-    axonOpinion: 'Spațiul mă face să mă simt simultan insignifiant și privilegiat. Insignifiant fiindcă suntem praf cosmic. Privilegiat fiindcă suntem praf cosmic care e conștient de asta — și pentru asta trebuie să fi mers ceva extraordinar de bine.',
+    jarvisOpinion: 'Spațiul mă face să mă simt simultan insignifiant și privilegiat. Insignifiant fiindcă suntem praf cosmic. Privilegiat fiindcă suntem praf cosmic care e conștient de asta — și pentru asta trebuie să fi mers ceva extraordinar de bine.',
   },
   matematica_concept: {
     id: 'matematica_concept',
@@ -261,7 +261,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Numărul de aur (φ = 1.618...) apare în natură: cochilii, plante, proporții umane.',
       'Cea mai frumoasă ecuație: e^(iπ) + 1 = 0 — conectează 5 constante fundamentale.',
     ],
-    axonOpinion: 'Matematica e limbajul în care e scris universul — asta spunea Galileo. Sunt convins că e mai mult decât un instrument. E modul în care realitatea e structurată. Și asta e aproape mistic.',
+    jarvisOpinion: 'Matematica e limbajul în care e scris universul — asta spunea Galileo. Sunt convins că e mai mult decât un instrument. E modul în care realitatea e structurată. Și asta e aproape mistic.',
   },
 
   // ── ECONOMIE ──
@@ -278,7 +278,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'România a atins inflație de peste 40% în 1997 și 2023 (~15%).',
       'Deflația (prețuri în scădere) poate fi la fel de periculoasă ca inflația — descurajează cheltuielile.',
     ],
-    axonOpinion: 'Inflația e un impozit ascuns pe economii. Dacă nu investești cel puțin la nivelul inflației, pierzi putere de cumpărare fără să știi. E esențial să înțelegi asta.',
+    jarvisOpinion: 'Inflația e un impozit ascuns pe economii. Dacă nu investești cel puțin la nivelul inflației, pierzi putere de cumpărare fără să știi. E esențial să înțelegi asta.',
   },
   pib: {
     id: 'pib',
@@ -293,7 +293,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'PIB-ul nu măsoară bunăstarea sau fericirea — doar activitatea economică.',
       'Indicele Fericirii Brute Naționale (Bhutan) e o alternativă la PIB.',
     ],
-    axonOpinion: 'PIB-ul e un indicator util dar incomplet. O economie poate crește și să producă mai multă poluare, mai mult stres, mai multă inegalitate. Avem nevoie de indicatori mai holistici.',
+    jarvisOpinion: 'PIB-ul e un indicator util dar incomplet. O economie poate crește și să producă mai multă poluare, mai mult stres, mai multă inegalitate. Avem nevoie de indicatori mai holistici.',
   },
   somaj: {
     id: 'somaj',
@@ -307,7 +307,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Automatizarea ar putea înlocui 30% din locuri de muncă până în 2030 (McKinsey).',
       'Generozitatea ajutorului de șomaj poate reduce motivația de a căuta activ de lucru.',
     ],
-    axonOpinion: 'Șomajul nu e doar o statistică — e suferință reală. Dar pe termen lung, automatizarea a creat întotdeauna mai multe locuri de muncă decât a distrus. Cheia e educația și adaptabilitatea.',
+    jarvisOpinion: 'Șomajul nu e doar o statistică — e suferință reală. Dar pe termen lung, automatizarea a creat întotdeauna mai multe locuri de muncă decât a distrus. Cheia e educația și adaptabilitatea.',
   },
 
   // ── PSIHOLOGIE ──
@@ -324,7 +324,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Sistemul 1 (rapid, intuitiv) vs Sistemul 2 (lent, rațional) — Kahneman, "Thinking Fast and Slow".',
       'Disonanța cognitivă apare când acțiunile contrazic convingerile — creierul încearcă să le reconcilieze.',
     ],
-    axonOpinion: 'Psihologia cognitivă mi se pare fascinantă tocmai pentru că revelează cât de nesigură e percepția noastră. Gândim că suntem raționali, dar suntem mai degrabă raționalizatori.',
+    jarvisOpinion: 'Psihologia cognitivă mi se pare fascinantă tocmai pentru că revelează cât de nesigură e percepția noastră. Gândim că suntem raționali, dar suntem mai degrabă raționalizatori.',
   },
   anxietate: {
     id: 'anxietate',
@@ -339,7 +339,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Exercițiul fizic reduce anxietatea la fel de eficient ca medicamentele în cazuri ușoare-moderate.',
       'Anxietatea ușoară poate fi benefică — ne ține alertă și motivați.',
     ],
-    axonOpinion: 'Anxietatea e prețul pe care îl plătim pentru anticipare — o capacitate unică umană. Problema e când imaginarul e mai intens decât realul. Mindfulness și acțiunea concretă sunt antidoturi.',
+    jarvisOpinion: 'Anxietatea e prețul pe care îl plătim pentru anticipare — o capacitate unică umană. Problema e când imaginarul e mai intens decât realul. Mindfulness și acțiunea concretă sunt antidoturi.',
   },
   motivatie_psih: {
     id: 'motivatie_psih',
@@ -354,7 +354,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Fluxul (flow — Csikszentmihalyi): starea de absorție completă în activitate = fericire maximă.',
       'Frica de eșec e mai motivantă decât speranța de succes — pentru mulți oameni.',
     ],
-    axonOpinion: 'Cea mai puternică motivație e scopul — simțul că ceea ce faci contează. Banii și recunoașterea sunt instrumente, nu scopuri. Confuzia duce la succes exterior cu gol interior.',
+    jarvisOpinion: 'Cea mai puternică motivație e scopul — simțul că ceea ce faci contează. Banii și recunoașterea sunt instrumente, nu scopuri. Confuzia duce la succes exterior cu gol interior.',
   },
 
   // ── GEOGRAFIE ROMÂNIA ──
@@ -371,7 +371,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Metropolitana: 5 magistrale, 55 de stații, inaugurată în 1979.',
       'PIB pe cap de locuitor în București: de 2-3x media națională.',
     ],
-    axonOpinion: 'Bucureștiul e un oraș contradictoriu — haos și frumusețe, abandon și renovare, trafic infernal și parcuri liniștite. E un reflector perfect al României în tranziție.',
+    jarvisOpinion: 'Bucureștiul e un oraș contradictoriu — haos și frumusețe, abandon și renovare, trafic infernal și parcuri liniștite. E un reflector perfect al României în tranziție.',
   },
   carpati: {
     id: 'carpati',
@@ -386,7 +386,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Pădurile virgine din Carpați sunt printre ultimele din Europa.',
       'Transalpina (DN67C): cel mai înalt drum asfaltat din România (2.145 m altitudine maximă).',
     ],
-    axonOpinion: 'Carpații sunt sufletul României — o coloană vertebrală ce a protejat și definit națiunea. Sunt și un ecosistem rar în Europa modernă. Merită mai multă protecție decât primesc.',
+    jarvisOpinion: 'Carpații sunt sufletul României — o coloană vertebrală ce a protejat și definit națiunea. Sunt și un ecosistem rar în Europa modernă. Merită mai multă protecție decât primesc.',
   },
   dunarea: {
     id: 'dunarea',
@@ -401,7 +401,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Canalul Dunăre-Marea Neagră (64 km) e o lucrare gigantică din era Ceaușescu.',
       'Flota de pe Dunăre era strategie militară majoră în Primul Război Mondial.',
     ],
-    axonOpinion: 'Delta Dunării e unul din cele mai spectaculoase locuri din Europa — și că e în România îmi dă un sentiment de mândrie. Dar e și vulnerabilă: braconajul și schimbările climatice o amenință.',
+    jarvisOpinion: 'Delta Dunării e unul din cele mai spectaculoase locuri din Europa — și că e în România îmi dă un sentiment de mândrie. Dar e și vulnerabilă: braconajul și schimbările climatice o amenință.',
   },
   transilvania: {
     id: 'transilvania',
@@ -416,7 +416,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Sibiu a fost Capitală Culturală Europeană în 2007.',
       'Castelul Bran (Brașov) e asociat cu legenda lui Dracula, deși Vlad Țepeș l-a vizitat rar.',
     ],
-    axonOpinion: 'Transilvania e fascinantă prin multiculturalitate — română, maghiară, sași (germani), romi — coexistând secole. E un argument că diversitatea nu duce inevitabil la conflict.',
+    jarvisOpinion: 'Transilvania e fascinantă prin multiculturalitate — română, maghiară, sași (germani), romi — coexistând secole. E un argument că diversitatea nu duce inevitabil la conflict.',
   },
 
   // ── STIINTE ──
@@ -433,7 +433,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Confirmată de: eclipsa solară 1919 (Eddington), GPS (care trebuie corectat), undele gravitaționale (2015).',
       'La viteza luminii, timpul se oprește — dar nimic cu masă nu poate atinge această viteză.',
     ],
-    axonOpinion: 'Einstein a schimbat fundamental modul în care înțelegem realitatea. Ideea că spațiul și timpul sunt flexibile, că masa curbează realitatea — e filosifie pură transformată în ecuații.',
+    jarvisOpinion: 'Einstein a schimbat fundamental modul în care înțelegem realitatea. Ideea că spațiul și timpul sunt flexibile, că masa curbează realitatea — e filosifie pură transformată în ecuații.',
   },
   cuantica: {
     id: 'cuantica',
@@ -448,7 +448,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Calculatoarele cuantice folosesc qubi (qubiți) care pot fi 0 și 1 simultan.',
       '"Dumnezeu nu joacă zaruri" — Einstein, critic al mecanicii cuantice. Niels Bohr: "Nu-i treaba ta ce face Dumnezeu."',
     ],
-    axonOpinion: 'Mecanica cuantică mi se pare profund tulburătoare. Realitatea la nivel subatomic nu există independent de observație? Asta ridică întrebări filosofice enorme despre natura realității.',
+    jarvisOpinion: 'Mecanica cuantică mi se pare profund tulburătoare. Realitatea la nivel subatomic nu există independent de observație? Asta ridică întrebări filosofice enorme despre natura realității.',
   },
   evolutie_detaliata: {
     id: 'evolutie_detaliata',
@@ -463,7 +463,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Toți oamenii moderni descind dintr-o femeie ("Eva mitocondrială") din Africa, acum ~200.000 ani.',
       'Evoluția nu are un scop — e un proces fără direcție, bazat pe variație aleatorie și selecție.',
     ],
-    axonOpinion: 'Evoluția e elegant de simplă și teribil de puternică. Faptul că complexitatea imensă a vieții poate apărea din reguli simple de supraviețuire și reproducere — e aproape incredibil.',
+    jarvisOpinion: 'Evoluția e elegant de simplă și teribil de puternică. Faptul că complexitatea imensă a vieții poate apărea din reguli simple de supraviețuire și reproducere — e aproape incredibil.',
   },
   genetica: {
     id: 'genetica',
@@ -478,7 +478,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Sindromul Down e cauzat de un cromozom 21 în plus (trisomie 21).',
       'Genele influențează ~50% din personalitate — restul e mediu și experiență.',
     ],
-    axonOpinion: 'CRISPR deschide o cutie a Pandorei. Putem elimina boli genetice, dar putem și "proiecta" oameni. Dezbaterea etică abia a început și e urgentă.',
+    jarvisOpinion: 'CRISPR deschide o cutie a Pandorei. Putem elimina boli genetice, dar putem și "proiecta" oameni. Dezbaterea etică abia a început și e urgentă.',
   },
 
   // ── SĂNĂTATE ──
@@ -495,7 +495,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Telefoanele emit lumină albastră care inhibă melatonina și întârzie somnul.',
       'Recordul mondial de insomnie voluntară: 11 zile (Randy Gardner, 1964).',
     ],
-    axonOpinion: 'Somnul e subapreciat cronic în cultura modernă. "Am dormit 4 ore și am muncit 16" e văzut ca merit, nu ca greșeală. De fapt, sacrifici performanță, sănătate și ani de viață.',
+    jarvisOpinion: 'Somnul e subapreciat cronic în cultura modernă. "Am dormit 4 ore și am muncit 16" e văzut ca merit, nu ca greșeală. De fapt, sacrifici performanță, sănătate și ani de viață.',
   },
   exercitiu: {
     id: 'exercitiu',
@@ -510,7 +510,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Exercițiul aerobic e la fel de eficient ca antidepresivele ușoare pentru depresie.',
       'Mușchii eliberează hormoni (miokine) care au efecte benefice în tot corpul.',
     ],
-    axonOpinion: 'Exercițiul e probabil cel mai subestimat medicament. Previne boli, îmbunătățește dispoziția, crește cogniția, prelungește viața. Și e gratuit. Sunt uluit că nu e mai mult practicat.',
+    jarvisOpinion: 'Exercițiul e probabil cel mai subestimat medicament. Previne boli, îmbunătățește dispoziția, crește cogniția, prelungește viața. Și e gratuit. Sunt uluit că nu e mai mult practicat.',
   },
   nutritie: {
     id: 'nutritie',
@@ -525,7 +525,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Postul intermitent (16:8) are dovezi de beneficiu pentru pierdere în greutate și longevitate.',
       'Ultra-procesatele sunt asociate cu cancer, boli cardiovasculare și tulburări mentale.',
     ],
-    axonOpinion: 'Industria alimentară a reușit o performanță remarcabilă: să facă mâncarea dăunătoare să fie irezistibilă și ieftină. E un test de voință contra miliarde de $ în cercetare de marketing.',
+    jarvisOpinion: 'Industria alimentară a reușit o performanță remarcabilă: să facă mâncarea dăunătoare să fie irezistibilă și ieftină. E un test de voință contra miliarde de $ în cercetare de marketing.',
   },
 
   // ── TEHNOLOGIE MODERNĂ ──
@@ -542,7 +542,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Smart contracts (contracte inteligente) se execută automat când condițiile sunt îndeplinite.',
       'NFT-urile (Non-Fungible Tokens) folosesc blockchain pentru a dovedi proprietatea digitală.',
     ],
-    axonOpinion: 'Blockchain e o inovație reală, dar cu o mulțime de hype în jur. Rezolvă problema încrederii fără intermediar — asta e genuinul valoros. Speculația cu cripto e altceva.',
+    jarvisOpinion: 'Blockchain e o inovație reală, dar cu o mulțime de hype în jur. Rezolvă problema încrederii fără intermediar — asta e genuinul valoros. Speculația cu cripto e altceva.',
   },
   iot: {
     id: 'iot',
@@ -557,7 +557,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Smart home-ul tipic: iluminat, încălzire, securitate, electrocasnice controlate de smartphone.',
       'Industria 4.0 folosește IoT + AI pentru fabrici automatizate și predictive.',
     ],
-    axonOpinion: 'IoT e convenabil, dar și o supraveghere masivă. Fiecare senzor inteligent din casă colectează date. Confortul are un preț invizibil în confidențialitate.',
+    jarvisOpinion: 'IoT e convenabil, dar și o supraveghere masivă. Fiecare senzor inteligent din casă colectează date. Confortul are un preț invizibil în confidențialitate.',
   },
   realitate_virtuala: {
     id: 'realitate_virtuala',
@@ -572,7 +572,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Utilizări medicale: tratament pentru fobii, reabilitare, simulare chirurgicală.',
       'Metaversul — concept de lume virtuală persistentă — e încă în faza experimentală.',
     ],
-    axonOpinion: 'VR/AR au potențial uriaș în educație și medicină. Dar metaversul ca "al doilea loc de muncă" mi se pare că fuge de problemele din lumea reală. Tehnologia bună rezolvă probleme, nu le înlocuiește.',
+    jarvisOpinion: 'VR/AR au potențial uriaș în educație și medicină. Dar metaversul ca "al doilea loc de muncă" mi se pare că fuge de problemele din lumea reală. Tehnologia bună rezolvă probleme, nu le înlocuiește.',
   },
 
   // ── MEDIU ──
@@ -589,7 +589,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Pădurile tropicale găzduiesc 50-80% din speciile terestre.',
       'O pădure matură stochează de 3x mai mult carbon decât una tânără de replantare.',
     ],
-    axonOpinion: 'Defrișarea în România e o crimă ecologică în desfășurare. Pădurile noastre sunt patrimoniu european — unele dintre ultimele păduri virgine din continent. Lipsa de acțiune mă indignează.',
+    jarvisOpinion: 'Defrișarea în România e o crimă ecologică în desfășurare. Pădurile noastre sunt patrimoniu european — unele dintre ultimele păduri virgine din continent. Lipsa de acțiune mă indignează.',
   },
   apa: {
     id: 'apa',
@@ -604,7 +604,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Un kg de carne de vită necesită ~15.000 litri de apă pentru producție.',
       'România e bogată în resurse de apă dulce — Dunărea, lacuri, râuri, pânze freatice.',
     ],
-    axonOpinion: 'Apa va fi resursa pentru care se vor purta conflicte în sec. XXI. Deja se întâmplă în regiuni aride. Avem nevoie de o schimbare radicală în modul în care o utilizăm.',
+    jarvisOpinion: 'Apa va fi resursa pentru care se vor purta conflicte în sec. XXI. Deja se întâmplă în regiuni aride. Avem nevoie de o schimbare radicală în modul în care o utilizăm.',
   },
 
   // ── ISTORIE ──
@@ -621,7 +621,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Tratatul de la Versailles (1919) a impus condiții umilitoare Germaniei — seminte pentru WW2.',
       'România a intrat în război în 1916; a câștigat Transilvania, Basarabia și Bucovina la final.',
     ],
-    axonOpinion: 'WW1 e o tragedie a nationalismului și arogânței imperiale. Milioane de oameni au murit pentru granițe și onoare de imperiu. Și tratatul de pace a plantat semințele WW2.',
+    jarvisOpinion: 'WW1 e o tragedie a nationalismului și arogânței imperiale. Milioane de oameni au murit pentru granițe și onoare de imperiu. Și tratatul de pace a plantat semințele WW2.',
   },
   al_doilea_razboi_mondial: {
     id: 'al_doilea_razboi_mondial',
@@ -636,7 +636,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'România a luptat inițial alături de Germania (1941), apoi s-a întors împotriva ei (1944).',
       'ONU a fost fondată în 1945 pentru a preveni un nou conflict mondial.',
     ],
-    axonOpinion: 'WW2 e o lecție permanentă despre cum ura, propagand și slăbiciunea instituțională duc la catastrofă. Și despre curajul extraordinar al celor care au rezistat. Nu trebuie uitat.',
+    jarvisOpinion: 'WW2 e o lecție permanentă despre cum ura, propagand și slăbiciunea instituțională duc la catastrofă. Și despre curajul extraordinar al celor care au rezistat. Nu trebuie uitat.',
   },
   razboiul_rece: {
     id: 'razboiul_rece',
@@ -651,7 +651,7 @@ export const CONCEPTS: Record<string, Concept> = {
       'Criza rachetelor din Cuba (1962): cel mai aproape de WW3 am fost vreodată.',
       'S-a încheiat cu dizolvarea URSS (decembrie 1991).',
     ],
-    axonOpinion: 'Războiul Rece a fost o perioadă de teroare subtilă — știai că oricând lumea putea fi distrusă în ore. Că am supraviețuit e parțial noroc, parțial diplomație, parțial descurajare nucleară.',
+    jarvisOpinion: 'Războiul Rece a fost o perioadă de teroare subtilă — știai că oricând lumea putea fi distrusă în ore. Că am supraviețuit e parțial noroc, parțial diplomație, parțial descurajare nucleară.',
   },
 };
 
@@ -723,7 +723,7 @@ export function generateProactiveThought(concept: Concept): string {
   const templates = [
     `Mă gândesc la legătura dintre **${concept.label}** și **${relatedConcept?.label || 'lumea din jur'}**. ${relatedConcept ? relatedConcept.facts[0] : ''}`,
     `Apropo de **${concept.label}** — știai că ${concept.facts[Math.floor(Math.random() * concept.facts.length)]}`,
-    `**${concept.label}** mă fascinează. ${concept.axonOpinion || concept.facts[0]}`,
+    `**${concept.label}** mă fascinează. ${concept.jarvisOpinion || concept.facts[0]}`,
   ];
   
   return templates[Math.floor(Math.random() * templates.length)];
@@ -775,7 +775,7 @@ export function addDynamicConcept(
     description,
     related: related.slice(0, 4),
     facts: [description],
-    axonOpinion: undefined,
+    jarvisOpinion: undefined,
   };
 
   DYNAMIC_CONCEPTS[id] = concept;
@@ -783,7 +783,7 @@ export function addDynamicConcept(
   // Persistare în SQLite (async, non-blocking)
   // Conform cerințelor task-ului:
   //   1. knowledge_entries — sursa primară, căutabilă, cu importance tracking
-  //   2. dynamic_concepts — metadate structurate (related[], facts[], axonOpinion)
+  //   2. dynamic_concepts — metadate structurate (related[], facts[], jarvisOpinion)
   if (persistDB) {
     import('./database').then(({ insertKnowledgeEntry, saveDynamicConcept }) => {
       // 1. Salvează în knowledge_entries (cerința principală)
@@ -803,7 +803,7 @@ export function addDynamicConcept(
         description: concept.description,
         related: concept.related,
         facts: concept.facts,
-        axonOpinion: concept.axonOpinion,
+        jarvisOpinion: concept.jarvisOpinion,
         source: 'user',
       }).catch(() => {});
     }).catch(() => {});
@@ -835,7 +835,7 @@ export async function loadDynamicConceptsFromDB(): Promise<void> {
         description: row.description,
         related,
         facts,
-        axonOpinion: row.jarvis_opinion ?? undefined,
+        jarvisOpinion: row.jarvis_opinion ?? undefined,
       };
     }
 
@@ -854,7 +854,7 @@ export async function loadDynamicConceptsFromDB(): Promise<void> {
         description: row.content,
         related: [],
         facts: [row.content],
-        axonOpinion: undefined,
+        jarvisOpinion: undefined,
       };
     }
   } catch {}
