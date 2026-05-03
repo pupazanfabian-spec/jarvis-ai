@@ -243,6 +243,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       await Promise.all([
         saveBrainStateFull(stateJson),
         saveMessagesFull(msgsJson),
+        saveConversation(Date.now().toString(), msgsSliced),
       ]);
     } catch (sqlErr) {
       if (__DEV__) console.warn('[Jarvis] SQLite persist failed, trying AsyncStorage:', sqlErr);

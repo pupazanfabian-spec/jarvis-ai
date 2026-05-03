@@ -1,17 +1,13 @@
-import {
-  documentDirectory,
-  makeDirectoryAsync,
-  writeAsStringAsync,
-  readAsStringAsync,
-  deleteAsync,
-  getInfoAsync,
-  readDirectoryAsync,
-} from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const MEMORY_DIR = `${documentDirectory}jarvis_memory/`;
-const INDEX_FILE = `${MEMORY_DIR}_index.json`;
-const MIGRATED_KEY = '@jarvis_memory_migrated_v2';
+const BASE_DIR = `${FileSystem.documentDirectory}JarvisMemory/`;
+const CONVERSATIONS_DIR = `${BASE_DIR}conversations/`;
+const KNOWLEDGE_DIR = `${BASE_DIR}knowledge/`;
+const CACHE_DIR = `${BASE_DIR}cache/`;
+
+const INDEX_FILE = `${KNOWLEDGE_DIR}_index.json`;
+const MIGRATED_KEY = '@jarvis_memory_migrated_v3';
 
 export type MemoryCategory =
   | 'personal'
@@ -54,18 +50,21 @@ function generateId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function ensureMemoryDir(): Promise<void> {
-  const info = await getInfoAsync(MEMORY_DIR);
-  if (!info.exists) {
-    await makeDirectoryAsync(MEMORY_DIR, { intermediates: true });
+export async function ensureDirs(): Promise<void> {
+  const dirs = [BASE_DIR, CONVERSATIONS_DIR, KNOWLEDGE_DIR, CACHE_DIR];
+  for (const dir of dirs) {
+    const info = await FileSystem.getInfoAsync(dir);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    }
   }
 }
 
 async function loadIndexFromDisk(): Promise<MemoryIndex> {
   try {
-    const info = await getInfoAsync(INDEX_FILE);
+    const info = await FileSystem.getInfoAsync(INDEX_FILE);
     if (!info.exists) return { entries: [], lastUpdated: new Date().toISOString() };
-    const raw = await readAsStringAsync(INDEX_FILE);
+    const raw = await FileSystem.readAsStringAsync(INDEX_FILE);
     const parsed = JSON.parse(raw) as MemoryIndex;
     if (!Array.isArray(parsed.entries)) return { entries: [], lastUpdated: new Date().toISOString() };
     return parsed;
@@ -77,14 +76,14 @@ async function loadIndexFromDisk(): Promise<MemoryIndex> {
 async function saveIndexToDisk(index: MemoryIndex): Promise<void> {
   try {
     index.lastUpdated = new Date().toISOString();
-    await writeAsStringAsync(INDEX_FILE, JSON.stringify(index));
+    await FileSystem.writeAsStringAsync(INDEX_FILE, JSON.stringify(index));
   } catch {
     if (__DEV__) console.warn('[MemoryFolder] Failed to save index');
   }
 }
 
 export async function initMemoryFolder(): Promise<number> {
-  await ensureMemoryDir();
+  await ensureDirs();
   _cachedIndex = await loadIndexFromDisk();
   return _cachedIndex.entries.length;
 }
@@ -125,8 +124,8 @@ export async function writeMemoryEntry(
     ...(fromFile ? { fromFile } : {}),
   };
 
-  const filePath = `${MEMORY_DIR}${entry.id}.json`;
-  await writeAsStringAsync(filePath, JSON.stringify(entry));
+  const filePath = `${KNOWLEDGE_DIR}${entry.id}.json`;
+  await FileSystem.writeAsStringAsync(filePath, JSON.stringify(entry));
 
   _cachedIndex.entries.push({
     id: entry.id,
@@ -142,8 +141,8 @@ export async function writeMemoryEntry(
 
 export async function deleteMemoryEntry(id: string): Promise<boolean> {
   try {
-    const filePath = `${MEMORY_DIR}${id}.json`;
-    await deleteAsync(filePath, { idempotent: true });
+    const filePath = `${KNOWLEDGE_DIR}${id}.json`;
+    await FileSystem.deleteAsync(filePath, { idempotent: true });
     if (_cachedIndex) {
       _cachedIndex.entries = _cachedIndex.entries.filter(e => e.id !== id);
       await saveIndexToDisk(_cachedIndex);
@@ -170,9 +169,9 @@ export async function clearAllMemory(): Promise<number> {
   if (!_cachedIndex) return 0;
   const count = _cachedIndex.entries.length;
   try {
-    const files = await readDirectoryAsync(MEMORY_DIR);
+    const files = await FileSystem.readDirectoryAsync(KNOWLEDGE_DIR);
     for (const file of files) {
-      await deleteAsync(`${MEMORY_DIR}${file}`, { idempotent: true });
+      await FileSystem.deleteAsync(`${KNOWLEDGE_DIR}${file}`, { idempotent: true });
     }
   } catch { /* ignore */ }
   _cachedIndex = { entries: [], lastUpdated: new Date().toISOString() };
@@ -219,38 +218,98 @@ export function listAllMemories(limit = 50): Array<{ fact: string; category: Mem
   }));
 }
 
-export function getMemoryStats(): { total: number; byCategory: Record<string, number> } {
-  if (!_cachedIndex) return { total: 0, byCategory: {} };
+export function getMemoryStats(): { total: number; byCategory: Record<string, number>; storageUsed: number } {
+  if (!_cachedIndex) return { total: 0, byCategory: {}, storageUsed: 0 };
   const byCategory: Record<string, number> = {};
   for (const e of _cachedIndex.entries) {
     byCategory[e.category] = (byCategory[e.category] || 0) + 1;
   }
-  return { total: _cachedIndex.entries.length, byCategory };
+  return { total: _cachedIndex.entries.length, byCategory, storageUsed: 0 }; // TODO: calculate actual size
 }
 
-export async function migrateFromAsyncStorage(): Promise<number> {
+export async function saveConversation(id: string, messages: any[]): Promise<void> {
+  await ensureDirs();
+  const filePath = `${CONVERSATIONS_DIR}${id}.json`;
+  await FileSystem.writeAsStringAsync(filePath, JSON.stringify({
+    id,
+    timestamp: new Date().toISOString(),
+    messages
+  }));
+}
+
+export async function listConversations(): Promise<string[]> {
+  await ensureDirs();
+  try {
+    return await FileSystem.readDirectoryAsync(CONVERSATIONS_DIR);
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteOldConversations(days = 30): Promise<number> {
+  await ensureDirs();
+  const files = await FileSystem.readDirectoryAsync(CONVERSATIONS_DIR);
+  let deletedCount = 0;
+  const now = Date.now();
+  const cutoff = days * 24 * 3600 * 1000;
+
+  for (const file of files) {
+    try {
+      const info = await FileSystem.getInfoAsync(`${CONVERSATIONS_DIR}${file}`);
+      if (info.exists && (now - info.modificationTime * 1000) > cutoff) {
+        await FileSystem.deleteAsync(`${CONVERSATIONS_DIR}${file}`);
+        deletedCount++;
+      }
+    } catch {}
+  }
+  return deletedCount;
+}
+
+export async function getStorageSize(): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(BASE_DIR);
+    if (!info.exists) return 0;
+    // Note: getInfoAsync on directory doesn't always return size on all platforms
+    // For a robust implementation, we would need to recurse, but this is a placeholder
+    return 0; 
+  } catch {
+    return 0;
+  }
+}
+
+export async function clearCache(): Promise<void> {
+  try {
+    const files = await FileSystem.readDirectoryAsync(CACHE_DIR);
+    for (const file of files) {
+      await FileSystem.deleteAsync(`${CACHE_DIR}${file}`, { idempotent: true });
+    }
+  } catch {}
+}
+
+export async function migrateFromOldVersion(): Promise<number> {
   try {
     const migrated = await AsyncStorage.getItem(MIGRATED_KEY);
     if (migrated === 'true') return 0;
 
-    const raw = await AsyncStorage.getItem('@jarvis_memory_json');
-    if (!raw) {
+    const oldDir = `${FileSystem.documentDirectory}jarvis_memory/`;
+    const oldInfo = await FileSystem.getInfoAsync(oldDir);
+    if (!oldInfo.exists) {
       await AsyncStorage.setItem(MIGRATED_KEY, 'true');
       return 0;
     }
 
-    const parsed = JSON.parse(raw) as { entries?: Array<{ fact: string; source: string; addedAt: string }> };
-    if (!Array.isArray(parsed.entries)) {
-      await AsyncStorage.setItem(MIGRATED_KEY, 'true');
-      return 0;
-    }
-
+    const files = await FileSystem.readDirectoryAsync(oldDir);
     let count = 0;
-    for (const old of parsed.entries) {
-      if (old.fact && old.fact.length > 2) {
-        const written = await writeMemoryEntry(old.fact, old.source || 'migrated', 'general');
-        if (written) count++;
-      }
+    for (const file of files) {
+      if (file === '_index.json' || !file.endsWith('.json')) continue;
+      try {
+        const raw = await FileSystem.readAsStringAsync(`${oldDir}${file}`);
+        const entry = JSON.parse(raw);
+        if (entry.fact) {
+          await writeMemoryEntry(entry.fact, entry.source || 'migrated', entry.category || 'general');
+          count++;
+        }
+      } catch {}
     }
 
     await AsyncStorage.setItem(MIGRATED_KEY, 'true');
@@ -258,40 +317,4 @@ export async function migrateFromAsyncStorage(): Promise<number> {
   } catch {
     return 0;
   }
-}
-
-export async function readMemoryFile(id: string): Promise<MemoryFileEntry | null> {
-  try {
-    const filePath = `${MEMORY_DIR}${id}.json`;
-    const raw = await readAsStringAsync(filePath);
-    return JSON.parse(raw) as MemoryFileEntry;
-  } catch {
-    return null;
-  }
-}
-
-export async function rebuildIndex(): Promise<number> {
-  await ensureMemoryDir();
-  const files = await readDirectoryAsync(MEMORY_DIR);
-  const entries: MemoryIndex['entries'] = [];
-
-  for (const file of files) {
-    if (file === '_index.json' || !file.endsWith('.json')) continue;
-    try {
-      const raw = await readAsStringAsync(`${MEMORY_DIR}${file}`);
-      const entry = JSON.parse(raw) as MemoryFileEntry;
-      if (entry.id && entry.fact) {
-        entries.push({
-          id: entry.id,
-          fact: entry.fact,
-          category: entry.category || 'general',
-          createdAt: entry.createdAt || new Date().toISOString(),
-        });
-      }
-    } catch { /* skip corrupted files */ }
-  }
-
-  _cachedIndex = { entries, lastUpdated: new Date().toISOString() };
-  await saveIndexToDisk(_cachedIndex);
-  return entries.length;
 }
