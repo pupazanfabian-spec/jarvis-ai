@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: '#fff', fontSize: 14, fontFamily: 'Inter_700Bold' },
   bubble: {
-    maxWidth: windowWidth * 0.85, borderRadius: 18, paddingHorizontal: 14,
+    maxWidth: Dimensions.get('window').width * 0.85, borderRadius: 18, paddingHorizontal: 14,
     paddingVertical: 10, paddingBottom: 6,
   },
   codeBubble: { maxWidth: '95%', paddingHorizontal: 8 },
