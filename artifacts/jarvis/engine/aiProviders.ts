@@ -15,7 +15,7 @@ const GROQ_KEY_STORAGE = 'jarvis_groq_api_key';
 const OPENROUTER_KEY_STORAGE = 'jarvis_openrouter_api_key';
 const ACTIVE_PROVIDER_STORAGE = '@jarvis_active_provider';
 
-export type AIProvider = 'none' | 'gemini' | 'openai' | 'groq' | 'openrouter';
+export type AIProvider = 'none' | 'auto' | 'gemini' | 'openai' | 'groq' | 'openrouter';
 
 export interface AIProviderSettings {
   activeProvider: AIProvider;
@@ -24,6 +24,7 @@ export interface AIProviderSettings {
   groqKey: string;
   openrouterKey: string;
 }
+
 
 // ─── Helper SecureStore cu fallback AsyncStorage (web / simulatoare) ────────
 
@@ -74,7 +75,7 @@ export async function saveProviderSettings(settings: AIProviderSettings): Promis
   ]);
 }
 
-const VALID_PROVIDERS: AIProvider[] = ['none', 'gemini', 'openai', 'groq', 'openrouter'];
+const VALID_PROVIDERS: AIProvider[] = ['none', 'auto', 'gemini', 'openai', 'groq', 'openrouter'];
 
 function normalizeProvider(raw: string | null): AIProvider {
   if (raw && (VALID_PROVIDERS as string[]).includes(raw)) return raw as AIProvider;
@@ -300,7 +301,7 @@ export async function callChatGPT(
   if (!apiKey || apiKey.length < 10) return null;
   try {
     return await callOpenAICompatible(
-      OPENAI_API_URL, apiKey, 'gpt-4.1-mini',
+      OPENAI_API_URL, apiKey, 'gpt-4o-mini',
       prompt, systemInstruction, history,
     );
   } catch (e) {
@@ -525,40 +526,218 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
   return parts.join(' ');
 }
 
+// ─── callActiveProvider ──────────────────────────────────────────────────────
+// Apel principal către provider-ul selectat (cu retry automat de 2 ori)
 export async function callActiveProvider(
   prompt: string,
   settings: AIProviderSettings,
   system?: string,
   history?: ConversationTurn[],
+  intent?: string,
 ): Promise<{ text: string; provider: AIProvider } | null> {
   const sys = system ?? JARVIS_SYSTEM_PROMPT;
 
-  type ProviderCall = { key: string; call: () => Promise<string | null>; name: AIProvider };
+  const maxRetries = 2;
+  const callWithRetry = async (fn: () => Promise<string | null>, name: AIProvider): Promise<{ text: string; provider: AIProvider } | null> => {
+    let lastErr: any = null;
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        if (i > 0) await new Promise(r => setTimeout(r, 1000 * i));
+        const text = await fn();
+        if (text) return { text, provider: name };
+      } catch (e) {
+        lastErr = e;
+        console.error(`[AIProvider] Retry ${i}/${maxRetries} for ${name} failed:`, e);
+      }
+    }
+    return null;
+  };
+
+  type ProviderCall = { key: string; call: () => Promise<string | null>, name: AIProvider; isFree: boolean; capability: number };
 
   const providers: ProviderCall[] = [
-    { key: settings.geminiKey, call: () => callGemini(prompt, settings.geminiKey, sys, history), name: 'gemini' },
-    { key: settings.openaiKey, call: () => callChatGPT(prompt, settings.openaiKey, sys, history), name: 'openai' },
-    { key: settings.groqKey, call: () => callGroq(prompt, settings.groqKey, sys, history), name: 'groq' },
-    { key: settings.openrouterKey, call: () => callOpenRouter(prompt, settings.openrouterKey, sys, history), name: 'openrouter' },
+    { key: settings.groqKey, call: () => callGroq(prompt, settings.groqKey, sys, history), name: 'groq', isFree: true, capability: 2 },
+    { key: settings.geminiKey, call: () => callGemini(prompt, settings.geminiKey, sys, history), name: 'gemini', isFree: true, capability: 3 },
+    { key: settings.openrouterKey, call: () => callOpenRouter(prompt, settings.openrouterKey, sys, history), name: 'openrouter', isFree: true, capability: 2 },
+    { key: settings.openaiKey, call: () => callChatGPT(prompt, settings.openaiKey, sys, history), name: 'openai', isFree: false, capability: 3 },
   ];
+
+  if (settings.activeProvider === 'auto') {
+    const available = providers.filter(p => p.key && p.key.length > 5);
+    if (intent === 'cmd_cod') {
+      available.sort((a, b) => b.capability - a.capability);
+    } else {
+      available.sort((a, b) => (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1));
+    }
+    for (const p of available) {
+      const res = await callWithRetry(p.call, p.name);
+      if (res) return res;
+    }
+    return null;
+  }
 
   const active = providers.find(p => p.name === settings.activeProvider);
   if (active?.key) {
-    try {
-      const text = await active.call();
-      if (text) return { text, provider: active.name };
-    } catch {}
+    const res = await callWithRetry(active.call, active.name);
+    if (res) return res;
   }
 
   for (const p of providers) {
     if (p.name === settings.activeProvider || !p.key) continue;
-    try {
-      const text = await p.call();
-      if (text) return { text, provider: p.name };
-    } catch {}
+    const res = await callWithRetry(p.call, p.name);
+    if (res) return res;
   }
 
   return null;
+}
+
+// ─── STREAMING SUPPORT ────────────────────────────────────────────────────────
+
+export type StreamHandler = (chunk: string) => void;
+
+export async function callActiveProviderStream(
+  prompt: string,
+  settings: AIProviderSettings,
+  onChunk: StreamHandler,
+  system?: string,
+  history?: ConversationTurn[],
+  intent?: string,
+): Promise<{ text: string; provider: AIProvider } | null> {
+  const { activeProvider } = settings;
+  const sys = system ?? JARVIS_SYSTEM_PROMPT;
+
+  // Încearcă streaming dacă provider-ul suportă, altfel fallback la call normal
+  try {
+    if (activeProvider === 'gemini' && settings.geminiKey) {
+      return await streamGemini(prompt, settings.geminiKey, onChunk, sys, history);
+    }
+    if (activeProvider === 'groq' && settings.groqKey) {
+      return await streamGroq(prompt, settings.groqKey, onChunk, sys, history);
+    }
+  } catch (err) {
+    console.warn(`[AIProvider] Streaming failed for ${activeProvider}, falling back to static call:`, err);
+  }
+
+  // Fallback
+  const result = await callActiveProvider(prompt, settings, sys, history, intent);
+  if (result) onChunk(result.text);
+  return result;
+}
+
+async function streamGemini(
+  prompt: string, apiKey: string, onChunk: StreamHandler,
+  system?: string, history: ConversationTurn[] = [],
+): Promise<{ text: string; provider: AIProvider } | null> {
+  const contents = [
+    ...(history ?? []).slice(-15).map(t => ({
+      role: t.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: t.content }],
+    })),
+    { role: 'user', parts: [{ text: prompt }] },
+  ];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Gemini Stream Error: ${resp.status}`);
+
+  // In React Native / Expo, fetch streaming results are often tricky.
+  // We'll use a text reader if available or fallback to a simpler approach.
+  const reader = (resp as any).body?.getReader();
+  let fullText = '';
+
+  if (reader) {
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      // Gemini returns JSON objects in an array format [{},{},...]
+      // We'll extract text from parts
+      const parts = chunk.split(/\"text\":\s*\"/);
+      for (let i = 1; i < parts.length; i++) {
+        const text = parts[i].split('\"')[0].replace(/\\n/g, '\n').replace(/\\"/g, '\"');
+        if (text) {
+          fullText += text;
+          onChunk(text);
+        }
+      }
+    }
+  } else {
+    // Basic fallback for environments without stream reader
+    const data = await resp.json() as any[];
+    for (const item of data) {
+      const text = item.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (text) {
+        fullText += text;
+        onChunk(text);
+      }
+    }
+  }
+
+  return { text: fullText, provider: 'gemini' };
+}
+
+async function streamGroq(
+  prompt: string, apiKey: string, onChunk: StreamHandler,
+  system?: string, history: ConversationTurn[] = [],
+): Promise<{ text: string; provider: AIProvider } | null> {
+  const messages = [];
+  if (system) messages.push({ role: 'system', content: system });
+  messages.push(...(history ?? []).slice(-15).map(t => ({ role: t.role, content: t.content })));
+  messages.push({ role: 'user', content: prompt });
+
+  const resp = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 1500,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`Groq Stream Error: ${resp.status}`);
+
+  const reader = (resp as any).body?.getReader();
+  let fullText = '';
+
+  if (reader) {
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+          try {
+            const json = JSON.parse(line.slice(6));
+            const content = json.choices?.[0]?.delta?.content || '';
+            if (content) {
+              fullText += content;
+              onChunk(content);
+            }
+          } catch {}
+        }
+      }
+    }
+  }
+
+  return { text: fullText, provider: 'groq' };
 }
 
 // ─── Test de conectivitate ────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, Clipboard, Modal, Platform, ScrollView,
-  StyleSheet, Text, TouchableOpacity, View,
+  StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
 import { writeAsStringAsync, documentDirectory } from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: '#fff', fontSize: 14, fontFamily: 'Inter_700Bold' },
   bubble: {
-    maxWidth: '85%', borderRadius: 18, paddingHorizontal: 14,
+    maxWidth: windowWidth * 0.85, borderRadius: 18, paddingHorizontal: 14,
     paddingVertical: 10, paddingBottom: 6,
   },
   codeBubble: { maxWidth: '95%', paddingHorizontal: 8 },

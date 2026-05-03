@@ -32,7 +32,8 @@ interface AIProviderContextType {
   saveGroqKey: (key: string) => Promise<void>;
   saveOpenRouterKey: (key: string) => Promise<void>;
   testKey: (provider: 'gemini' | 'openai' | 'groq' | 'openrouter', key: string) => Promise<boolean>;
-  generate: (prompt: string, system?: string, history?: ConversationTurn[]) => Promise<{ text: string; provider: AIProvider } | null>;
+  generate: (prompt: string, system?: string, history?: ConversationTurn[], intent?: string) => Promise<{ text: string; provider: AIProvider } | null>;
+  generateStream: (prompt: string, onChunk: (chunk: string) => void, system?: string, history?: ConversationTurn[], intent?: string) => Promise<{ text: string; provider: AIProvider } | null>;
   clearError: () => void;
 }
 
@@ -116,9 +117,22 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     prompt: string,
     system?: string,
     history?: ConversationTurn[],
+    intent?: string,
   ): Promise<{ text: string; provider: AIProvider } | null> => {
     if (settings.activeProvider === 'none') return null;
-    return callActiveProvider(prompt, settings, system ?? JARVIS_SYSTEM_PROMPT, history);
+    return callActiveProvider(prompt, settings, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
+  }, [settings]);
+
+  const generateStream = useCallback(async (
+    prompt: string,
+    onChunk: (chunk: string) => void,
+    system?: string,
+    history?: ConversationTurn[],
+    intent?: string,
+  ): Promise<{ text: string; provider: AIProvider } | null> => {
+    if (settings.activeProvider === 'none') return null;
+    const { callActiveProviderStream } = await import('@/engine/aiProviders');
+    return callActiveProviderStream(prompt, settings, onChunk, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
   }, [settings]);
 
   const clearError = useCallback(() => setTestError(''), []);
@@ -129,7 +143,7 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     <AIProviderContext.Provider value={{
       settings, isReady, isTesting, testError, secureStoreFallback,
       setActiveProvider, saveGeminiKey, saveOpenAIKey, saveGroqKey, saveOpenRouterKey,
-      testKey, generate, clearError,
+      testKey, generate, generateStream, clearError,
     }}>
       {children}
     </AIProviderContext.Provider>

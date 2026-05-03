@@ -166,9 +166,8 @@ export function extractSearchQuery(text: string): string {
 }
 
 // ─── Căutare paralelă — cel mai rapid răspuns valid câștigă ─────────────────
-// Wikipedia RO, Wikipedia EN și DuckDuckGo pornesc simultan (Promise.any).
-// Primul care răspunde cu text valid este returnat imediat; celelalte continuă
-// în fundal dar nu mai sunt salvate (cache-ul principal e suficient).
+// Wikipedia RO și DuckDuckGo pornesc simultan.
+// Dacă Wikipedia RO nu are rezultate, încercăm Wikipedia EN ca fallback.
 export async function searchOnline(query: string): Promise<OnlineResult> {
   const cleanQuery = extractSearchQuery(query);
   const cacheKey = cleanQuery.toLowerCase().trim();
@@ -182,16 +181,23 @@ export async function searchOnline(query: string): Promise<OnlineResult> {
     }
   } catch {}
 
-  // Toate sursele pornesc simultan — câștigă primul cu rezultat valid
-  const firstResult = await Promise.any([
+  // 1. Încercăm Wikipedia RO și DuckDuckGo în paralel
+  let result = await Promise.any([
     searchWikipediaRO(cleanQuery).then(r => { if (!r) throw new Error('empty'); return r; }),
-    searchWikipediaEN(cleanQuery).then(r => { if (!r) throw new Error('empty'); return r; }),
     searchDuckDuckGo(cleanQuery).then(r => { if (!r) throw new Error('empty'); return r; }),
   ]).catch(() => null);
 
-  if (firstResult) {
-    _cacheResult(cacheKey, firstResult);
-    return firstResult;
+  // 2. Fallback la Wikipedia EN dacă nu am găsit nimic satisfăcător pe RO
+  if (!result || (result.source.includes('Wikipedia RO') && result.text.length < 100)) {
+    const enResult = await searchWikipediaEN(cleanQuery);
+    if (enResult && enResult.found) {
+      result = enResult;
+    }
+  }
+
+  if (result) {
+    _cacheResult(cacheKey, result);
+    return result;
   }
 
   return {
@@ -202,27 +208,37 @@ export async function searchOnline(query: string): Promise<OnlineResult> {
   };
 }
 
-// Cache async, non-blocking
+// Cache async, non-blocking — acum 24h
 function _cacheResult(cacheKey: string, result: OnlineResult): void {
   import('./database').then(({ setCachedWebResult }) => {
-    setCachedWebResult(cacheKey, result, 48).catch(() => {});
+    setCachedWebResult(cacheKey, result, 24).catch(() => {});
   }).catch(() => {});
 }
 
 // ─── Extrage top 3 propoziții relevante din text web ─────────────────────────
-// Scor = semanticSimilarity (cosine TF-IDF) dintre query și fiecare propoziție
+// Scor îmbunătățit: semanticSimilarity + bonus pentru cuvinte cheie exacte
 export function extractTopSentences(rawText: string, query: string, maxSentences = 3): string {
   const sentences = rawText
     .split(/[.!?](?:\s|$)/)
     .map(s => s.trim())
-    .filter(s => s.length > 20 && s.length < 400);
+    .filter(s => s.length > 20 && s.length < 500);
 
   if (sentences.length <= maxSentences) return rawText;
 
-  const scored = sentences.map(s => ({
-    s,
-    score: semanticSimilarity(query, s),
-  }));
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+  const scored = sentences.map(s => {
+    const simScore = semanticSimilarity(query, s);
+    let keywordBonus = 0;
+    const sLower = s.toLowerCase();
+    queryWords.forEach(w => {
+      if (sLower.includes(w)) keywordBonus += 0.15;
+    });
+    return {
+      s,
+      score: simScore + keywordBonus,
+    };
+  });
 
   const topSentences = scored
     .sort((a, b) => b.score - a.score)
@@ -231,7 +247,7 @@ export function extractTopSentences(rawText: string, query: string, maxSentences
     .sort((a, b) => sentences.indexOf(a.s) - sentences.indexOf(b.s))
     .map(x => x.s);
 
-  return topSentences.join(' ');
+  return topSentences.join('. ') + (topSentences.length > 0 ? '.' : '');
 }
 
 // ─── Căutare online cu sinteză semantică ─────────────────────────────────────

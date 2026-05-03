@@ -50,7 +50,7 @@ async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       query_text TEXT NOT NULL,
       result_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      ttl_hours INTEGER DEFAULT 48
+      ttl_hours INTEGER DEFAULT 24
     );
 
     CREATE INDEX IF NOT EXISTS idx_wc_hash ON web_cache(query_hash);

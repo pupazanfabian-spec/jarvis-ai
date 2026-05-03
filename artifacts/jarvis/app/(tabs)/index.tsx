@@ -179,7 +179,7 @@ export default function ChatScreen() {
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
   const topInset = isWeb ? 67 : insets.top;
-  const bottomInset = isWeb ? 34 : 0;
+  const bottomInset = isWeb ? 34 : insets.bottom;
   const docCount = brainState.learnedDocuments.length;
 
   const handlePinButton = useCallback(() => {
@@ -479,7 +479,11 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         {isEmpty && !isThinking && !webSearching ? (
           <View style={styles.flex}>
             <EmptyState />
@@ -495,7 +499,7 @@ export default function ChatScreen() {
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!!messages.length}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             initialNumToRender={15}
             maxToRenderPerBatch={8}
             windowSize={8}

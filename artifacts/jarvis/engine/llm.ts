@@ -216,10 +216,10 @@ export async function generateLLMResponse(
 
     const systemPrompt = buildSystemPrompt(userName, creatorName, learnedFacts);
 
-    // Construiește istoricul (ultimele 6 schimburi)
+    // Construiește istoricul (ultimele 12 schimburi = 24 mesaje)
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...history.slice(-12).map(m => ({ role: m.role, content: m.content })),
+      ...history.slice(-24).map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },
     ];
 

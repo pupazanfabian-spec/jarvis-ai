@@ -473,13 +473,13 @@ const INTENT_PATTERNS: IntentPattern[] = [
   },
   {
     intent: 'salut',
-    patterns: [/^(salut|buna|hei|hello|hi|hey|servus|noroc|buna ziua|buna dimineata|buna seara|salutare)[\s!,]?$/],
-    weight: 9,
+    patterns: [/(salut|buna|ciao|hei|servus|noroc|buna dimineata|buna ziua|buna seara|v salut|s-avem noroc|sa traiesti)/],
+    weight: 10,
   },
   {
     intent: 'ramas_bun',
-    patterns: [/(la revedere|pa|bye|goodbye|pe curand|noapte buna|o zi buna)/],
-    weight: 9,
+    patterns: [/(pa|la revedere|noapte buna|pe curand|ne auzim|sa ne auzim cu bine|o zi buna|o seara placuta|drum bun)/],
+    weight: 10,
   },
   {
     intent: 'identitate_jarvis',
@@ -1191,6 +1191,7 @@ export function processMessage(
 
   state.conversationCount++;
   const intent = detectIntent(trimmed);
+  (state as any).lastIntent = intent; // Store intent for later use in BrainContext
   let response = '';
 
   // ── PRIMUL STRAT: Verificare constituție ─────────────────────────────────
