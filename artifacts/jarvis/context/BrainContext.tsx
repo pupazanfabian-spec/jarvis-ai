@@ -52,12 +52,14 @@ interface BrainContextType {
   messages: Message[];
   isThinking: boolean;
   webSearching: boolean;
+  wantsOnline: boolean;
   brainState: BrainState;
   dbReady: boolean;
   sendMessage: (text: string) => Promise<void>;
   clearConversation: () => void;
   addDocument: (name: string, content: string) => Promise<void>;
   removeDocument: (id: string) => void;
+  setWantsOnline: (val: boolean) => void;
 }
 
 const BrainContext = createContext<BrainContextType | null>(null);
@@ -110,6 +112,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [isThinking, setIsThinking] = useState(false);
   const [webSearching, setWebSearching] = useState(false);
+  const [wantsOnline, setWantsOnline] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const brainRef = useRef<BrainState>(createInitialBrainState());
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
@@ -318,6 +321,26 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       if (__DEV__) console.warn('[Jarvis] autoLearnFromWeb failed:', err);
     }
   }, [dbReady]);
+
+  const autoLearnFromCloud = useCallback(async (result: { text: string; provider: string }) => {
+    await autoLearnFromWeb(result.text, result.provider, '');
+  }, [autoLearnFromWeb]);
+
+  const buildCloudCtx = useCallback((): string => {
+    const state = brainRef.current;
+    const ctx: JarvisContext = {
+      userName: state.userName || undefined,
+      preferredStyle: state.selfKnowledge.preferredStyle,
+      topTopics: Object.entries(state.selfKnowledge.topicFrequency)
+        .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
+      learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
+      inferenceRules: state.inferenceEngine.rules.slice(-5).map(r => r.if + ' -> ' + r.then),
+      entities: state.entityTracker.entities.slice(-8).map(e => ({ value: e.value, relation: e.relation || '' })),
+      recentTopics: state.lastTopics.slice(-5),
+      conversationCount: state.conversationCount,
+    };
+    return buildRichSystemPrompt(ctx);
+  }, []);
 
   // ─── sendMessage ──────────────────────────────────────────────────────────
 
@@ -566,7 +589,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     });
 
     setIsThinking(false);
-  }, [persist, messages, llmStatus, llmGenerate, aiGenerate, aiSettings, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject]);
+  }, [persist, messages, llmStatus, llmGenerate, aiGenerate, aiSettings, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud]);
 
   const addDocument = useCallback(async (name: string, content: string) => {
     setIsThinking(true);
@@ -638,8 +661,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BrainContext.Provider value={{
-      messages, isThinking, webSearching, brainState, dbReady,
-      sendMessage, clearConversation, addDocument, removeDocument,
+      messages, isThinking, webSearching, wantsOnline, brainState, dbReady,
+      sendMessage, clearConversation, addDocument, removeDocument, setWantsOnline,
     }}>
       {children}
     </BrainContext.Provider>
