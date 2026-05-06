@@ -538,6 +538,17 @@ function handleMemory(intent: Intent, text: string, state: BrainState): string |
     const subject = m[1].trim();
     return `JARVIS_MEM_ACTION:uita_specific||${subject}`;
   }
+  
+  if (intent === 'folder_acorda_acces') {
+    return 'JARVIS_FOLDER_ACTION:acorda_acces';
+  }
+  if (intent === 'folder_listeaza') {
+    return 'JARVIS_FOLDER_ACTION:listeaza';
+  }
+  if (intent === 'folder_actualizeaza') {
+    return 'JARVIS_FOLDER_ACTION:actualizeaza';
+  }
+  
   return null;
 }
 

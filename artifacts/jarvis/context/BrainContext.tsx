@@ -43,7 +43,7 @@ import {
   createProject, addProjectStep, saveProjectFile,
 } from '@/engine/projectMemory';
 import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, type MemoryStore } from '@/engine/memory';
-import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory } from '@/engine/memoryFolder';
+import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
@@ -461,7 +461,45 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     let response = processMessage(text, brainRef.current, history);
     const intent = (brainRef.current as any).lastIntent || 'unknown';
 
-    // ... (logic for folders and memory remains same)
+    // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
+    if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
+      const isMem = response.startsWith('JARVIS_MEM_ACTION:');
+      const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
+      const [action, payload] = fullAction.split('||');
+
+      if (isMem) {
+        if (action === 'salveaza') {
+          await writeMemoryEntry(payload, 'user', 'manual');
+          response = `Am memorat: **"${payload}"** 💾`;
+        } else if (action === 'citeste') {
+          const stats = getMemoryStats();
+          const items = listAllMemories();
+          response = `🧠 **Memoria mea (${stats.total} însemnări):**\n\n` +
+            (items.length > 0 ? items.map(m => `• ${m.fact}`).join('\n') : 'Nu am nicio însemnare memorată încă.');
+        } else if (action === 'sterge_tot') {
+          await clearAllMemory();
+          response = 'Am șters întreaga memorie persistentă. 🧼';
+        } else if (action === 'uita_specific') {
+          const deletedCount = await deleteMemoryByKeyword(payload);
+          response = deletedCount > 0
+            ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
+            : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
+        }
+      } else {
+        if (action === 'acorda_acces') {
+          const granted = await requestFolderAccess();
+          response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
+        } else if (action === 'listeaza') {
+          const folders = await getExternalFolders();
+          response = folders.length > 0
+            ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
+            : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
+        } else if (action === 'actualizeaza') {
+          const count = await scanAllFolders();
+          response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+        }
+      }
+    }
 
     // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
     if (response.startsWith('JARVIS_CMD:')) {
