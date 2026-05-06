@@ -469,9 +469,9 @@ export default function ChatScreen() {
             {allProjects.length === 0 ? (
               <Text style={styles.sheetEmpty}>Niciun proiect salvat încă.{'\n'}Generează cod în Dev Mode pentru a crea unul.</Text>
             ) : (
-              allProjects.map(proj => (
+              allProjects.map((proj, index) => (
                 <TouchableOpacity
-                  key={proj.id}
+                  key={`item-${index}`}
                   style={[styles.projectRow, activeProject?.id === proj.id && styles.projectRowActive]}
                   onPress={() => handleSelectProject(proj.id)}
                 >
