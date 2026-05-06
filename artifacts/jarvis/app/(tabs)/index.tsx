@@ -177,7 +177,7 @@ export default function ChatScreen() {
     <ChatBubble message={item} index={index} />
   ), []);
 
-  const keyExtractor = useCallback((item: Message) => item.id, []);
+  const keyExtractor = useCallback((item: Message, index: number) => item.id ? item.id.toString() : index.toString(), []);
 
   const topInset = isWeb ? 67 : insets.top;
   const bottomInset = isWeb ? 34 : insets.bottom;
