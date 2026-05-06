@@ -16,8 +16,6 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system';
-
 import ChatBubble from '@/components/ChatBubble';
 import ThinkingIndicator from '@/components/ThinkingIndicator';
 import QuickActions from '@/components/QuickActions';
@@ -131,30 +129,6 @@ export default function ChatScreen() {
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      const checkPermissions = async () => {
-        const { status } = await FileSystem.getStorageStateAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Acces Stocare',
-            'Jarvis are nevoie de acces la stocare pentru a salva conversațiile și cunoștințele local pe telefonul tău. Datele rămân private.',
-            [
-              { text: 'Mai târziu', style: 'cancel' },
-              { 
-                text: 'Permite', 
-                onPress: async () => {
-                  // System prompt request
-                }
-              }
-            ]
-          );
-        }
-      };
-      checkPermissions();
-    }
   }, []);
 
   const openProjectSwitcher = useCallback(async () => {
