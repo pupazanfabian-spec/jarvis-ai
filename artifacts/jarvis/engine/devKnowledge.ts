@@ -2149,7 +2149,7 @@ export const DEV_CONCEPTS: Record<string, DevConcept> = {
     id: 'expo_file_system',
     label: 'Expo File System',
     category: 'react-native',
-    description: 'Acces fișiere locale în Expo. expo-file-system/legacy pentru API clasic. documentDirectory, cacheDirectory. Citire, scriere, ștergere, stat.',
+    description: 'Acces fișiere locale în Expo. expo-file-system pentru API clasic. documentDirectory, cacheDirectory. Citire, scriere, ștergere, stat.',
     example: 'import { readAsStringAsync, writeAsStringAsync, documentDirectory, deleteAsync, getInfoAsync } from "expo-file-system/legacy";\n\nconst path = `${documentDirectory}myfile.txt`;\nawait writeAsStringAsync(path, "conținut");\nconst content = await readAsStringAsync(path);\n\nconst info = await getInfoAsync(path);\nif (info.exists) console.log("Mărime:", info.size);\n\nawait deleteAsync(path, { idempotent: true });',
     related: ['expo', 'offline_first'],
   },

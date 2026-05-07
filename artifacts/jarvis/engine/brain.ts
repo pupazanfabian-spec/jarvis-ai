@@ -601,6 +601,12 @@ export function processMessage(
     }
   }
 
+  if (intent === 'data_ora') return handleDateTime();
+  if (intent === 'matematica') {
+    const r = handleMath(trimmed);
+    if (r) return r;
+  }
+
   if (intent === 'cine_sunt_eu') {
     const entities = state.entityTracker.entities.filter(e => e.relation === 'eu');
     const facts = state.selfKnowledge.learnedFacts.slice(-15);
@@ -636,10 +642,30 @@ export function processMessage(
     }
   }
 
-  // NOTE: Logic for static responses and other intents should follow here as in original brain.ts
-  // This is a simplified version for demonstration, but a full implementation would include all the original logic.
-  
-  return `Înțeles. Ce vrei să aprofundăm?`;
+  // Căutare în Documente studiate
+  const docResult = searchDocuments(trimmed, state.learnedDocuments);
+  if (docResult) return docResult;
+
+  // Căutare în Dicționar local (cunoștințe de bază)
+  const dictResult = searchDictionary(trimmed);
+  if (dictResult) {
+    const category = detectTopicCategory(trimmed);
+    const qType = detectQuestionType(trimmed);
+    return synthesizeKnowledgeResponse(dictResult.split('\n\n')[1] || dictResult, dictResult.split('\n\n')[0].replace(/\*\*/g, ''), category, qType, { userName: state.userName });
+  }
+
+  // Inferență logică / Fapte învățate anterior
+  const inference = inferAnswer(state.inferenceEngine, trimmed);
+  if (inference) return inference;
+
+  // Dacă am ajuns aici și e o comandă de scriere/cod, returnăm un text care să forțeze fallback la LLM/Cloud
+  if (COMMAND_INTENTS.has(intent)) {
+    return `Subiect interesant. Lucrez la acest aspect: **${intent}**.`;
+  }
+
+  // Mesaj final de fallback — va fi interceptat de BrainContext pentru Cloud/LLM
+  const kws = extractKeywords(trimmed, 2);
+  return generateSmartUnknown(trimmed, kws, { userName: state.userName, conversationCount: state.conversationCount });
 }
 
 export function processDocument(name: string, content: string, state: BrainState): string {

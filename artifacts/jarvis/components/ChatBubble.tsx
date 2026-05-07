@@ -4,7 +4,8 @@ import {
   Animated, Clipboard, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
-import { writeAsStringAsync, documentDirectory } from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
+const { writeAsStringAsync, documentDirectory } = FileSystem;
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
@@ -358,14 +359,14 @@ const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; la
         <View style={codeStyles.body}>
           <View style={codeStyles.lineNumbers}>
             {lines.map((_, i) => (
-              <Text key={i} style={codeStyles.lineNum}>{i + 1}</Text>
+              <Text key={`item-${i}`} style={codeStyles.lineNum}>{i + 1}</Text>
             ))}
           </View>
           <View style={codeStyles.codeLines}>
             {tokenizedLines.map((tokens, i) => (
-              <View key={i} style={codeStyles.codeLine}>
+              <View key={`item-${i}`} style={codeStyles.codeLine}>
                 {tokens.map((tok, j) => (
-                  <Text key={j} style={[codeStyles.token, { color: SYNTAX_COLORS[tok.type] }]}>
+                  <Text key={`item-${j}`} style={[codeStyles.token, { color: SYNTAX_COLORS[tok.type] }]}>
                     {tok.text}
                   </Text>
                 ))}
@@ -438,12 +439,12 @@ function renderInline(text: string): React.ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <Text key={i} style={styles.bold}>{part.slice(2, -2)}</Text>;
+      return <Text key={`item-${i}`} style={styles.bold}>{part.slice(2, -2)}</Text>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <Text key={i} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
+      return <Text key={`item-${i}`} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
     }
-    return <Text key={i}>{part}</Text>;
+    return <Text key={`item-${i}`}>{part}</Text>;
   });
 }
 
@@ -455,11 +456,11 @@ const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: 
       {segments.map((seg, i) => {
         switch (seg.type) {
           case 'code_block':
-            return <CodeBlock key={i} code={seg.content} language={seg.language || 'typescript'} />;
+            return <CodeBlock key={`item-${i}`} code={seg.content} language={seg.language || 'typescript'} />;
 
           case 'heading':
             return (
-              <Text key={i} style={[
+              <Text key={`item-${i}`} style={[
                 styles.heading,
                 seg.level === 1 && styles.h1,
                 seg.level === 2 && styles.h2,
@@ -472,7 +473,7 @@ const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: 
 
           case 'bullet':
             return (
-              <View key={i} style={styles.bulletRow}>
+              <View key={`item-${i}`} style={styles.bulletRow}>
                 <Text style={[styles.bulletDot, isUser && styles.userText]}>•</Text>
                 <Text style={[styles.bulletText, isUser && styles.userText]}>
                   {renderInline(seg.content)}
@@ -483,7 +484,7 @@ const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: 
           case 'text':
           default:
             return (
-              <Text key={i} style={[styles.text, isUser ? styles.userText : styles.aiText]}>
+              <Text key={`item-${i}`} style={[styles.text, isUser ? styles.userText : styles.aiText]}>
                 {renderInline(seg.content)}
               </Text>
             );

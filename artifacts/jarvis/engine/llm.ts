@@ -3,14 +3,16 @@
 // Funcționează DOAR în development build (nu în Expo Go)
 // În Expo Go, isLlamaAvailable = false și creierul clasic preia controlul
 
-import {
+import * as FileSystem from 'expo-file-system';
+
+const {
   documentDirectory,
   getInfoAsync,
   makeDirectoryAsync,
   deleteAsync,
   createDownloadResumable,
   writeAsStringAsync,
-} from 'expo-file-system/legacy';
+} = FileSystem;
 
 interface LlamaContext {
   completion(params: {

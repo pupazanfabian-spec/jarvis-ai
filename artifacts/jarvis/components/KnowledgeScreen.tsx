@@ -247,7 +247,7 @@ export default function KnowledgeScreen({ visible, onClose }: Props) {
         <View style={styles.filterRow}>
           {(
             ['all', 'web', 'user', 'dynamic_concept', 'gemini', 'openai'] as FilterMode[]
-          ).map(f => {
+          ).map((f, index) => {
             const label =
               f === 'all' ? 'Toate'
               : f === 'web' ? 'Web'
@@ -261,7 +261,7 @@ export default function KnowledgeScreen({ visible, onClose }: Props) {
               : colors.primary;
             return (
               <TouchableOpacity
-                key={f}
+                key={`item-${index}`}
                 style={[
                   styles.chip,
                   filter === f && [styles.chipActive, { borderColor: activeColor, backgroundColor: activeColor + '22' }],

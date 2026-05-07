@@ -61,7 +61,7 @@ export default function ThinkingIndicator({ webSearch = false }: ThinkingIndicat
         ) : (
           dots.map((dot, i) => (
             <Animated.View
-              key={i}
+              key={`item-${i}`}
               style={[
                 styles.dot,
                 {

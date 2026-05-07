@@ -105,7 +105,7 @@ export default function PinScreen({ mode, onSuccess, onCancel, subtitle }: Props
         <Animated.View style={[styles.dotsRow, { transform: [{ translateX: shakeAnim }] }]}>
           {[0, 1, 2, 3].map(i => (
             <Animated.View
-              key={i}
+              key={`item-${i}`}
               style={[
                 styles.dot,
                 digits.length > i && styles.dotFilled,
@@ -121,13 +121,13 @@ export default function PinScreen({ mode, onSuccess, onCancel, subtitle }: Props
         {/* Keypad */}
         <View style={styles.keypad}>
           {KEYS.map((row, ri) => (
-            <View key={ri} style={styles.keyRow}>
+            <View key={`item-${ri}`} style={styles.keyRow}>
               {row.map((key, ki) => (
                 key === '' ? (
-                  <View key={ki} style={styles.keyEmpty} />
+                  <View key={`item-${ki}`} style={styles.keyEmpty} />
                 ) : key === 'del' ? (
                   <TouchableOpacity
-                    key={ki}
+                    key={`item-${ki}`}
                     style={styles.keyBtn}
                     onPress={() => handleKey('del')}
                     activeOpacity={0.7}
@@ -136,7 +136,7 @@ export default function PinScreen({ mode, onSuccess, onCancel, subtitle }: Props
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
-                    key={ki}
+                    key={`item-${ki}`}
                     style={styles.keyBtn}
                     onPress={() => handleKey(key)}
                     activeOpacity={0.7}

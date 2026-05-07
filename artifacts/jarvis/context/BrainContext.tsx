@@ -559,7 +559,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const isClassicFallback = response.startsWith('Nu am date') ||
         response.startsWith('Nu am găsit') ||
         response.startsWith('Subiect interesant') ||
-        response.startsWith('Înțeleg ideea');
+        response.startsWith('Înțeleg ideea') ||
+        response.startsWith('Nu am informații') ||
+        response.startsWith('Subiectul') ||
+        response.startsWith('Nu am suficiente');
 
       // Fallback 1: LLM local (Phi-3 Mini) dacă e disponibil
       if (isClassicFallback && llmStatus === 'ready') {

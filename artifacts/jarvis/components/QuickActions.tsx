@@ -96,9 +96,9 @@ export default function QuickActions({ onPress, devMode = false, visible = true 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.container}
       >
-        {actions.map((action) => (
+        {actions.map((action, index) => (
           <TouchableOpacity
-            key={action.label}
+            key={`item-${index}`}
             style={[styles.chip, devMode && styles.devChip]}
             onPress={() => onPress(action.label)}
             activeOpacity={0.7}

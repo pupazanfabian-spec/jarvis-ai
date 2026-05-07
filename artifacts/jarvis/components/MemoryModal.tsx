@@ -78,7 +78,7 @@ export default function MemoryModal({ visible, brainState, onClose, onClear }: P
             <>
               <Text style={styles.sectionTitle}>Notițe salvate</Text>
               {memories.map((m, i) => (
-                <View key={i} style={styles.card}>
+                <View key={`item-${i}`} style={styles.card}>
                   <Feather name="bookmark" size={16} color={colors.warning} />
                   <View style={styles.cardContent}>
                     <Text style={styles.cardValue}>{m}</Text>
@@ -92,8 +92,8 @@ export default function MemoryModal({ visible, brainState, onClose, onClear }: P
           {brainState.learnedDocuments.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>Documente în memorie</Text>
-              {brainState.learnedDocuments.map(doc => (
-                <View key={doc.id} style={styles.card}>
+              {brainState.learnedDocuments.map((doc, i) => (
+                <View key={`item-${i}`} style={styles.card}>
                   <Feather name="file-text" size={16} color={colors.accent} />
                   <View style={styles.cardContent}>
                     <Text style={styles.cardValue}>{doc.name}</Text>

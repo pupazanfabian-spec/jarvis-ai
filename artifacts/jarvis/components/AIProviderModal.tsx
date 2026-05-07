@@ -208,12 +208,12 @@ export default function AIProviderModal({ visible, onClose }: Props) {
           </Text>
 
           <Text style={styles.sectionTitle}>Selectează providerul activ</Text>
-          {PROVIDER_OPTIONS.map(opt => {
+          {PROVIDER_OPTIONS.map((opt, index) => {
             const isActive = settings.activeProvider === opt.id;
             const isLoading = savingProvider === opt.id;
             return (
               <TouchableOpacity
-                key={opt.id}
+                key={`item-${index}`}
                 style={[styles.providerCard, isActive && styles.providerCardActive]}
                 onPress={() => handleSelectProvider(opt.id)}
                 activeOpacity={0.75}

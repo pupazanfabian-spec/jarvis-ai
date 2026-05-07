@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { readAsStringAsync } from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
+const { readAsStringAsync } = FileSystem;
 import Colors from '@/constants/colors';
 import { LearnedDocument } from '@/engine/brain';
 
@@ -171,8 +172,8 @@ export default function FileUploadModal({
               </Text>
             </View>
           ) : (
-            documents.map(doc => (
-              <View key={doc.id} style={styles.docCard}>
+            documents.map((doc, index) => (
+              <View key={`item-${index}`} style={styles.docRow}>
                 <View style={styles.docIcon}>
                   <Feather name="file-text" size={20} color={colors.primary} />
                 </View>

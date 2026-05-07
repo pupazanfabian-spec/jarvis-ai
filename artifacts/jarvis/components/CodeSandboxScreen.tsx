@@ -242,9 +242,9 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
 
         {/* Language Picker */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.langBar} contentContainerStyle={styles.langBarContent}>
-          {LANGUAGES.map(lang => (
+          {LANGUAGES.map((lang, index) => (
             <TouchableOpacity
-              key={lang.id}
+              key={`item-${index}`}
               style={[styles.langChip, selectedLang.id === lang.id && styles.langChipActive]}
               onPress={() => selectLanguage(lang)}
             >
@@ -258,9 +258,9 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
 
         {/* Tab Bar */}
         <View style={styles.tabBar}>
-          {(['editor', 'output', 'tutorial'] as const).map(t => (
+          {(['editor', 'output', 'tutorial'] as const).map((t, index) => (
             <TouchableOpacity
-              key={t}
+              key={`item-${index}`}
               style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
               onPress={() => setTab(t)}
             >
@@ -290,7 +290,7 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
                 {/* Line numbers */}
                 <View style={styles.lineNumbers}>
                   {Array.from({ length: lineCount }).map((_, i) => (
-                    <Text key={i} style={styles.lineNum}>{i + 1}</Text>
+                    <Text key={`item-${i}`} style={styles.lineNum}>{i + 1}</Text>
                   ))}
                 </View>
 
@@ -299,9 +299,9 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
                   {syntaxHighlight && tokens ? (
                     <View style={StyleSheet.absoluteFill} pointerEvents="none">
                       {tokens.map((lineTokens, li) => (
-                        <View key={li} style={styles.tokenLine}>
+                        <View key={`item-${li}`} style={styles.tokenLine}>
                           {lineTokens.map((tok, ti) => (
-                            <Text key={ti} style={[styles.tokenText, { color: tok.color }]}>
+                            <Text key={`item-${ti}`} style={[styles.tokenText, { color: tok.color }]}>
                               {tok.text}
                             </Text>
                           ))}
@@ -451,7 +451,7 @@ export default function CodeSandboxScreen({ visible, onClose }: Props) {
               <>
                 <Text style={styles.tutorialTitle}>{tutorial.titlu}</Text>
                 {tutorial.sectiuni.map((s, i) => (
-                  <View key={i} style={styles.tutorialSection}>
+                  <View key={`item-${i}`} style={styles.tutorialSection}>
                     <Text style={styles.tutorialSubtitle}>{s.subtitlu}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator>
                       <Text style={styles.tutorialCode}>{s.continut}</Text>

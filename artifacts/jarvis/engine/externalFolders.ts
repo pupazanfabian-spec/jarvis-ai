@@ -1,9 +1,10 @@
 import { Platform } from 'react-native';
-import {
+import * as FileSystem from 'expo-file-system';
+const {
   readAsStringAsync,
   getInfoAsync,
   StorageAccessFramework,
-} from 'expo-file-system/legacy';
+} = FileSystem;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { writeMemoryEntry, type MemoryCategory } from './memoryFolder';
 
