@@ -292,7 +292,7 @@ export async function clearCache(): Promise<void> {
   } catch {}
 }
 
-export async function migrateFromOldVersion(): Promise<number> {
+export async function migrateFromAsyncStorage(): Promise<number> {
   try {
     const migrated = await AsyncStorage.getItem(MIGRATED_KEY);
     if (migrated === 'true') return 0;
