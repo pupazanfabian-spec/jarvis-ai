@@ -33,6 +33,12 @@ const PROVIDER_OPTIONS: { id: AIProvider; label: string; icon: FeatherIconName; 
     desc: 'Jarvis folosește doar cunoașterea locală și căutarea web.',
   },
   {
+    id: 'auto',
+    label: 'Automat (Free Fallback)',
+    icon: 'refresh-cw',
+    desc: 'Incearcă Gemini → Groq → OpenRouter. Ideal pentru disponibilitate maximă.',
+  },
+  {
     id: 'gemini',
     label: 'Gemini Flash (Google)',
     icon: 'zap',
@@ -143,7 +149,14 @@ export default function AIProviderModal({ visible, onClose }: Props) {
       groq: settings.groqKey,
       openrouter: settings.openrouterKey,
     };
-    if (provider !== 'none' && !keyMap[provider]) {
+
+    if (provider === 'auto') {
+      const hasAnyFreeKey = settings.geminiKey || settings.groqKey || settings.openrouterKey;
+      if (!hasAnyFreeKey) {
+        Alert.alert('Chei lipsă', 'Adaugă și validează cel puțin o cheie pentru Gemini, Groq sau OpenRouter pentru a folosi modul Automat.', [{ text: 'OK' }]);
+        return;
+      }
+    } else if (provider !== 'none' && !keyMap[provider]) {
       Alert.alert('Cheie lipsă', 'Adaugă și validează o cheie API mai întâi, apoi poți activa providerul.', [{ text: 'OK' }]);
       return;
     }

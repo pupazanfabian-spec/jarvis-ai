@@ -662,9 +662,7 @@ export function processMessage(
   // Căutare în Dicționar local (cunoștințe de bază)
   const dictResult = searchDictionary(trimmed);
   if (dictResult) {
-    // Dacă avem un provider AI activ, preferăm Groq pentru răspunsuri simple/definiții
-    // signalăm acest lucru prin prefixul JARVIS_CMD
-    return `JARVIS_CMD:auto||${trimmed}`;
+    return dictResult;
   }
 
   // Inferență logică / Fapte învățate anterior

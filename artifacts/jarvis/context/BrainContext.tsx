@@ -343,6 +343,76 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     return buildRichSystemPrompt(ctx);
   }, []);
 
+  const _handleOfflineFallback = useCallback(async (
+    text: string,
+    history: ConversationTurn[],
+    intent: string,
+  ): Promise<string> => {
+    let response = processMessage(text, brainRef.current, history);
+
+    const isClassicFallback = response.startsWith('Nu am date') ||
+      response.startsWith('Nu am găsit') ||
+      response.startsWith('Subiect interesant') ||
+      response.startsWith('Înțeleg ideea') ||
+      response.startsWith('Nu am informații') ||
+      response.startsWith('Subiectul') ||
+      response.startsWith('Nu am suficiente') ||
+      response.startsWith('JARVIS_CMD:auto');
+
+    if (response.startsWith('JARVIS_CMD:auto')) {
+      // Dacă am ajuns aici, Cloud AI a eșuat sau e oprit, deci ignorăm prefixul
+      response = 'Nu am date suficiente despre acest subiect în memoria locală.';
+    }
+
+    // Fallback 1: LLM local (Phi-3 Mini) dacă e disponibil
+    if (isClassicFallback && llmStatus === 'ready') {
+      const state = brainRef.current;
+      const llmResp = await llmGenerate(text, {
+        userName: state.userName,
+        creatorName: state.creatorId,
+        learnedFacts: state.selfKnowledge.learnedFacts.slice(-20),
+        history: history.slice(-20) as { role: 'user' | 'assistant'; content: string }[],
+      });
+      if (llmResp) return `🧠 ${llmResp}`;
+    }
+
+    // Fallback 2: Cunoaștere acumulată anterior din DB
+    let answeredFromDB = false;
+    if (isClassicFallback && dbReady) {
+      try {
+        const dbAnswer = await queryKnowledgeForAnswer(text, 0.4);
+        if (dbAnswer) {
+          response = synthesizeWebResponse(
+            dbAnswer.content, dbAnswer.source ?? 'Memorie locală', text,
+            detectQuestionType(text), { userName: brainRef.current.userName ?? undefined },
+          );
+          answeredFromDB = true;
+        }
+      } catch { }
+    }
+
+    // Fallback 3: Căutare online (Wikipedia RO + EN + DuckDuckGo)
+    const shouldSearchOnline = wantsOnline || (isClassicFallback && !answeredFromDB);
+    if (shouldSearchOnline) {
+      setWebSearching(true);
+      try {
+        const onlineResult = await searchOnlineSynthesized(text);
+        if (onlineResult.found) {
+          response = synthesizeWebResponse(
+            onlineResult.text, onlineResult.source, text,
+            detectQuestionType(text), { userName: brainRef.current.userName ?? undefined },
+          );
+          autoLearnFromWeb(onlineResult.text, onlineResult.source, text);
+        }
+      } catch {
+        // Fără internet sau eroare — continuăm
+      } finally {
+        setWebSearching(false);
+      }
+    }
+    return response;
+  }, [dbReady, llmGenerate, llmStatus, wantsOnline, autoLearnFromWeb]);
+
   // ─── sendMessage ──────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async (text: string) => {
@@ -541,6 +611,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
     // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
     else if (aiSettings.activeProvider !== 'none') {
+      let aiSuccess = false;
       try {
         const assistantId = (Date.now() + 1).toString();
         setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
@@ -552,70 +623,28 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         if (aiResult?.text) {
           response = aiResult.text.trim();
           autoLearnFromCloud(aiResult);
-          setIsThinking(false);
-          return;
+          aiSuccess = true;
+        } else {
+          // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
+          setMessages(prev => prev.filter(m => m.id !== assistantId));
         }
-      } catch {
-        // Fallback offline
+      } catch (err) {
+        console.warn('[BrainContext] Cloud AI failed:', err);
       }
+
+      if (aiSuccess) {
+        setIsThinking(false);
+        return;
+      }
+      
+      // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
+      console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
+      response = await _handleOfflineFallback(text, history, intent);
     }
 
-    // ── Fallback offline (doar dacă Cloud AI e off sau a eșuat) ───────────────
+    // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
     else {
-      const isClassicFallback = response.startsWith('Nu am date') ||
-        response.startsWith('Nu am găsit') ||
-        response.startsWith('Subiect interesant') ||
-        response.startsWith('Înțeleg ideea') ||
-        response.startsWith('Nu am informații') ||
-        response.startsWith('Subiectul') ||
-        response.startsWith('Nu am suficiente');
-
-      // Fallback 1: LLM local (Phi-3 Mini) dacă e disponibil
-      if (isClassicFallback && llmStatus === 'ready') {
-        const state = brainRef.current;
-        const llmResp = await llmGenerate(text, {
-          userName: state.userName,
-          creatorName: state.creatorId,
-          learnedFacts: state.selfKnowledge.learnedFacts.slice(-20),
-          history: history.slice(-20) as { role: 'user' | 'assistant'; content: string }[],
-        });
-        if (llmResp) response = `🧠 ${llmResp}`;
-      }
-
-      // Fallback 2: Cunoaștere acumulată anterior din DB
-      let answeredFromDB = false;
-      if (isClassicFallback && dbReady) {
-        try {
-          const dbAnswer = await queryKnowledgeForAnswer(text, 0.4);
-          if (dbAnswer) {
-            response = synthesizeWebResponse(
-              dbAnswer.content, dbAnswer.source ?? 'Memorie locală', text,
-              detectQuestionType(text), { userName: brainRef.current.userName ?? undefined },
-            );
-            answeredFromDB = true;
-          }
-        } catch {}
-      }
-
-      // Fallback 3: Căutare online (Wikipedia RO + EN + DuckDuckGo)
-      const shouldSearchOnline = wantsOnline || (isClassicFallback && !answeredFromDB);
-      if (shouldSearchOnline) {
-        setWebSearching(true);
-        try {
-          const onlineResult = await searchOnlineSynthesized(text);
-          if (onlineResult.found) {
-            response = synthesizeWebResponse(
-              onlineResult.text, onlineResult.source, text,
-              detectQuestionType(text), { userName: brainRef.current.userName ?? undefined },
-            );
-            autoLearnFromWeb(onlineResult.text, onlineResult.source, text);
-          }
-        } catch {
-          // Fără internet sau eroare — continuăm
-        } finally {
-          setWebSearching(false);
-        }
-      }
+      response = await _handleOfflineFallback(text, history, intent);
     }
 
     setBrainState({ ...brainRef.current });

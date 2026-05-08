@@ -569,23 +569,14 @@ export async function callActiveProvider(
   }
 
   if (settings.activeProvider === 'auto') {
-    const available = providers.filter(p => p.key && p.key.length > 5);
-    if (intent === 'cmd_cod') {
-      available.sort((a, b) => b.capability - a.capability);
-    } else if (intent === 'cmd_groq_direct') {
-       // Deja încercat mai sus, dar ca fallback preferăm tot free
-       available.sort((a, b) => (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1));
-    } else {
-      // Pentru răspunsuri simple, Groq (capability 2, isFree true) are prioritate mare
-      available.sort((a, b) => {
-          if (a.name === 'groq') return -1;
-          if (b.name === 'groq') return 1;
-          return (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1);
-      });
-    }
-    for (const p of available) {
-      const res = await callWithRetry(p.call, p.name);
-      if (res) return res;
+    // Ordine strictă cerută: 1) Gemini Flash, 2) Groq, 3) OpenRouter
+    const sequence: AIProvider[] = ['gemini', 'groq', 'openrouter'];
+    for (const name of sequence) {
+      const p = providers.find(prov => prov.name === name);
+      if (p && p.key && p.key.length > 5) {
+        const res = await callWithRetry(p.call, p.name);
+        if (res) return res;
+      }
     }
     return null;
   }
@@ -617,27 +608,33 @@ export async function callActiveProviderStream(
   history?: ConversationTurn[],
   intent?: string,
 ): Promise<{ text: string; provider: AIProvider } | null> {
-  let { activeProvider } = settings;
+  const { activeProvider } = settings;
   const sys = system ?? JARVIS_SYSTEM_PROMPT;
 
-  // Forțare Groq pentru intent special
+  // Ordine pentru fallback automat (doar providers care suportă streaming aici)
+  const providersToTry: AIProvider[] = [];
   if (intent === 'cmd_groq_direct' && settings.groqKey) {
-    activeProvider = 'groq';
+    providersToTry.push('groq');
+  } else if (activeProvider === 'auto') {
+    providersToTry.push('gemini', 'groq');
+  } else {
+    providersToTry.push(activeProvider);
   }
 
-  // Încearcă streaming dacă provider-ul suportă, altfel fallback la call normal
-  try {
-    if (activeProvider === 'gemini' && settings.geminiKey) {
-      return await streamGemini(prompt, settings.geminiKey, onChunk, sys, history);
+  for (const provider of providersToTry) {
+    try {
+      if (provider === 'gemini' && settings.geminiKey) {
+        return await streamGemini(prompt, settings.geminiKey, onChunk, sys, history);
+      }
+      if (provider === 'groq' && settings.groqKey) {
+        return await streamGroq(prompt, settings.groqKey, onChunk, sys, history);
+      }
+    } catch (err) {
+      console.warn(`[AIProvider] Streaming failed for ${provider}, trying next:`, err);
     }
-    if (activeProvider === 'groq' && settings.groqKey) {
-      return await streamGroq(prompt, settings.groqKey, onChunk, sys, history);
-    }
-  } catch (err) {
-    console.warn(`[AIProvider] Streaming failed for ${activeProvider}, falling back to static call:`, err);
   }
 
-  // Fallback
+  // Fallback la call static (care acoperă toți providerii inclusiv OpenRouter)
   const result = await callActiveProvider(prompt, settings, sys, history, intent);
   if (result) onChunk(result.text);
   return result;
