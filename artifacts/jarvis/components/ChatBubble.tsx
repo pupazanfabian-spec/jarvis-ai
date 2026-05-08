@@ -4,7 +4,7 @@ import {
   Animated, Clipboard, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 const { writeAsStringAsync, documentDirectory } = FileSystem;
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';

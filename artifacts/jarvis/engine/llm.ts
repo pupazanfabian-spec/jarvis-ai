@@ -3,7 +3,7 @@
 // Funcționează DOAR în development build (nu în Expo Go)
 // În Expo Go, isLlamaAvailable = false și creierul clasic preia controlul
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const {
   documentDirectory,

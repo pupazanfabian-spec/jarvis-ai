@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 const { readAsStringAsync } = FileSystem;
 import Colors from '@/constants/colors';
 import { LearnedDocument } from '@/engine/brain';
