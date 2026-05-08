@@ -154,7 +154,7 @@ async function callGeminiModel(
     ],
   };
 
-  const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const resp = await fetchTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -163,12 +163,13 @@ async function callGeminiModel(
 
   const data = await resp.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    error?: { message?: string; code?: number };
+    error?: { message?: string; code?: number; status?: string };
   };
 
   if (!resp.ok || data.error) {
     const msg = data.error?.message ?? `HTTP ${resp.status}`;
-    return { text: null, error: msg };
+    const status = data.error?.status ?? '';
+    return { text: null, error: `${status}::${msg}` };
   }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
@@ -195,7 +196,8 @@ export async function callGemini(
           error.includes('RESOURCE_EXHAUSTED') ||
           error.includes('rate') ||
           error.includes('429') ||
-          error.includes('limit: 0');
+          error.includes('limit: 0') ||
+          error.includes('INVALID_ARGUMENT');
         if (isSkippable) continue;
         return null;
       }
@@ -208,20 +210,22 @@ export async function callGemini(
 
 export async function testGeminiKeyDetailed(apiKey: string): Promise<{ ok: boolean; error: string }> {
   if (!apiKey || apiKey.length < 10) return { ok: false, error: 'Cheia este prea scurtă.' };
+  let lastError = '';
   for (const model of GEMINI_MODELS) {
     try {
       const { text, error } = await callGeminiModel(model, 'Say: ok', apiKey);
       if (text) return { ok: true, error: '' };
       if (error) {
-        if (error.includes('API_KEY_INVALID') || error.includes('INVALID_ARGUMENT') ||
-            (error.includes('400') && !error.includes('quota'))) {
-          return { ok: false, error: `Cheie invalidă: ${error.slice(0, 120)}` };
+        if (error.includes('API_KEY_INVALID')) {
+          return { ok: false, error: 'Cheie API Google invalidă. Verifică în Google AI Studio.' };
         }
+        lastError = error;
         const isSkippable =
           error.includes('not found') || error.includes('404') ||
           error.includes('deprecated') || error.includes('quota') ||
           error.includes('RESOURCE_EXHAUSTED') || error.includes('rate') ||
-          error.includes('429') || error.includes('limit: 0');
+          error.includes('429') || error.includes('limit: 0') ||
+          error.includes('INVALID_ARGUMENT');
         if (isSkippable) continue;
         return { ok: false, error: `Eroare API (${model}): ${error.slice(0, 150)}` };
       }
@@ -230,9 +234,10 @@ export async function testGeminiKeyDetailed(apiKey: string): Promise<{ ok: boole
       if (msg.includes('abort') || msg.includes('timeout')) {
         return { ok: false, error: 'Timeout — verifică conexiunea la internet.' };
       }
+      lastError = msg;
     }
   }
-  return { ok: false, error: 'Niciun model Gemini disponibil. Verifică cheia sau conexiunea.' };
+  return { ok: false, error: `Niciun model Gemini disponibil pentru această cheie. Ultima eroare: ${lastError.slice(0, 100)}` };
 }
 
 // ─── ChatGPT (OpenAI) ────────────────────────────────────────────────────────
@@ -640,7 +645,8 @@ export async function callActiveProviderStream(
   return result;
 }
 
-async function streamGemini(
+async function streamGeminiModel(
+  model: string,
   prompt: string, apiKey: string, onChunk: StreamHandler,
   system?: string, history: ConversationTurn[] = [],
 ): Promise<{ text: string; provider: AIProvider } | null> {
@@ -652,54 +658,43 @@ async function streamGemini(
     { role: 'user', parts: [{ text: prompt }] },
   ];
 
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents,
-        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
-      }),
-    });
+  const url = `${GEMINI_BASE}/${model}:streamGenerateContent?key=${encodeURIComponent(apiKey)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+    }),
+  });
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => 'Unknown error');
-      throw new Error(`Gemini Stream Error: ${resp.status} - ${errText}`);
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => 'Unknown error');
+    throw new Error(`Gemini Stream Error: ${resp.status} - ${errText}`);
+  }
+
+  const reader = (resp as any).body?.getReader();
+  let fullText = '';
+
+  if (reader) {
+    let decoder: any;
+    try {
+      decoder = new TextDecoder();
+    } catch {
+      // Fallback dacă TextDecoder lipsește (unele medii RN vechi)
     }
 
-    // In React Native / Expo, fetch streaming results are often tricky.
-    // We'll use a text reader if available or fallback to a simpler approach.
-    const reader = (resp as any).body?.getReader();
-    let fullText = '';
-
-    if (reader) {
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        // Gemini returns JSON objects in an array format [{},{},...]
-        // We'll extract text from parts
-        const parts = chunk.split(/\"text\":\s*\"/);
-        for (let i = 1; i < parts.length; i++) {
-          const endIdx = parts[i].indexOf('\"');
-          if (endIdx !== -1) {
-            const text = parts[i].slice(0, endIdx).replace(/\\n/g, '\n').replace(/\\"/g, '\"');
-            if (text) {
-              fullText += text;
-              onChunk(text);
-            }
-          }
-        }
-      }
-    } else {
-      // Basic fallback for environments without stream reader
-      const data = await resp.json() as any[];
-      if (Array.isArray(data)) {
-        for (const item of data) {
-          const text = item.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder ? decoder.decode(value, { stream: true }) : String.fromCharCode(...value);
+      
+      const parts = chunk.split(/\"text\":\s*\"/);
+      for (let i = 1; i < parts.length; i++) {
+        const endIdx = parts[i].indexOf('\"');
+        if (endIdx !== -1) {
+          const text = parts[i].slice(0, endIdx).replace(/\\n/g, '\n').replace(/\\"/g, '\"');
           if (text) {
             fullText += text;
             onChunk(text);
@@ -707,12 +702,35 @@ async function streamGemini(
         }
       }
     }
-
-    return { text: fullText, provider: 'gemini' };
-  } catch (err) {
-    if (__DEV__) console.warn('[AIProvider] streamGemini failed:', err);
-    throw err;
+  } else {
+    const data = await resp.json() as any[];
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        const text = item.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (text) {
+          fullText += text;
+          onChunk(text);
+        }
+      }
+    }
   }
+  return { text: fullText, provider: 'gemini' };
+}
+
+async function streamGemini(
+  prompt: string, apiKey: string, onChunk: StreamHandler,
+  system?: string, history: ConversationTurn[] = [],
+): Promise<{ text: string; provider: AIProvider } | null> {
+  // Încearcă modelele în ordine pentru streaming
+  for (const model of ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']) {
+    try {
+      return await streamGeminiModel(model, prompt, apiKey, onChunk, system, history);
+    } catch (err) {
+      if (__DEV__) console.warn(`[AIProvider] streamGeminiModel failed for ${model}:`, err);
+      // Continuă la următorul model dacă nu a început să trimită text
+    }
+  }
+  throw new Error('Toate modelele de streaming Gemini au eșuat.');
 }
 
 async function streamGroq(
@@ -749,11 +767,15 @@ async function streamGroq(
     let fullText = '';
 
     if (reader) {
-      const decoder = new TextDecoder();
+      let decoder: any;
+      try {
+        decoder = new TextDecoder();
+      } catch {}
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
+        const chunk = decoder ? decoder.decode(value, { stream: true }) : String.fromCharCode(...value);
         const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
