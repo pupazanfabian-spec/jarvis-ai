@@ -562,12 +562,26 @@ export async function callActiveProvider(
     { key: settings.openaiKey, call: () => callChatGPT(prompt, settings.openaiKey, sys, history), name: 'openai', isFree: false, capability: 3 },
   ];
 
+  // Forțare Groq pentru intent special
+  if (intent === 'cmd_groq_direct' && settings.groqKey) {
+    const res = await callWithRetry(providers[0].call, 'groq');
+    if (res) return res;
+  }
+
   if (settings.activeProvider === 'auto') {
     const available = providers.filter(p => p.key && p.key.length > 5);
     if (intent === 'cmd_cod') {
       available.sort((a, b) => b.capability - a.capability);
+    } else if (intent === 'cmd_groq_direct') {
+       // Deja încercat mai sus, dar ca fallback preferăm tot free
+       available.sort((a, b) => (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1));
     } else {
-      available.sort((a, b) => (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1));
+      // Pentru răspunsuri simple, Groq (capability 2, isFree true) are prioritate mare
+      available.sort((a, b) => {
+          if (a.name === 'groq') return -1;
+          if (b.name === 'groq') return 1;
+          return (a.isFree === b.isFree ? b.capability - a.capability : a.isFree ? -1 : 1);
+      });
     }
     for (const p of available) {
       const res = await callWithRetry(p.call, p.name);
@@ -603,8 +617,13 @@ export async function callActiveProviderStream(
   history?: ConversationTurn[],
   intent?: string,
 ): Promise<{ text: string; provider: AIProvider } | null> {
-  const { activeProvider } = settings;
+  let { activeProvider } = settings;
   const sys = system ?? JARVIS_SYSTEM_PROMPT;
+
+  // Forțare Groq pentru intent special
+  if (intent === 'cmd_groq_direct' && settings.groqKey) {
+    activeProvider = 'groq';
+  }
 
   // Încearcă streaming dacă provider-ul suportă, altfel fallback la call normal
   try {

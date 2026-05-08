@@ -507,14 +507,20 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const cmdLabel = parts[0] ?? 'comandă';
       const cmdOriginal = parts[1] ?? text;
 
-      if (aiSettings.activeProvider !== 'none') {
+      // Forțăm Groq dacă este cerut explicit
+      const forceGroq = cmdLabel === 'groq' && aiSettings.settings.groqKey;
+      
+      if (aiSettings.activeProvider !== 'none' || forceGroq) {
         try {
           const assistantId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
 
+          // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
+          const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
+
           const aiResult = await aiSettings.generateStream(cmdOriginal, (chunk) => {
             setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-          }, buildCloudCtx(), history.slice(-20) as ConversationTurn[], intent);
+          }, buildCloudCtx(), history.slice(-20) as ConversationTurn[], finalIntent);
 
           if (aiResult) {
             response = aiResult.text.trim();

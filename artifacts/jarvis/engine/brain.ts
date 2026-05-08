@@ -392,11 +392,13 @@ type Intent =
   | 'securitate' | 'constitutie' | 'follow_up' | 'cine_sunt_eu'
   | 'cmd_scriere' | 'cmd_traducere' | 'cmd_rezumat' | 'cmd_lista'
   | 'cmd_comparare' | 'cmd_plan' | 'cmd_creatie' | 'cmd_cod'
+  | 'cmd_groq_direct'
   | 'unknown';
 
 export const COMMAND_INTENTS = new Set<Intent>([
   'cmd_scriere', 'cmd_traducere', 'cmd_rezumat', 'cmd_lista',
   'cmd_comparare', 'cmd_plan', 'cmd_creatie', 'cmd_cod',
+  'cmd_groq_direct',
 ]);
 
 export function isCommandIntent(intent: string): boolean {
@@ -415,6 +417,7 @@ const INTENT_PATTERNS: IntentPattern[] = [
   { intent: 'constitutie', patterns: [/(constitutia ta|regulile tale|ce reguli ai|principiile tale|codul tau de legi|care sunt legile tale|arata-mi constitutia)/], weight: 10 },
   { intent: 'creator_declare', patterns: [/(eu sunt creatorul|eu te-am creat|eu sunt cel care te-a creat|eu sunt stapanul|sunt creatorul tau|sunt programatorul tau|sunt cel care te-a facut)/], weight: 10 },
   { intent: 'creator_verify', patterns: [/(cine te-a creat|cine e creatorul|cine te-a facut|cine esti proprietarul|cine te controleaza|de cine asculti|stapanul tau)/], weight: 10 },
+  { intent: 'cmd_groq_direct', patterns: [/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i], weight: 11 },
   { intent: 'salut', patterns: [/(salut|buna|ciao|hei|servus|noroc|buna dimineata|buna ziua|buna seara|v salut|s-avem noroc|sa traiesti)/], weight: 10 },
   { intent: 'ramas_bun', patterns: [/(pa|la revedere|noapte buna|pe curand|ne auzim|sa ne auzim cu bine|o zi buna|o seara placuta|drum bun)/], weight: 10 },
   { intent: 'identitate_jarvis', patterns: [/(cum (te|il|va|iti) cheama|care (e|este) numele|ce nume (ai|are)|cum (te|iti) numesti|cine esti|prezinta-te|esti jarvis|ce esti tu)/], weight: 9 },
@@ -466,6 +469,12 @@ const INTENT_PATTERNS: IntentPattern[] = [
 
 function detectIntent(text: string): Intent {
   const n = norm(text);
+
+  // Verificare directă pentru cuvinte cheie Groq
+  if (/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i.test(n)) {
+    return 'cmd_groq_direct';
+  }
+
   let bestIntent: Intent = 'unknown';
   let bestScore = 0;
 
@@ -642,6 +651,10 @@ export function processMessage(
     }
   }
 
+  if (intent === 'cmd_groq_direct') {
+    return `JARVIS_CMD:groq||${trimmed}`;
+  }
+
   // Căutare în Documente studiate
   const docResult = searchDocuments(trimmed, state.learnedDocuments);
   if (docResult) return docResult;
@@ -649,9 +662,9 @@ export function processMessage(
   // Căutare în Dicționar local (cunoștințe de bază)
   const dictResult = searchDictionary(trimmed);
   if (dictResult) {
-    const category = detectTopicCategory(trimmed);
-    const qType = detectQuestionType(trimmed);
-    return synthesizeKnowledgeResponse(dictResult.split('\n\n')[1] || dictResult, dictResult.split('\n\n')[0].replace(/\*\*/g, ''), category, qType, { userName: state.userName });
+    // Dacă avem un provider AI activ, preferăm Groq pentru răspunsuri simple/definiții
+    // signalăm acest lucru prin prefixul JARVIS_CMD
+    return `JARVIS_CMD:auto||${trimmed}`;
   }
 
   // Inferență logică / Fapte învățate anterior
@@ -660,12 +673,11 @@ export function processMessage(
 
   // Dacă am ajuns aici și e o comandă de scriere/cod, returnăm un text care să forțeze fallback la LLM/Cloud
   if (COMMAND_INTENTS.has(intent)) {
-    return `Subiect interesant. Lucrez la acest aspect: **${intent}**.`;
+    return `JARVIS_CMD:auto||${trimmed}`;
   }
 
   // Mesaj final de fallback — va fi interceptat de BrainContext pentru Cloud/LLM
-  const kws = extractKeywords(trimmed, 2);
-  return generateSmartUnknown(trimmed, kws, { userName: state.userName, conversationCount: state.conversationCount });
+  return `JARVIS_CMD:auto||${trimmed}`;
 }
 
 export function processDocument(name: string, content: string, state: BrainState): string {
