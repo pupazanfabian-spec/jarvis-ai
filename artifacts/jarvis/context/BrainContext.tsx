@@ -416,7 +416,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   // ─── sendMessage ──────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || isThinking || webSearching) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -428,245 +428,253 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     setMessages(prev => [...prev, userMsg]);
     setIsThinking(true);
 
-    await new Promise(r => setTimeout(r, 50));
+    try {
+      await new Promise(r => setTimeout(r, 50));
 
-    const history = messages.map(m => ({ role: m.role, content: m.content }));
+      // Folosim varianta funcțională a setMessages pentru a asigura că avem istoricul corect
+      let currentMessages: Message[] = [];
+      setMessages(prev => { currentMessages = prev; return prev; });
+      const history = currentMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
 
-    // ─── Dev Mode Chain ────────────────────────────────────────────────────────
-    if (isDevMode) {
-      const devIntent = detectDevIntent(text);
+      // ─── Dev Mode Chain ────────────────────────────────────────────────────────
+      if (isDevMode) {
+        const devIntent = detectDevIntent(text);
 
-      if (devIntent !== 'none') {
-        let devResponse = '';
+        if (devIntent !== 'none') {
+          let devResponse = '';
 
-        // 1. Încearcă offline: template sau explicație din devKnowledge
-        if (devIntent === 'generate') {
-          const templateResult = generateFromTemplate(text);
-          if (templateResult) {
-            devResponse = formatCodeResponse(templateResult);
-            // Creează sau actualizează proiectul activ cu pașii generați (non-blocking)
-            getActiveProject().then(async curProj => {
-              let projectId: string;
-              if (curProj) {
-                projectId = curProj.id;
-              } else {
-                const projectName = templateResult.templateId
-                  ? `App: ${templateResult.templateId}`
-                  : text.slice(0, 60);
-                const projectStack = templateResult.stack || 'react-native';
-                const projectDesc = `Stack: ${projectStack}. Generat din: ${text.slice(0, 80)}`;
-                const newProj = await createProject(projectName, projectStack, projectDesc);
-                projectId = newProj.id;
-              }
-              for (const file of templateResult.files) {
-                await addProjectStep(projectId, `Creare ${file.filename}`).catch(() => {});
-                await saveProjectFile(projectId, file.filename, file.language, file.code).catch(() => {});
-              }
-              refreshProject();
-            }).catch(() => {});
-          }
-        }
-
-        if (!devResponse && (devIntent === 'explain' || devIntent === 'compare')) {
-          const offlineExplanation = generateDevExplanation(text);
-          if (offlineExplanation) {
-            devResponse = offlineExplanation;
-          }
-        }
-
-        // 2. Debug mode: extrage snippet din mesaj și trimite la AI Cloud
-        if (devIntent === 'debug' || !devResponse) {
-          const codeSnippet = extractCodeSnippet(text);
-          const activeProj = await getActiveProject().catch(() => null);
-          const projectContext = activeProj ? buildProjectContext(activeProj) : undefined;
-          const projectSummary = activeProj ? formatProjectSummary(activeProj) : undefined;
-          const enrichedText = projectSummary ? `${text}\n\n[Context proiect]\n${projectSummary}` : text;
-          const aiPrompt = buildAICodePrompt(enrichedText, devIntent === 'debug' ? 'debug' : devIntent, projectContext, codeSnippet);
-
-          // Încearcă AI Cloud
-          if (aiSettings.activeProvider !== 'none') {
-            try {
-              const cloudResult = await aiGenerate(aiPrompt);
-              if (cloudResult) {
-                const providerName = cloudResult.provider === 'gemini' ? '✨ Gemini Dev' : '🤖 ChatGPT Dev';
-                devResponse = `${providerName}:\n\n${cloudResult.text}`;
-                autoLearnFromWeb(cloudResult.text, cloudResult.provider, text);
-              }
-            } catch {}
+          // 1. Încearcă offline: template sau explicație din devKnowledge
+          if (devIntent === 'generate') {
+            const templateResult = generateFromTemplate(text);
+            if (templateResult) {
+              devResponse = formatCodeResponse(templateResult);
+              // Creează sau actualizează proiectul activ cu pașii generați (non-blocking)
+              getActiveProject().then(async curProj => {
+                let projectId: string;
+                if (curProj) {
+                  projectId = curProj.id;
+                } else {
+                  const projectName = templateResult.templateId
+                    ? `App: ${templateResult.templateId}`
+                    : text.slice(0, 60);
+                  const projectStack = templateResult.stack || 'react-native';
+                  const projectDesc = `Stack: ${projectStack}. Generat din: ${text.slice(0, 80)}`;
+                  const newProj = await createProject(projectName, projectStack, projectDesc);
+                  projectId = newProj.id;
+                }
+                for (const file of templateResult.files) {
+                  await addProjectStep(projectId, `Creare ${file.filename}`).catch(() => { });
+                  await saveProjectFile(projectId, file.filename, file.language, file.code).catch(() => { });
+                }
+                refreshProject();
+              }).catch(() => { });
+            }
           }
 
-          // Fallback offline pentru 'generate' fără template și fără AI
-          if (!devResponse && devIntent === 'generate') {
-            devResponse = `🔧 **Jarvis Dev — Mod Offline**\n\nAm detectat o cerere de generare cod pentru: **"${text.slice(0, 80)}"**\n\nÎn prezent nu am un template exact pentru această cerere și nu e configurat niciun provider AI.\n\n**Opțiuni:**\n• Conectează **Gemini** sau **ChatGPT** din setări (iconița 🔑) pentru generare cod complet\n• Încearcă formulări mai specifice:\n  — "generează app todo"\n  — "creează calculator"\n  — "scrie un timer app"\n  — "fă un QR scanner"\n  — "quiz app în React Native"\n  — "fitness tracker"\n\n**Template-uri disponibile offline:** todo, calculator, chat, notițe, weather, auth, API, landing, screen capture, QR scanner, timer, quiz, fitness tracker`;
+          if (!devResponse && (devIntent === 'explain' || devIntent === 'compare')) {
+            const offlineExplanation = generateDevExplanation(text);
+            if (offlineExplanation) {
+              devResponse = offlineExplanation;
+            }
           }
-        }
 
-        if (devResponse) {
-          const aiMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: devResponse,
-            timestamp: new Date(),
-          };
-          setMessages(prev => {
-            const next = [...prev, aiMsg];
-            persist(next, brainRef.current);
-            return next;
-          });
-          setIsThinking(false);
-          return;
+          // 2. Debug mode: extrage snippet din mesaj și trimite la AI Cloud
+          if (devIntent === 'debug' || !devResponse) {
+            const codeSnippet = extractCodeSnippet(text);
+            const activeProj = await getActiveProject().catch(() => null);
+            const projectContext = activeProj ? buildProjectContext(activeProj) : undefined;
+            const projectSummary = activeProj ? formatProjectSummary(activeProj) : undefined;
+            const enrichedText = projectSummary ? `${text}\n\n[Context proiect]\n${projectSummary}` : text;
+            const aiPrompt = buildAICodePrompt(enrichedText, devIntent === 'debug' ? 'debug' : devIntent, projectContext, codeSnippet);
+
+            // Încearcă AI Cloud
+            if (aiSettings.activeProvider !== 'none') {
+              try {
+                const cloudResult = await aiGenerate(aiPrompt);
+                if (cloudResult) {
+                  const providerName = cloudResult.provider === 'gemini' ? '✨ Gemini Dev' : '🤖 ChatGPT Dev';
+                  devResponse = `${providerName}:\n\n${cloudResult.text}`;
+                  autoLearnFromWeb(cloudResult.text, cloudResult.provider, text);
+                }
+              } catch { }
+            }
+
+            // Fallback offline pentru 'generate' fără template și fără AI
+            if (!devResponse && devIntent === 'generate') {
+              devResponse = `🔧 **Jarvis Dev — Mod Offline**\n\nAm detectat o cerere de generare cod pentru: **"${text.slice(0, 80)}"**\n\nÎn prezent nu am un template exact pentru această cerere și nu e configurat niciun provider AI.\n\n**Opțiuni:**\n• Conectează **Gemini** sau **ChatGPT** din setări (iconița 🔑) pentru generare cod complet\n• Încearcă formulări mai specifice:\n  — "generează app todo"\n  — "creează calculator"\n  — "scrie un timer app"\n  — "fă un QR scanner"\n  — "quiz app în React Native"\n  — "fitness tracker"\n\n**Template-uri disponibile offline:** todo, calculator, chat, notițe, weather, auth, API, landing, screen capture, QR scanner, timer, quiz, fitness tracker`;
+            }
+          }
+
+          if (devResponse) {
+            const aiMsg: Message = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: devResponse,
+              timestamp: new Date(),
+            };
+            setMessages(prev => {
+              const next = [...prev, aiMsg];
+              persist(next, brainRef.current).catch(() => {});
+              return next;
+            });
+            setIsThinking(false);
+            return;
+          }
         }
       }
-    }
-    // ─── End Dev Mode Chain ───────────────────────────────────────────────────
+      // ─── End Dev Mode Chain ───────────────────────────────────────────────────
 
-    // Auto-detect fapte din mesajul utilizatorului și salvează în memoryFolder (non-blocking)
-    const detectedFacts = autoDetectFacts(text);
-    if (detectedFacts.length > 0) {
-      Promise.all(detectedFacts.map(f =>
-        writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => {})
-      )).catch(() => {});
-    }
+      // Auto-detect fapte din mesajul utilizatorului și salvează în memoryFolder (non-blocking)
+      const detectedFacts = autoDetectFacts(text);
+      if (detectedFacts.length > 0) {
+        Promise.all(detectedFacts.map(f =>
+          writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { })
+        )).catch(() => { });
+      }
 
-    let response = processMessage(text, brainRef.current, history);
-    const intent = (brainRef.current as any).lastIntent || 'unknown';
+      let response = processMessage(text, brainRef.current, history);
+      const intent = (brainRef.current as any).lastIntent || 'unknown';
 
-    // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
-    if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
-      const isMem = response.startsWith('JARVIS_MEM_ACTION:');
-      const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
-      const [action, payload] = fullAction.split('||');
+      // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
+      if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
+        const isMem = response.startsWith('JARVIS_MEM_ACTION:');
+        const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
+        const [action, payload] = fullAction.split('||');
 
-      if (isMem) {
-        if (action === 'salveaza') {
-          await writeMemoryEntry(payload, 'user', 'manual');
-          response = `Am memorat: **"${payload}"** 💾`;
-        } else if (action === 'citeste') {
-          const stats = getMemoryStats();
-          const items = listAllMemories();
-          response = `🧠 **Memoria mea (${stats.total} însemnări):**\n\n` +
-            (items.length > 0 ? items.map(m => `• ${m.fact}`).join('\n') : 'Nu am nicio însemnare memorată încă.');
-        } else if (action === 'sterge_tot') {
-          await clearAllMemory();
-          response = 'Am șters întreaga memorie persistentă. 🧼';
-        } else if (action === 'uita_specific') {
-          const deletedCount = await deleteMemoryByKeyword(payload);
-          response = deletedCount > 0
-            ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
-            : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
-        }
-      } else {
-        if (action === 'acorda_acces') {
-          const granted = await requestFolderAccess();
-          response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
-        } else if (action === 'listeaza') {
-          const folders = await getExternalFolders();
-          response = folders.length > 0
-            ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
-            : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
-        } else if (action === 'actualizeaza') {
-          const count = await scanAllFolders();
-          response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+        if (isMem) {
+          if (action === 'salveaza') {
+            await writeMemoryEntry(payload, 'user', 'manual');
+            response = `Am memorat: **"${payload}"** 💾`;
+          } else if (action === 'citeste') {
+            const stats = getMemoryStats();
+            const items = listAllMemories();
+            response = `🧠 **Memoria mea (${stats.total} însemnări):**\n\n` +
+              (items.length > 0 ? items.map(m => `• ${m.fact}`).join('\n') : 'Nu am nicio însemnare memorată încă.');
+          } else if (action === 'sterge_tot') {
+            await clearAllMemory();
+            response = 'Am șters întreaga memorie persistentă. 🧼';
+          } else if (action === 'uita_specific') {
+            const deletedCount = await deleteMemoryByKeyword(payload);
+            response = deletedCount > 0
+              ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
+              : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
+          }
+        } else {
+          if (action === 'acorda_acces') {
+            const granted = await requestFolderAccess();
+            response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
+          } else if (action === 'listeaza') {
+            const folders = await getExternalFolders();
+            response = folders.length > 0
+              ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
+              : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
+          } else if (action === 'actualizeaza') {
+            const count = await scanAllFolders();
+            response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+          }
         }
       }
-    }
 
-    // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
-    if (response.startsWith('JARVIS_CMD:')) {
-      const parts = response.slice('JARVIS_CMD:'.length).split('||');
-      const cmdLabel = parts[0] ?? 'comandă';
-      const cmdOriginal = parts[1] ?? text;
+      // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
+      if (response.startsWith('JARVIS_CMD:')) {
+        const parts = response.slice('JARVIS_CMD:'.length).split('||');
+        const cmdLabel = parts[0] ?? 'comandă';
+        const cmdOriginal = parts[1] ?? text;
 
-      // Forțăm Groq dacă este cerut explicit
-      const forceGroq = cmdLabel === 'groq' && aiSettings.settings.groqKey;
-      
-      if (aiSettings.activeProvider !== 'none' || forceGroq) {
+        // Forțăm Groq dacă este cerut explicit
+        const forceGroq = cmdLabel === 'groq' && aiSettings.settings.groqKey;
+
+        if (aiSettings.activeProvider !== 'none' || forceGroq) {
+          try {
+            const assistantId = (Date.now() + 1).toString();
+            setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
+
+            // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
+            const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
+
+            const aiResult = await aiSettings.generateStream(cmdOriginal, (chunk) => {
+              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
+            }, buildCloudCtx(), (history as any).slice(-20), finalIntent);
+
+            if (aiResult) {
+              response = aiResult.text.trim();
+              autoLearnFromCloud(aiResult).catch(() => {});
+            } else {
+              response = `⚠️ Provider AI nu răspunde. Verifică cheia API și conexiunea la internet.`;
+              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+            }
+            setIsThinking(false);
+            return;
+          } catch (err) {
+            response = `⚠️ Eroare la executarea comenzii "${cmdLabel}". Verifică conexiunea și cheia API.`;
+          }
+        } else {
+          response = `Activează **Gemini** sau **ChatGPT** din meniul ⚙️ pentru a putea folosi comenzi AI avansate (${cmdLabel}).`;
+        }
+      }
+
+      // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
+      else if (aiSettings.activeProvider !== 'none') {
+        let aiSuccess = false;
         try {
           const assistantId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
 
-          // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
-          const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
-
-          const aiResult = await aiSettings.generateStream(cmdOriginal, (chunk) => {
+          const aiResult = await aiSettings.generateStream(text, (chunk) => {
             setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-          }, buildCloudCtx(), history.slice(-20) as ConversationTurn[], finalIntent);
+          }, buildCloudCtx(), (history as any).slice(-20), intent);
 
-          if (aiResult) {
+          if (aiResult?.text) {
             response = aiResult.text.trim();
-            autoLearnFromCloud(aiResult);
+            autoLearnFromCloud(aiResult).catch(() => {});
+            aiSuccess = true;
           } else {
-            response = `⚠️ Provider AI nu răspunde. Verifică cheia API și conexiunea la internet.`;
-            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+            // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
+            setMessages(prev => prev.filter(m => m.id !== assistantId));
           }
+        } catch (err) {
+          if (__DEV__) console.warn('[BrainContext] Cloud AI failed:', err);
+        }
+
+        if (aiSuccess) {
           setIsThinking(false);
           return;
-        } catch {
-          response = `⚠️ Eroare la executarea comenzii "${cmdLabel}". Verifică conexiunea și cheia API.`;
         }
-      } else {
-        response = `Activează **Gemini** sau **ChatGPT** din meniul ⚙️ pentru a putea folosi comenzi AI avansate (${cmdLabel}).`;
-      }
-    }
 
-    // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
-    else if (aiSettings.activeProvider !== 'none') {
-      let aiSuccess = false;
-      try {
-        const assistantId = (Date.now() + 1).toString();
-        setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
-
-        const aiResult = await aiSettings.generateStream(text, (chunk) => {
-          setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-        }, buildCloudCtx(), history.slice(-20) as ConversationTurn[], intent);
-
-        if (aiResult?.text) {
-          response = aiResult.text.trim();
-          autoLearnFromCloud(aiResult);
-          aiSuccess = true;
-        } else {
-          // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
-          setMessages(prev => prev.filter(m => m.id !== assistantId));
-        }
-      } catch (err) {
-        console.warn('[BrainContext] Cloud AI failed:', err);
+        // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
+        if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
+        response = await _handleOfflineFallback(text, (history as any), intent);
       }
 
-      if (aiSuccess) {
-        setIsThinking(false);
-        return;
+      // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
+      else {
+        response = await _handleOfflineFallback(text, (history as any), intent);
       }
-      
-      // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
-      console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
-      response = await _handleOfflineFallback(text, history, intent);
+
+      setBrainState({ ...brainRef.current });
+
+      // Persistează entitățile actualizate în SQLite (non-blocking)
+      persistEntities(brainRef.current);
+
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => {
+        const next = [...prev, aiMsg];
+        persist(next, brainRef.current).catch(() => {});
+        return next;
+      });
+    } catch (err) {
+      if (__DEV__) console.warn('[BrainContext] sendMessage failed:', err);
+      // Optional: add an error message to chat
+    } finally {
+      setIsThinking(false);
     }
-
-    // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
-    else {
-      response = await _handleOfflineFallback(text, history, intent);
-    }
-
-    setBrainState({ ...brainRef.current });
-
-    // Persistează entitățile actualizate în SQLite (non-blocking)
-    persistEntities(brainRef.current);
-
-    const aiMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: response,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => {
-      const next = [...prev, aiMsg];
-      persist(next, brainRef.current);
-      return next;
-    });
-
-    setIsThinking(false);
-  }, [persist, messages, llmStatus, llmGenerate, aiGenerate, aiSettings, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud]);
+  }, [persist, isThinking, webSearching, llmStatus, llmGenerate, aiGenerate, aiSettings, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud, _handleOfflineFallback]);
 
   const addDocument = useCallback(async (name: string, content: string) => {
     setIsThinking(true);

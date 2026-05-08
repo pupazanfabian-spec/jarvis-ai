@@ -101,42 +101,48 @@ export async function writeMemoryEntry(
   if (!fact || fact.trim().length < 3) return null;
   const trimmed = fact.trim();
 
-  if (!_cachedIndex) _cachedIndex = await loadIndexFromDisk();
+  try {
+    await ensureDirs();
+    if (!_cachedIndex) _cachedIndex = await loadIndexFromDisk();
 
-  const isDuplicate = _cachedIndex.entries.some(
-    e => e.fact.toLowerCase() === trimmed.toLowerCase(),
-  );
-  if (isDuplicate) return null;
+    const isDuplicate = _cachedIndex.entries.some(
+      e => e.fact.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (isDuplicate) return null;
 
-  const partialMatch = _cachedIndex.entries.some(e => {
-    const a = e.fact.toLowerCase();
-    const b = trimmed.toLowerCase();
-    return (a.length > 20 && b.includes(a)) || (b.length > 20 && a.includes(b));
-  });
-  if (partialMatch) return null;
+    const partialMatch = _cachedIndex.entries.some(e => {
+      const a = e.fact.toLowerCase();
+      const b = trimmed.toLowerCase();
+      return (a.length > 20 && b.includes(a)) || (b.length > 20 && a.includes(b));
+    });
+    if (partialMatch) return null;
 
-  const entry: MemoryFileEntry = {
-    id: generateId(),
-    fact: trimmed,
-    source,
-    category,
-    createdAt: new Date().toISOString(),
-    ...(fromFile ? { fromFile } : {}),
-  };
+    const entry: MemoryFileEntry = {
+      id: generateId(),
+      fact: trimmed,
+      source,
+      category,
+      createdAt: new Date().toISOString(),
+      ...(fromFile ? { fromFile } : {}),
+    };
 
-  const filePath = `${KNOWLEDGE_DIR}${entry.id}.json`;
-  await FileSystem.writeAsStringAsync(filePath, JSON.stringify(entry));
+    const filePath = `${KNOWLEDGE_DIR}${entry.id}.json`;
+    await FileSystem.writeAsStringAsync(filePath, JSON.stringify(entry));
 
-  _cachedIndex.entries.push({
-    id: entry.id,
-    fact: entry.fact,
-    category: entry.category,
-    createdAt: entry.createdAt,
-    source,
-  });
-  await saveIndexToDisk(_cachedIndex);
+    _cachedIndex.entries.push({
+      id: entry.id,
+      fact: entry.fact,
+      category: entry.category,
+      createdAt: entry.createdAt,
+      source,
+    });
+    await saveIndexToDisk(_cachedIndex);
 
-  return entry;
+    return entry;
+  } catch (err) {
+    if (__DEV__) console.warn('[MemoryFolder] writeMemoryEntry failed:', err);
+    return null;
+  }
 }
 
 export async function deleteMemoryEntry(id: string): Promise<boolean> {

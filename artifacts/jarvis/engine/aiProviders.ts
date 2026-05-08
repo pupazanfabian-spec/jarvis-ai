@@ -652,54 +652,67 @@ async function streamGemini(
     { role: 'user', parts: [{ text: prompt }] },
   ];
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents,
-      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
-    }),
-  });
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+      }),
+    });
 
-  if (!resp.ok) throw new Error(`Gemini Stream Error: ${resp.status}`);
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => 'Unknown error');
+      throw new Error(`Gemini Stream Error: ${resp.status} - ${errText}`);
+    }
 
-  // In React Native / Expo, fetch streaming results are often tricky.
-  // We'll use a text reader if available or fallback to a simpler approach.
-  const reader = (resp as any).body?.getReader();
-  let fullText = '';
+    // In React Native / Expo, fetch streaming results are often tricky.
+    // We'll use a text reader if available or fallback to a simpler approach.
+    const reader = (resp as any).body?.getReader();
+    let fullText = '';
 
-  if (reader) {
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      // Gemini returns JSON objects in an array format [{},{},...]
-      // We'll extract text from parts
-      const parts = chunk.split(/\"text\":\s*\"/);
-      for (let i = 1; i < parts.length; i++) {
-        const text = parts[i].split('\"')[0].replace(/\\n/g, '\n').replace(/\\"/g, '\"');
-        if (text) {
-          fullText += text;
-          onChunk(text);
+    if (reader) {
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        // Gemini returns JSON objects in an array format [{},{},...]
+        // We'll extract text from parts
+        const parts = chunk.split(/\"text\":\s*\"/);
+        for (let i = 1; i < parts.length; i++) {
+          const endIdx = parts[i].indexOf('\"');
+          if (endIdx !== -1) {
+            const text = parts[i].slice(0, endIdx).replace(/\\n/g, '\n').replace(/\\"/g, '\"');
+            if (text) {
+              fullText += text;
+              onChunk(text);
+            }
+          }
+        }
+      }
+    } else {
+      // Basic fallback for environments without stream reader
+      const data = await resp.json() as any[];
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          const text = item.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (text) {
+            fullText += text;
+            onChunk(text);
+          }
         }
       }
     }
-  } else {
-    // Basic fallback for environments without stream reader
-    const data = await resp.json() as any[];
-    for (const item of data) {
-      const text = item.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (text) {
-        fullText += text;
-        onChunk(text);
-      }
-    }
-  }
 
-  return { text: fullText, provider: 'gemini' };
+    return { text: fullText, provider: 'gemini' };
+  } catch (err) {
+    if (__DEV__) console.warn('[AIProvider] streamGemini failed:', err);
+    throw err;
+  }
 }
 
 async function streamGroq(
@@ -711,37 +724,58 @@ async function streamGroq(
   messages.push(...(history ?? []).slice(-15).map(t => ({ role: t.role, content: t.content })));
   messages.push({ role: 'user', content: prompt });
 
-  const resp = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 1500,
-    }),
-  });
+  try {
+    const resp = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages,
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 1500,
+      }),
+    });
 
-  if (!resp.ok) throw new Error(`Groq Stream Error: ${resp.status}`);
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => 'Unknown error');
+      throw new Error(`Groq Stream Error: ${resp.status} - ${errText}`);
+    }
 
-  const reader = (resp as any).body?.getReader();
-  let fullText = '';
+    const reader = (resp as any).body?.getReader();
+    let fullText = '';
 
-  if (reader) {
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
+    if (reader) {
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+            try {
+              const json = JSON.parse(line.trim().slice(6));
+              const content = json.choices?.[0]?.delta?.content || '';
+              if (content) {
+                fullText += content;
+                onChunk(content);
+              }
+            } catch {}
+          }
+        }
+      }
+    } else {
+      // Fallback for no reader
+      const text = await resp.text();
+      const lines = text.split('\n');
       for (const line of lines) {
-        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+        if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
           try {
-            const json = JSON.parse(line.slice(6));
+            const json = JSON.parse(line.trim().slice(6));
             const content = json.choices?.[0]?.delta?.content || '';
             if (content) {
               fullText += content;
@@ -751,9 +785,12 @@ async function streamGroq(
         }
       }
     }
-  }
 
-  return { text: fullText, provider: 'groq' };
+    return { text: fullText, provider: 'groq' };
+  } catch (err) {
+    if (__DEV__) console.warn('[AIProvider] streamGroq failed:', err);
+    throw err;
+  }
 }
 
 // ─── Test de conectivitate ────────────────────────────────────────────────────

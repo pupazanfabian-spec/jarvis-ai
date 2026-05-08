@@ -23,6 +23,9 @@ async function fetchWithTimeout(url: string): Promise<Response> {
       headers: { 'Accept': 'application/json', 'User-Agent': 'Jarvis-AI/2.0' },
     });
     return resp;
+  } catch (err) {
+    if (__DEV__) console.warn(`[WebSearch] Fetch failed for ${url}:`, err);
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -30,12 +33,15 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 
 // ─── Wikipedia RO ───────────────────────────────────────────────────────────
 async function searchWikipediaRO(query: string): Promise<OnlineResult | null> {
+  if (!query) return null;
   try {
     const searchUrl = `https://ro.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=3&format=json&origin=*`;
     const searchResp = await fetchWithTimeout(searchUrl);
     if (!searchResp.ok) return null;
 
     const searchData = await searchResp.json() as unknown[];
+    if (!Array.isArray(searchData) || !searchData[1]) return null;
+    
     const titles: string[] = Array.isArray(searchData[1]) ? searchData[1] as string[] : [];
     if (titles.length === 0) return null;
 
@@ -50,7 +56,7 @@ async function searchWikipediaRO(query: string): Promise<OnlineResult | null> {
 
     const text = extract.length > 500 ? extract.slice(0, 497) + '...' : extract;
     return { found: true, text, source: `Wikipedia RO — "${titles[0]}"`, query };
-  } catch {
+  } catch (err) {
     return null;
   }
 }

@@ -154,18 +154,26 @@ export default function ChatScreen() {
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text || isThinking || webSearching) return;
-    setInputText('');
-    setShowQuick(false);
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await sendMessage(text);
-    scrollToBottom();
+    
+    try {
+      setInputText('');
+      setShowQuick(false);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+      await sendMessage(text);
+      scrollToBottom();
+    } catch (err) {
+      if (__DEV__) console.warn('[ChatScreen] handleSend failed:', err);
+    }
   }, [inputText, isThinking, webSearching, sendMessage, scrollToBottom]);
 
   const handleQuickAction = useCallback((text: string) => {
+    if (!text || isThinking || webSearching) return;
     setShowQuick(false);
-    sendMessage(text);
+    sendMessage(text).catch(() => {});
     scrollToBottom();
-  }, [sendMessage, scrollToBottom]);
+  }, [sendMessage, scrollToBottom, isThinking, webSearching]);
 
   const handleClear = useCallback(() => {
     setShowMemory(false);
