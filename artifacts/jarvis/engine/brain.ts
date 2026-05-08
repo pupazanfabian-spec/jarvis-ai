@@ -1,4 +1,4 @@
-// Jarvis AI Brain v6.1 — Semantic, inferential, entity-aware, constitutionally protected, response-synthesizing
+// Jarvis AI Brain v6.2 — Semantic, inferential, entity-aware, constitutionally protected, response-synthesizing
 // Imbunatatit cu gestiune avansata a memoriei si context persistent
 
 import { findRelevantConcept, findRelevantConceptExtended, CONCEPTS, addDynamicConcept } from './knowledge';

@@ -321,7 +321,7 @@ export default function ChatScreen() {
                   ? `✨ ${providerLabel(aiProviderSettings.activeProvider)} • Hibrid`
                   : docCount > 0
                     ? `${docCount} doc. • Fără net`
-                    : `v3.1 • Fără net`}
+                    : `v3.2 • Fără net`}
             </Text>
           </View>
         </View>

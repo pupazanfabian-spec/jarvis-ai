@@ -81,17 +81,17 @@ jobs:
       - name: Rename and stage APK
         run: |
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          cp "$APK" Jarvis-AI-v3.1.0-release.apk
-          ls -lh Jarvis-AI-v3.1.0-release.apk
+          cp "$APK" Jarvis-AI-v3.2.0-release.apk
+          ls -lh Jarvis-AI-v3.2.0-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Jarvis-AI-v3.1.0
-          path: Jarvis-AI-v3.1.0-release.apk
+          name: Jarvis-AI-v3.2.0
+          path: Jarvis-AI-v3.2.0-release.apk
           retention-days: 90
 
       - name: Summary
         run: |
-          echo "## Jarvis AI v3.1.0 APK Ready" >> $GITHUB_STEP_SUMMARY
+          echo "## Jarvis AI v3.2.0 APK Ready" >> $GITHUB_STEP_SUMMARY
           echo "Descarcă APK-ul din secțiunea **Artifacts** de mai sus." >> $GITHUB_STEP_SUMMARY
