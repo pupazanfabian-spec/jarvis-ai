@@ -56,9 +56,20 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     if (initialized.current) return;
     initialized.current = true;
     loadProviderSettings().then(s => {
+      if (__DEV__) {
+        console.log('[AIProviderContext] Settings loaded:', {
+          active: s.activeProvider,
+          hasGemini: !!s.geminiKey,
+          hasGroq: !!s.groqKey,
+          hasOpenRouter: !!s.openrouterKey,
+        });
+      }
       setSettings(s);
       setIsReady(true);
-    }).catch(() => setIsReady(true));
+    }).catch(err => {
+      console.error('[AIProviderContext] Error loading settings:', err);
+      setIsReady(true);
+    });
   }, []);
 
   const settingsRef = useRef<AIProviderSettings>(settings);

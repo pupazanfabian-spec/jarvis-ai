@@ -90,6 +90,16 @@ export async function loadProviderSettings(): Promise<AIProviderSettings> {
     secureGet(OPENROUTER_KEY_STORAGE),
     AsyncStorage.getItem(ACTIVE_PROVIDER_STORAGE),
   ]);
+
+  if (__DEV__) {
+    console.log('[AIProvider] Keys loaded from storage:', {
+      gemini: geminiKey ? `***${geminiKey.slice(-4)}` : 'MISSING',
+      groq: groqKey ? `***${groqKey.slice(-4)}` : 'MISSING',
+      openrouter: openrouterKey ? `***${openrouterKey.slice(-4)}` : 'MISSING',
+      active: activeProvider || 'none',
+    });
+  }
+
   return {
     geminiKey: geminiKey ?? '',
     openaiKey: openaiKey ?? '',
@@ -531,15 +541,34 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
   return parts.join(' ');
 }
 
+// ─── buildAIContext ─────────────────────────────────────────────────────────
+
+/**
+ * Pregătește contextul AI și verifică prezența cheilor.
+ * Adaugă log-uri pentru debug în dezvoltare.
+ */
+export function buildAIContext(settings: AIProviderSettings): AIProviderSettings {
+  if (__DEV__) {
+    console.log('[AIProvider] Building AI context:', {
+      active: settings.activeProvider,
+      gemini: settings.geminiKey ? `***${settings.geminiKey.slice(-4)}` : 'none',
+      groq: settings.groqKey ? `***${settings.groqKey.slice(-4)}` : 'none',
+      openrouter: settings.openrouterKey ? `***${settings.openrouterKey.slice(-4)}` : 'none',
+    });
+  }
+  return settings;
+}
+
 // ─── callActiveProvider ──────────────────────────────────────────────────────
 // Apel principal către provider-ul selectat (cu retry automat de 2 ori)
 export async function callActiveProvider(
   prompt: string,
-  settings: AIProviderSettings,
+  rawSettings: AIProviderSettings,
   system?: string,
   history?: ConversationTurn[],
   intent?: string,
 ): Promise<{ text: string; provider: AIProvider } | null> {
+  const settings = buildAIContext(rawSettings);
   const sys = system ?? JARVIS_SYSTEM_PROMPT;
 
   const maxRetries = 2;

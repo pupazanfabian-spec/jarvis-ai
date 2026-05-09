@@ -119,7 +119,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const memoryRef = useRef<MemoryStore>({ entries: [] });
   const loaded = useRef(false);
   const { generate: llmGenerate, status: llmStatus } = useLLM();
-  const { generate: aiGenerate, settings: aiSettings } = useAIProvider();
+  const aiProvider = useAIProvider();
   const { isDevMode, refreshProject } = useDevMode();
 
   // ─── Startup: DB init → migrare → concepte dinamice → entități ────────────
@@ -488,9 +488,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             const aiPrompt = buildAICodePrompt(enrichedText, devIntent === 'debug' ? 'debug' : devIntent, projectContext, codeSnippet);
 
             // Încearcă AI Cloud
-            if (aiSettings.activeProvider !== 'none') {
+            if (aiProvider.settings.activeProvider !== 'none') {
               try {
-                const cloudResult = await aiGenerate(aiPrompt);
+                const cloudResult = await aiProvider.generate(aiPrompt);
                 if (cloudResult) {
                   const providerName = cloudResult.provider === 'gemini' ? '✨ Gemini Dev' : '🤖 ChatGPT Dev';
                   devResponse = `${providerName}:\n\n${cloudResult.text}`;
@@ -582,9 +582,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         const cmdOriginal = parts[1] ?? text;
 
         // Forțăm Groq dacă este cerut explicit
-        const forceGroq = cmdLabel === 'groq' && aiSettings.settings.groqKey;
+        const forceGroq = cmdLabel === 'groq' && aiProvider.settings.groqKey;
 
-        if (aiSettings.activeProvider !== 'none' || forceGroq) {
+        if (aiProvider.settings.activeProvider !== 'none' || forceGroq) {
           try {
             const assistantId = (Date.now() + 1).toString();
             setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
@@ -592,7 +592,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
             const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
 
-            const aiResult = await aiSettings.generateStream(cmdOriginal, (chunk) => {
+            const aiResult = await aiProvider.generateStream(cmdOriginal, (chunk) => {
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
             }, buildCloudCtx(), (history as any).slice(-20), finalIntent);
 
@@ -614,13 +614,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       }
 
       // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
-      else if (aiSettings.activeProvider !== 'none') {
+      else if (aiProvider.settings.activeProvider !== 'none') {
         let aiSuccess = false;
         try {
           const assistantId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
 
-          const aiResult = await aiSettings.generateStream(text, (chunk) => {
+          const aiResult = await aiProvider.generateStream(text, (chunk) => {
             setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
           }, buildCloudCtx(), (history as any).slice(-20), intent);
 
@@ -674,7 +674,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsThinking(false);
     }
-  }, [persist, isThinking, webSearching, llmStatus, llmGenerate, aiGenerate, aiSettings, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud, _handleOfflineFallback]);
+  }, [persist, isThinking, webSearching, llmStatus, llmGenerate, aiProvider, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud, _handleOfflineFallback]);
 
   const addDocument = useCallback(async (name: string, content: string) => {
     setIsThinking(true);
