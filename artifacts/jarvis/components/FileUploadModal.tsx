@@ -173,7 +173,7 @@ export default function FileUploadModal({
             </View>
           ) : (
             documents.map((doc, index) => (
-              <View key={`item-${index}`} style={styles.docRow}>
+              <View key={`item-${index}`} style={styles.docCard}>
                 <View style={styles.docIcon}>
                   <Feather name="file-text" size={20} color={colors.primary} />
                 </View>

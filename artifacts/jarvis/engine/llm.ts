@@ -14,6 +14,8 @@ const {
   writeAsStringAsync,
 } = FileSystem;
 
+import { NativeModules, TurboModuleRegistry } from 'react-native';
+
 interface LlamaContext {
   completion(params: {
     messages: { role: string; content: string }[];
@@ -33,7 +35,11 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const llama = require('llama.rn');
   initLlama = llama.initLlama;
-  llamaAvailable = true;
+  
+  // Verificăm dacă modulul nativ este prezent pentru a evita crash-ul "Cannot read property 'initContext' of null"
+  // RNLlama este numele modulului în TurboModules și NativeModules pentru llama.rn
+  const nativeModule = NativeModules.RNLlama || (TurboModuleRegistry && TurboModuleRegistry.get('RNLlama'));
+  llamaAvailable = !!nativeModule;
 } catch {
   llamaAvailable = false;
 }

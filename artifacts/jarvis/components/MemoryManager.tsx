@@ -172,7 +172,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
                   onPress={handleDeleteOld}
                 >
                   <Feather name="calendar" size={18} color="#FFF" />
-                  <Text style={styles.actionText}>Șterge conv. > 30 zile</Text>
+                  <Text style={styles.actionText}>Șterge conv. {'>'} 30 zile</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
