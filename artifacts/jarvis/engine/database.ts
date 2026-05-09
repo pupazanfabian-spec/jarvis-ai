@@ -4,6 +4,9 @@
 
 import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // Tipul rezultat de la searchOnline — duplicat local pentru a evita import circular
 export interface CachedWebResult {
@@ -14,14 +17,19 @@ export interface CachedWebResult {
 }
 
 let _db: SQLite.SQLiteDatabase | null = null;
-let _dbHealthy = true;
+let _dbHealthy = !isExpoGo;
 
 const KNOWLEDGE_FALLBACK_KEY = '@jarvis_knowledge_fallback';
+const LEARNED_FACTS_FALLBACK_KEY = '@jarvis_learned_facts_fallback';
+const ENTITIES_FALLBACK_KEY = '@jarvis_entities_fallback';
+const WEB_CACHE_FALLBACK_KEY = '@jarvis_web_cache_fallback';
+const CONCEPTS_FALLBACK_KEY = '@jarvis_concepts_fallback';
 
 // ─── NativeDatabase Wrapper ─────────────────────────────────────────────────
 
 export class NativeDatabase {
   static async prepareAsync(): Promise<SQLite.SQLiteDatabase | null> {
+    if (isExpoGo) return null;
     if (_db) return _db;
     if (!_dbHealthy) return null;
 
@@ -37,7 +45,7 @@ export class NativeDatabase {
   }
 
   static isAvailable(): boolean {
-    return _dbHealthy;
+    return _dbHealthy && !isExpoGo;
   }
 }
 
@@ -329,6 +337,86 @@ export async function getAllKnowledgeEntries(domain?: string): Promise<Knowledge
   }
 }
 
+// ─── Web Cache Fallback ──────────────────────────────────────────────────────
+
+async function _getWebCacheFallback(qHash: string): Promise<CachedWebResult | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${WEB_CACHE_FALLBACK_KEY}_${qHash}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+async function _setWebCacheFallback(qHash: string, result: CachedWebResult): Promise<void> {
+  try {
+    await AsyncStorage.setItem(`${WEB_CACHE_FALLBACK_KEY}_${qHash}`, JSON.stringify(result));
+  } catch {}
+}
+
+// ─── Dynamic Concepts Fallback ───────────────────────────────────────────────
+
+async function _saveConceptFallback(concept: any): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(CONCEPTS_FALLBACK_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.push({ ...concept, created_at: Date.now() });
+    await AsyncStorage.setItem(CONCEPTS_FALLBACK_KEY, JSON.stringify(list.slice(-100)));
+  } catch {}
+}
+
+async function _loadConceptsFallback(): Promise<DBDynamicConcept[]> {
+  try {
+    const raw = await AsyncStorage.getItem(CONCEPTS_FALLBACK_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return list.map((c: any) => ({
+      ...c,
+      related_json: JSON.stringify(c.related || []),
+      facts_json: JSON.stringify(c.facts || []),
+    }));
+  } catch { return []; }
+}
+
+// ─── Learned Facts Fallback ──────────────────────────────────────────────────
+
+async function _saveLearnedFactFallback(content: string, confidence: number, source: string, category: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(LEARNED_FACTS_FALLBACK_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.push({ content, confidence, source, category, created_at: Date.now() });
+    await AsyncStorage.setItem(LEARNED_FACTS_FALLBACK_KEY, JSON.stringify(list.slice(-200)));
+  } catch {}
+}
+
+async function _getLearnedFactsFallback(limit: number): Promise<any[]> {
+  try {
+    const raw = await AsyncStorage.getItem(LEARNED_FACTS_FALLBACK_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return list.slice(-limit).reverse();
+  } catch { return []; }
+}
+
+// ─── Entities Fallback ───────────────────────────────────────────────────────
+
+async function _upsertEntityFallback(name: string, type: string, data: any): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(ENTITIES_FALLBACK_KEY);
+    const entities = raw ? JSON.parse(raw) : {};
+    entities[name] = { name, type, data_json: JSON.stringify(data), last_updated: Date.now() };
+    await AsyncStorage.setItem(ENTITIES_FALLBACK_KEY, JSON.stringify(entities));
+  } catch {}
+}
+
+async function _loadEntitiesFallback(): Promise<any[]> {
+  try {
+    const raw = await AsyncStorage.getItem(ENTITIES_FALLBACK_KEY);
+    if (!raw) return [];
+    const entities = JSON.parse(raw);
+    return Object.values(entities).sort((a: any, b: any) => b.last_updated - a.last_updated);
+  } catch { return []; }
+}
+
 function hashQuery(query: string): string {
   let hash = 0;
   for (let i = 0; i < query.length; i++) {
@@ -340,10 +428,10 @@ function hashQuery(query: string): string {
 }
 
 export async function getCachedWebResult(query: string): Promise<CachedWebResult | null> {
+  const qHash = hashQuery(query.toLowerCase().trim());
   try {
     const db = await getDB();
-    if (!db) return null;
-    const qHash = hashQuery(query.toLowerCase().trim());
+    if (!db) return _getWebCacheFallback(qHash);
     const now = Date.now();
     const row = await db.getFirstAsync<{ result_json: string; created_at: number; ttl_hours: number }>(
       'SELECT result_json, created_at, ttl_hours FROM web_cache WHERE query_hash = ?',
@@ -360,7 +448,7 @@ export async function getCachedWebResult(query: string): Promise<CachedWebResult
     const parsed = JSON.parse(row.result_json) as CachedWebResult;
     return parsed;
   } catch {
-    return null;
+    return _getWebCacheFallback(qHash);
   }
 }
 
@@ -369,10 +457,13 @@ export async function setCachedWebResult(
   result: CachedWebResult,
   ttlHours = 48,
 ): Promise<void> {
+  const qHash = hashQuery(query.toLowerCase().trim());
   try {
     const db = await getDB();
-    if (!db) return;
-    const qHash = hashQuery(query.toLowerCase().trim());
+    if (!db) {
+      await _setWebCacheFallback(qHash, result);
+      return;
+    }
     const now = Date.now();
     await db.runAsync(
       `INSERT OR REPLACE INTO web_cache
@@ -380,7 +471,9 @@ export async function setCachedWebResult(
        VALUES (?, ?, ?, ?, ?)`,
       [qHash, query, JSON.stringify(result), now, ttlHours]
     );
-  } catch {}
+  } catch {
+    await _setWebCacheFallback(qHash, result);
+  }
 }
 
 export interface DBDynamicConcept {
@@ -407,7 +500,10 @@ export async function saveDynamicConcept(concept: {
 }): Promise<void> {
   try {
     const db = await getDB();
-    if (!db) return;
+    if (!db) {
+      await _saveConceptFallback(concept);
+      return;
+    }
     const now = Date.now();
     await db.runAsync(
       `INSERT OR IGNORE INTO dynamic_concepts
@@ -425,18 +521,20 @@ export async function saveDynamicConcept(concept: {
         concept.source ?? 'user',
       ]
     );
-  } catch {}
+  } catch {
+    await _saveConceptFallback(concept);
+  }
 }
 
 export async function loadAllDynamicConcepts(): Promise<DBDynamicConcept[]> {
   try {
     const db = await getDB();
-    if (!db) return [];
+    if (!db) return _loadConceptsFallback();
     return db.getAllAsync<DBDynamicConcept>(
       'SELECT * FROM dynamic_concepts ORDER BY created_at DESC'
     );
   } catch {
-    return [];
+    return _loadConceptsFallback();
   }
 }
 
@@ -448,26 +546,31 @@ export async function insertLearnedFact(
 ): Promise<void> {
   try {
     const db = await getDB();
-    if (!db) return;
+    if (!db) {
+      await _saveLearnedFactFallback(content, confidence, source, category);
+      return;
+    }
     const now = Date.now();
     await db.runAsync(
       `INSERT INTO learned_facts (content, confidence, source, category, created_at)
        VALUES (?, ?, ?, ?, ?)`,
       [content, confidence, source, category, now]
     );
-  } catch {}
+  } catch {
+    await _saveLearnedFactFallback(content, confidence, source, category);
+  }
 }
 
 export async function getRecentLearnedFacts(limit = 50): Promise<{ content: string; confidence: number; source: string; category: string }[]> {
   try {
     const db = await getDB();
-    if (!db) return [];
+    if (!db) return _getLearnedFactsFallback(limit);
     return db.getAllAsync(
       'SELECT content, confidence, source, category FROM learned_facts ORDER BY created_at DESC LIMIT ?',
       [limit]
     );
   } catch {
-    return [];
+    return _getLearnedFactsFallback(limit);
   }
 }
 
@@ -486,14 +589,19 @@ export async function upsertEntity(
 ): Promise<void> {
   try {
     const db = await getDB();
-    if (!db) return;
+    if (!db) {
+      await _upsertEntityFallback(name, type, data);
+      return;
+    }
     const now = Date.now();
     await db.runAsync(
       `INSERT OR REPLACE INTO entities (name, type, data_json, last_updated)
        VALUES (?, ?, ?, ?)`,
       [name, type, JSON.stringify(data), now]
     );
-  } catch {}
+  } catch {
+    await _upsertEntityFallback(name, type, data);
+  }
 }
 
 export async function loadAllEntities(): Promise<Array<{
@@ -504,7 +612,15 @@ export async function loadAllEntities(): Promise<Array<{
 }>> {
   try {
     const db = await getDB();
-    if (!db) return [];
+    if (!db) {
+      const fbRows = await _loadEntitiesFallback();
+      return fbRows.map((r: any) => ({
+        name: r.name,
+        type: r.type,
+        data: JSON.parse(r.data_json),
+        last_updated: r.last_updated,
+      }));
+    }
     const rows = await db.getAllAsync<{ name: string; type: string; data_json: string; last_updated: number }>(
       'SELECT name, type, data_json, last_updated FROM entities ORDER BY last_updated DESC'
     );
