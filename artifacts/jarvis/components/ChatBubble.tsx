@@ -435,22 +435,20 @@ function parseMarkdown(text: string): Segment[] {
   return segments;
 }
 
-function renderInline(text: string): React.ReactNode[] {
+const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: string; isUser: boolean }) {
+  const segments = useMemo(() => parseMarkdown(text), [text]);
+function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <Text key={`item-${i}`} style={styles.bold}>{part.slice(2, -2)}</Text>;
+      return <Text key={`inline-${i}`} style={styles.bold}>{part.slice(2, -2)}</Text>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <Text key={`item-${i}`} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
+      return <Text key={`inline-${i}`} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
     }
-    return <Text key={`item-${i}`}>{part}</Text>;
+    return part;
   });
 }
-
-const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: string; isUser: boolean }) {
-  const segments = useMemo(() => parseMarkdown(text), [text]);
-
   return (
     <View>
       {segments.map((seg, i) => {
