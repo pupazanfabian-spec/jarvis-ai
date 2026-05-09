@@ -125,7 +125,7 @@ export type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODELS = [
-  'gemini-2.0-flash',  
+    gemini-1.5-flash
 ];
 
 interface GeminiResult { text: string | null; error: string | null; }
