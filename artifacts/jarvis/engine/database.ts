@@ -16,25 +16,39 @@ export interface CachedWebResult {
 let _db: SQLite.SQLiteDatabase | null = null;
 let _dbHealthy = true;
 
-// ─── Deschide / Inițializează DB ─────────────────────────────────────────────
+const KNOWLEDGE_FALLBACK_KEY = '@jarvis_knowledge_fallback';
 
-export async function getDB(): Promise<SQLite.SQLiteDatabase | null> {
-  if (_db) return _db;
-  if (!_dbHealthy) return null;
+// ─── NativeDatabase Wrapper ─────────────────────────────────────────────────
 
-  try {
-    _db = await SQLite.openDatabaseAsync('jarvis_v3.db');
-    await initSchema(_db);
-    return _db;
-  } catch (err) {
-    console.error('[Database] Failed to open/init SQLite:', err);
-    _dbHealthy = false;
-    return null;
+export class NativeDatabase {
+  static async prepareAsync(): Promise<SQLite.SQLiteDatabase | null> {
+    if (_db) return _db;
+    if (!_dbHealthy) return null;
+
+    try {
+      _db = await SQLite.openDatabaseAsync('jarvis_v3.db');
+      await initSchema(_db);
+      return _db;
+    } catch (err) {
+      console.error('[Database] Failed to open/init SQLite:', err);
+      _dbHealthy = false;
+      return null;
+    }
+  }
+
+  static isAvailable(): boolean {
+    return _dbHealthy;
   }
 }
 
+// ─── Deschide / Inițializează DB (Legacy support) ─────────────────────────────
+
+export async function getDB(): Promise<SQLite.SQLiteDatabase | null> {
+  return NativeDatabase.prepareAsync();
+}
+
 export function isSQLiteAvailable(): boolean {
-  return _dbHealthy;
+  return NativeDatabase.isAvailable();
 }
 
 async function initSchema(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -126,10 +140,46 @@ export interface KnowledgeEntry {
   last_accessed?: number;
 }
 
+async function _saveKnowledgeFallback(entry: KnowledgeEntry): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(KNOWLEDGE_FALLBACK_KEY);
+    const list: KnowledgeEntry[] = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    const newEntry: KnowledgeEntry = {
+      ...entry,
+      id: entry.id ?? Math.floor(Math.random() * 1000000),
+      access_count: entry.access_count ?? 0,
+      created_at: entry.created_at ?? now,
+      last_accessed: entry.last_accessed ?? now,
+      importance: entry.importance ?? 0.5,
+    };
+    list.push(newEntry);
+    await AsyncStorage.setItem(KNOWLEDGE_FALLBACK_KEY, JSON.stringify(list.slice(-500)));
+    return newEntry.id!;
+  } catch {
+    return -1;
+  }
+}
+
+async function _searchKnowledgeFallback(query: string, limit: number): Promise<KnowledgeEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(KNOWLEDGE_FALLBACK_KEY);
+    if (!raw) return [];
+    const list: KnowledgeEntry[] = JSON.parse(raw);
+    const q = query.toLowerCase();
+    return list
+      .filter(e => e.content.toLowerCase().includes(q) || (e.label && e.label.toLowerCase().includes(q)))
+      .sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0))
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 export async function insertKnowledgeEntry(entry: KnowledgeEntry): Promise<number> {
   try {
     const db = await getDB();
-    if (!db) return -1;
+    if (!db) return _saveKnowledgeFallback(entry);
     const now = Date.now();
     const result = await db.runAsync(
       `INSERT OR IGNORE INTO knowledge_entries
@@ -148,7 +198,7 @@ export async function insertKnowledgeEntry(entry: KnowledgeEntry): Promise<numbe
     return result.lastInsertRowId;
   } catch (err) {
     console.error('[Database] insertKnowledgeEntry error:', err);
-    return -1;
+    return _saveKnowledgeFallback(entry);
   }
 }
 
@@ -158,7 +208,7 @@ export async function searchKnowledgeEntries(
 ): Promise<KnowledgeEntry[]> {
   try {
     const db = await getDB();
-    if (!db) return [];
+    if (!db) return _searchKnowledgeFallback(query, limit);
     const q = `%${query.toLowerCase()}%`;
     const rows = await db.getAllAsync<KnowledgeEntry>(
       `SELECT * FROM knowledge_entries
@@ -169,7 +219,7 @@ export async function searchKnowledgeEntries(
     );
     return rows;
   } catch {
-    return [];
+    return _searchKnowledgeFallback(query, limit);
   }
 }
 
@@ -179,7 +229,14 @@ export async function queryKnowledgeForAnswer(
 ): Promise<{ content: string; label: string | null; source: string | null; id: number } | null> {
   try {
     const db = await getDB();
-    if (!db) return null;
+    if (!db) {
+      const fallback = await _searchKnowledgeFallback(query, 1);
+      if (fallback.length > 0 && (fallback[0].importance ?? 0) >= minImportance) {
+        const e = fallback[0];
+        return { content: e.content, label: e.label ?? null, source: e.source ?? null, id: e.id! };
+      }
+      return null;
+    }
 
     const words = query.toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -223,7 +280,19 @@ export async function queryKnowledgeForAnswer(
 export async function bumpKnowledgeAccess(id: number): Promise<void> {
   try {
     const db = await getDB();
-    if (!db) return;
+    if (!db) {
+      const raw = await AsyncStorage.getItem(KNOWLEDGE_FALLBACK_KEY);
+      if (!raw) return;
+      const list: KnowledgeEntry[] = JSON.parse(raw);
+      const idx = list.findIndex(e => e.id === id);
+      if (idx !== -1) {
+        list[idx].access_count = (list[idx].access_count ?? 0) + 1;
+        list[idx].last_accessed = Date.now();
+        list[idx].importance = Math.min(1.0, (list[idx].importance ?? 0.5) + 0.05);
+        await AsyncStorage.setItem(KNOWLEDGE_FALLBACK_KEY, JSON.stringify(list));
+      }
+      return;
+    }
     const now = Date.now();
     await db.runAsync(
       `UPDATE knowledge_entries SET
@@ -239,7 +308,13 @@ export async function bumpKnowledgeAccess(id: number): Promise<void> {
 export async function getAllKnowledgeEntries(domain?: string): Promise<KnowledgeEntry[]> {
   try {
     const db = await getDB();
-    if (!db) return [];
+    if (!db) {
+      const raw = await AsyncStorage.getItem(KNOWLEDGE_FALLBACK_KEY);
+      if (!raw) return [];
+      const list: KnowledgeEntry[] = JSON.parse(raw);
+      if (domain) return list.filter(e => e.domain === domain).sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0));
+      return list.sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0));
+    }
     if (domain) {
       return db.getAllAsync<KnowledgeEntry>(
         'SELECT * FROM knowledge_entries WHERE domain = ? ORDER BY importance DESC',
@@ -678,7 +753,14 @@ export async function autoPruneKnowledge(): Promise<number> {
 export async function deleteKnowledgeEntry(id: number): Promise<void> {
   try {
     const db = await getDB();
-    if (!db) return;
+    if (!db) {
+      const raw = await AsyncStorage.getItem(KNOWLEDGE_FALLBACK_KEY);
+      if (!raw) return;
+      const list: KnowledgeEntry[] = JSON.parse(raw);
+      const newList = list.filter(e => e.id !== id);
+      await AsyncStorage.setItem(KNOWLEDGE_FALLBACK_KEY, JSON.stringify(newList));
+      return;
+    }
     await db.runAsync('DELETE FROM knowledge_entries WHERE id = ?', [id]);
   } catch {}
 }
