@@ -437,18 +437,20 @@ function parseMarkdown(text: string): Segment[] {
 
 const MarkdownContent = memo(function MarkdownContent({ text, isUser }: { text: string; isUser: boolean }) {
   const segments = useMemo(() => parseMarkdown(text), [text]);
-function renderInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <Text key={`inline-${i}`} style={styles.bold}>{part.slice(2, -2)}</Text>;
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <Text key={`inline-${i}`} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
-    }
-    return part;
-  });
-}
+
+  const renderInline = useCallback((txt: string): React.ReactNode => {
+    const parts = txt.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <Text key={`inline-${i}`} style={styles.bold}>{part.slice(2, -2)}</Text>;
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <Text key={`inline-${i}`} style={styles.inlineCode}>{part.slice(1, -1)}</Text>;
+      }
+      return part;
+    });
+  }, []);
+
   return (
     <View>
       {segments.map((seg, i) => {
