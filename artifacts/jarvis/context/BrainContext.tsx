@@ -633,17 +633,23 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             if (aiResult) {
               response = aiResult.text.trim();
               autoLearnFromCloud(aiResult).catch(() => {});
+              
+              const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
+              setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
+              
+              // Continuăm la finalul funcției pentru persistență și survey
             } else {
               response = `⚠️ Provider AI nu răspunde. Verifică cheia API și conexiunea la internet.`;
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+              setLastProvider('Eroare');
             }
-            setIsThinking(false);
-            return;
           } catch (err) {
             response = `⚠️ Eroare la executarea comenzii "${cmdLabel}". Verifică conexiunea și cheia API.`;
+            setLastProvider('Eroare');
           }
         } else {
           response = `Activează **Gemini** sau **ChatGPT** din meniul ⚙️ pentru a putea folosi comenzi AI avansate (${cmdLabel}).`;
+          setLastProvider('Local');
         }
       }
 
@@ -663,7 +669,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             autoLearnFromCloud(aiResult).catch(() => {});
             aiSuccess = true;
             
-            // Task 1: Update lastProvider
             const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
             setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
           } else {
@@ -674,15 +679,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           if (__DEV__) console.warn('[BrainContext] Cloud AI failed:', err);
         }
 
-        if (aiSuccess) {
-          setIsThinking(false);
-          return;
+        if (!aiSuccess) {
+          // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
+          if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
+          response = await _handleOfflineFallback(text, (history as any), intent);
+          setLastProvider('Local');
         }
-
-        // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
-        if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
-        response = await _handleOfflineFallback(text, (history as any), intent);
-        setLastProvider('Local');
       }
 
       // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
