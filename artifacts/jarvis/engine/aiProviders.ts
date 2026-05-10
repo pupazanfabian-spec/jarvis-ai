@@ -457,7 +457,8 @@ export const JARVIS_SYSTEM_PROMPT =
   `(2) Fără "Bineînțeles!", "Cu plăcere!", "Desigur!". ` +
   `(3) Răspunzi în română. ` +
   `(4) Cod cerut = cod complet, funcțional, cu exemple. ` +
-  `(5) Rezultatul direct, nu procesul.`;
+  `(5) Rezultatul direct, nu procesul. ` +
+  `(6) Când ești întrebat despre ora sau data curentă, folosește timpul sistemului utilizatorului (new Date()).`;
 
 export interface JarvisContext {
   userName?: string;

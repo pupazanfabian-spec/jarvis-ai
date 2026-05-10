@@ -441,6 +441,17 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     return response;
   }, [dbReady, llmGenerate, llmStatus, wantsOnline, autoLearnFromWeb]);
 
+  // ─── Sync lastProvider cu setările active ────────────────────────────
+  useEffect(() => {
+    if (aiProvider.settings.activeProvider !== 'none' && aiProvider.settings.activeProvider !== 'auto') {
+      const p = aiProvider.settings.activeProvider;
+      const pName = p.charAt(0).toUpperCase() + p.slice(1);
+      setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
+    } else if (aiProvider.settings.activeProvider === 'auto') {
+      setLastProvider('Auto');
+    }
+  }, [aiProvider.settings.activeProvider]);
+
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
     isProcessing.current = true;
@@ -465,8 +476,35 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
       let response = '';
 
+      // ─── Survey Handler: Căutare Online Forțată ────────────────────────────────
+      if (text === 'Caută online despre asta') {
+        const lastUserMsg = [...currentMessages].reverse().find(m => m.role === 'user' && m.content !== text);
+        const searchQuery = lastUserMsg ? lastUserMsg.content : '';
+        
+        if (searchQuery) {
+          setWebSearching(true);
+          setLastProvider('Web Search');
+          try {
+            const onlineResult = await searchOnlineSynthesized(searchQuery);
+            if (onlineResult.found) {
+              response = synthesizeWebResponse(
+                onlineResult.text, onlineResult.source, searchQuery,
+                detectQuestionType(searchQuery), { userName: brainRef.current.userName ?? undefined },
+              );
+              autoLearnFromWeb(onlineResult.text, onlineResult.source, searchQuery);
+            } else {
+              response = `Nu am găsit informații noi online despre "${searchQuery}".`;
+            }
+          } catch {
+            response = 'Nu am putut accesa internetul în acest moment.';
+          } finally {
+            setWebSearching(false);
+          }
+        }
+      }
+
       // ─── Dev Mode Chain ────────────────────────────────────────────────────────
-      if (isDevMode) {
+      if (!response && isDevMode) {
         const devIntent = detectDevIntent(text);
 
         if (devIntent !== 'none') {

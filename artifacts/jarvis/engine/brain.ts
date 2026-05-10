@@ -396,7 +396,7 @@ const INTENT_PATTERNS: IntentPattern[] = [
   { intent: 'nu', patterns: [/^(nu|no|nope|negativ)[\s!.]?$/], weight: 7 },
   { intent: 'gluma', patterns: [/(gluma|amuzant|fa-ma sa rad|spune-mi o gluma)/], weight: 5 },
   { intent: 'motivatie', patterns: [/(motiveaza|motivatie|curaj|inspiratie|citat|incurajeaza)/], weight: 5 },
-  { intent: 'data_ora', patterns: [/(ce ora|ce data|azi e|astazi e|ce zi|ce an|ceasul|data de azi)/], weight: 7 },
+  { intent: 'data_ora', patterns: [/(ce ora|ce data|azi e|astazi e|ce zi|ce an|ceasul|data de azi|cat e ceasul|cât e ceasul|în ce zi suntem|ce dată este)/i], weight: 10 },
   { intent: 'matematica', patterns: [/(\d[\d\s]*[\+\-\*\/][\d\s]|\d+\s*(plus|minus|ori|impartit|radical|la puterea|procent))/], weight: 8 },
   { intent: 'memorie_salveaza', patterns: [/(retine|memorizeaza|noteaza|tine minte|salveaza|aminteste-ti)/], weight: 7 },
   { intent: 'memorie_citeste', patterns: [/(ce ai retinut|ce ti-am spus|afiseaza memoria|ce ai memorat|ce stii despre mine)/], weight: 7 },
@@ -656,9 +656,7 @@ function handleMath(text: string): string | null {
 
 function handleDateTime(): string {
   const now = new Date();
-  const ZILE = ['Duminică', 'Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă'];
-  const LUNI = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
-  return `🕐 **${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}** — ${ZILE[now.getDay()]}, ${now.getDate()} ${LUNI[now.getMonth()]} ${now.getFullYear()}`;
+  return `🕐 **${now.toLocaleString('ro-RO')}**`;
 }
 
 function handleMemory(intent: Intent, text: string, state: BrainState): string | null {
