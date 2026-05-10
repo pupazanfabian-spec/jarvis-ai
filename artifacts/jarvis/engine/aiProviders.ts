@@ -465,6 +465,7 @@ export interface JarvisContext {
   entities?: Array<{ value: string; relation: string }>;
   recentTopics?: string[];
   conversationCount?: number;
+  customContext?: string;
 }
 
 export function buildRichSystemPrompt(ctx?: JarvisContext): string {
@@ -491,6 +492,10 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
   if (!ctx) return base;
 
   const parts: string[] = [base];
+
+  if (ctx.customContext) {
+    parts.push(`\n\n${ctx.customContext}`);
+  }
 
   if (ctx.userName) {
     parts.push(`\n\nUtilizatorul se numește **${ctx.userName}**.`);

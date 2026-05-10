@@ -685,9 +685,32 @@ export function processDocument(name: string, content: string, state: BrainState
   return `📚 Studiat: **"${name}"** (${words.toLocaleString()} cuvinte).`;
 }
 
-export function autoDetectFacts(userMessage: string): any[] {
-  const facts: any[] = [];
-  if (userMessage.includes('ma numesc')) facts.push({ fact: userMessage, category: 'personal' });
+import { type MemoryCategory } from './memory';
+
+export function autoDetectFacts(userMessage: string): { fact: string; category: MemoryCategory }[] {
+  const facts: { fact: string; category: MemoryCategory }[] = [];
+  const lower = userMessage.toLowerCase();
+  
+  // Detecție Nume
+  if (/mă numesc|numele meu este|sunt (?!un|o|aici|gata)/i.test(userMessage)) {
+    facts.push({ fact: userMessage, category: 'fapte_utilizator' });
+  }
+  
+  // Detecție Preferințe
+  if (/îmi place|ador|prefer|îmi place|nu-mi place|urăsc/i.test(lower)) {
+    facts.push({ fact: userMessage, category: 'preferinte' });
+  }
+
+  // Detecție Obiective
+  if (/vreau să|scopul meu|planific să|obiectivul meu|țelul meu/i.test(lower)) {
+    facts.push({ fact: userMessage, category: 'obiective' });
+  }
+
+  // Detecție Fapte importante (ex: lucrez la, stau în)
+  if (/lucrez la|stau în|locuiesc în|sunt din|am \d+ ani/i.test(lower)) {
+    facts.push({ fact: userMessage, category: 'fapte_utilizator' });
+  }
+
   return facts;
 }
 

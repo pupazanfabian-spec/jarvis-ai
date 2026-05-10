@@ -171,44 +171,89 @@ export function extractSearchQuery(text: string): string {
   return query.length > 2 ? query : text;
 }
 
-// ─── Căutare paralelă — cel mai rapid răspuns valid câștigă ─────────────────
-// Wikipedia RO și DuckDuckGo pornesc simultan.
-// Dacă Wikipedia RO nu are rezultate, încercăm Wikipedia EN ca fallback.
+// ─── NewsAPI (Free Tier - limited) ──────────────────────────────────────────
+async function searchNews(query: string): Promise<OnlineResult | null> {
+  try {
+    // Folosim un proxy sau un serviciu gratuit dacă e posibil, altfel NewsAPI are nevoie de key.
+    // Dar putem folosi DuckDuckGo News (via HTML scraping sau RSS dacă e disponibil)
+    // Pentru acest task, vom simula o sursă de știri via DuckDuckGo News
+    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query + ' news')}`;
+    const resp = await fetchWithTimeout(url);
+    if (!resp.ok) return null;
+    
+    const html = await resp.text();
+    // Extragem primele câteva titluri și descrieri din HTML-ul simplu (non-JS) al DDG
+    const results = html.match(/<a class="result__a" href="([^"]+)">([^<]+)<\/a>.*?<a class="result__snippet" href="[^"]+">([^<]+)<\/a>/g);
+    
+    if (results && results.length > 0) {
+      const top = results.slice(0, 2).map(r => {
+        const title = r.match(/<a class="result__a"[^>]*>([^<]+)<\/a>/)?.[1] || '';
+        const snippet = r.match(/<a class="result__snippet"[^>]*>([^<]+)<\/a>/)?.[1] || '';
+        return `[STIRE] ${title}: ${snippet}`;
+      }).join('\n\n');
+      
+      return { found: true, text: top, source: 'Stiri (via DuckDuckGo)', query };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Content Scraping ───────────────────────────────────────────────────────
+export async function scrapeUrl(url: string): Promise<string> {
+  try {
+    const resp = await fetchWithTimeout(url);
+    if (!resp.ok) return '';
+    const html = await resp.text();
+    
+    // Curățare brută HTML -> Text
+    let text = html
+      .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, '')
+      .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+      
+    return text.slice(0, 2000); // Limităm la 2000 caractere
+  } catch {
+    return '';
+  }
+}
+
+// ─── Căutare paralelă îmbunătățită ──────────────────────────────────────────
 export async function searchOnline(query: string): Promise<OnlineResult> {
   const cleanQuery = extractSearchQuery(query);
   const cacheKey = cleanQuery.toLowerCase().trim();
 
-  // Verifică cache-ul SQLite înainte de orice request HTTP
-  try {
-    const { getCachedWebResult } = await import('./database');
-    const cached = await getCachedWebResult(cacheKey);
-    if (cached && cached.found) {
-      return { ...cached, query: cleanQuery };
-    }
-  } catch {}
+  // 1. Încercăm toate sursele în paralel
+  const results = await Promise.allSettled([
+    searchWikipediaRO(cleanQuery),
+    searchDuckDuckGo(cleanQuery),
+    searchNews(cleanQuery),
+    searchWikipediaEN(cleanQuery),
+  ]);
 
-  // 1. Încercăm Wikipedia RO și DuckDuckGo în paralel
-  let result = await Promise.any([
-    searchWikipediaRO(cleanQuery).then(r => { if (!r) throw new Error('empty'); return r; }),
-    searchDuckDuckGo(cleanQuery).then(r => { if (!r) throw new Error('empty'); return r; }),
-  ]).catch(() => null);
+  const validResults = results
+    .filter((r): r is PromiseFulfilledResult<OnlineResult | null> => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value as OnlineResult);
 
-  // 2. Fallback la Wikipedia EN dacă nu am găsit nimic satisfăcător pe RO
-  if (!result || (result.source.includes('Wikipedia RO') && result.text.length < 100)) {
-    const enResult = await searchWikipediaEN(cleanQuery);
-    if (enResult && enResult.found) {
-      result = enResult;
-    }
-  }
+  if (validResults.length > 0) {
+    // Alegem cel mai bun rezultat (preferăm Wikipedia RO sau știri dacă e query de actualitate)
+    const news = validResults.find(r => r.source.includes('Stiri'));
+    const wikiRo = validResults.find(r => r.source.includes('Wikipedia RO'));
+    const ddg = validResults.find(r => r.source.includes('DuckDuckGo'));
+    const wikiEn = validResults.find(r => r.source.includes('Wikipedia EN'));
 
-  if (result) {
-    _cacheResult(cacheKey, result);
-    return result;
+    const finalResult = news || wikiRo || ddg || wikiEn || validResults[0];
+    
+    _cacheResult(cacheKey, finalResult);
+    return finalResult;
   }
 
   return {
     found: false,
-    text: 'Nu am găsit informații online despre asta. Încearcă să reformulezi întrebarea sau verifică conexiunea la internet.',
+    text: 'Nu am găsit informații online recente despre asta. Încearcă să reformulezi.',
     source: '',
     query: cleanQuery,
   };

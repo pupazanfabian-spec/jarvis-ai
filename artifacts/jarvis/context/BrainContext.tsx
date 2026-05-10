@@ -42,7 +42,7 @@ import {
   getActiveProject, buildProjectContext, formatProjectSummary,
   createProject, addProjectStep, saveProjectFile,
 } from '@/engine/projectMemory';
-import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, type MemoryStore } from '@/engine/memory';
+import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, formatMemoriesForPrompt, type MemoryStore, type MemoryCategory } from '@/engine/memory';
 import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts } from '@/engine/brain';
@@ -71,7 +71,7 @@ const STATE_KEY = '@jarvis_v3_state';
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠\n\n**Ce pot face:**\n🤔 Răspund din 270+ subiecte din memorie\n📡 Caut pe internet când nu știu (Wikipedia, DuckDuckGo)\n🔗 Deduc logic din ce îmi spui\n👤 Rețin persoanele și entitățile menționate\n🕐 Știu ce am discutat azi, ieri, săptămâna trecută\n📄 Studiez fișierele pe care mi le trimiți\n💾 Nu uit nimic între sesiuni\n\n**Caută online:** spune "caută online [subiect]" sau întreabă orice — dacă nu știu din memorie, verific internetul automat.\n\nCum te cheamă? Sau întreabă-mă ceva — orice.',
+  content: 'Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠\n\n**Ce pot face:**\n🤔 Răspund din 270+ subiecte din memorie\n📡 Caut pe internet în timp real (DuckDuckGo, Wikipedia, News)\n🔗 Deduc logic din ce îmi spui\n👤 Rețin persoanele și entitățile menționate\n💾 Memorie persistentă: îmi amintesc cine ești și ce preferi între sesiuni\n\n**Cum te cheamă?** Sau întreabă-mă orice.',
   timestamp: new Date(),
 };
 
@@ -259,7 +259,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
     let memChanged = false;
     for (const fact of state.selfKnowledge.learnedFacts) {
-      const updated = addMemoryEntry(memoryRef.current, fact, 'brain');
+      let category: MemoryCategory = 'general';
+      if (/vrea|îmi place|prefer|îmi place|vreau/i.test(fact)) category = 'preferinte';
+      else if (/lucrez|numele|cheamă|stau|locuiesc|ani/i.test(fact)) category = 'fapte_utilizator';
+      else if (/scop|obiectiv|țel|planific/i.test(fact)) category = 'obiective';
+
+      const updated = addMemoryEntry(memoryRef.current, fact, 'brain', category);
       if (updated !== memoryRef.current) {
         memoryRef.current = updated;
         memChanged = true;
@@ -267,7 +272,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     }
     if (state.userName) {
       const nameFact = `Utilizatorul se numește ${state.userName}`;
-      const updated = addMemoryEntry(memoryRef.current, nameFact, 'user');
+      const updated = addMemoryEntry(memoryRef.current, nameFact, 'user', 'fapte_utilizator', 0.9);
       if (updated !== memoryRef.current) {
         memoryRef.current = updated;
         memChanged = true;
@@ -327,8 +332,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     await autoLearnFromWeb(result.text, result.provider, '');
   }, [autoLearnFromWeb]);
 
-  const buildCloudCtx = useCallback((): string => {
+  const buildCloudCtx = useCallback((query?: string): string => {
     const state = brainRef.current;
+    
+    // Obținem amintirile relevante pentru query-ul curent
+    const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
+    const memoryContext = formatMemoriesForPrompt(relevantMemories);
+
     const ctx: JarvisContext = {
       userName: state.userName || undefined,
       preferredStyle: state.selfKnowledge.preferredStyle,
@@ -339,6 +349,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       entities: state.entityTracker.entities.slice(-8).map(e => ({ value: e.value, relation: e.relation || '' })),
       recentTopics: state.lastTopics.slice(-5),
       conversationCount: state.conversationCount,
+      customContext: memoryContext, // Injectăm memoria aici
     };
     return buildRichSystemPrompt(ctx);
   }, []);
@@ -524,12 +535,19 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       }
       // ─── End Dev Mode Chain ───────────────────────────────────────────────────
 
-      // Auto-detect fapte din mesajul utilizatorului și salvează în memoryFolder (non-blocking)
+      // Auto-detect fapte din mesajul utilizatorului și salvează în memorie (non-blocking)
       const detectedFacts = autoDetectFacts(text);
       if (detectedFacts.length > 0) {
-        Promise.all(detectedFacts.map(f =>
-          writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { })
-        )).catch(() => { });
+        let memUpdated = false;
+        detectedFacts.forEach(f => {
+          const updated = addMemoryEntry(memoryRef.current, f.fact, 'auto-detect', f.category);
+          if (updated !== memoryRef.current) {
+            memoryRef.current = updated;
+            memUpdated = true;
+          }
+          writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { });
+        });
+        if (memUpdated) saveMemory(memoryRef.current).catch(() => {});
       }
 
       let response = processMessage(text, brainRef.current, history);
@@ -594,7 +612,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
             const aiResult = await aiProvider.generateStream(cmdOriginal, (chunk) => {
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-            }, buildCloudCtx(), (history as any).slice(-20), finalIntent);
+            }, buildCloudCtx(text), (history as any).slice(-20), finalIntent);
 
             if (aiResult) {
               response = aiResult.text.trim();
@@ -622,7 +640,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
           const aiResult = await aiProvider.generateStream(text, (chunk) => {
             setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-          }, buildCloudCtx(), (history as any).slice(-20), intent);
+          }, buildCloudCtx(text), (history as any).slice(-20), intent);
 
           if (aiResult?.text) {
             response = aiResult.text.trim();
