@@ -553,9 +553,7 @@ function FeedbackToast({ visible, icon, label, color }: { visible: boolean; icon
 }
 
 const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
-  if (!message || !message.content) return null;
-  
-  const isUser = message.role === 'user';
+  const isUser = message?.role === 'user';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
   const [menuVisible, setMenuVisible] = useState(false);
@@ -574,12 +572,14 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  const timestamp = message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp);
+  const timestamp = message?.timestamp instanceof Date ? message.timestamp : new Date(message?.timestamp || Date.now());
   const timeStr = timestamp.toLocaleTimeString('ro-RO', {
     hour: '2-digit', minute: '2-digit',
   });
 
-  const hasCode = message.content.includes('```');
+  const hasCode = message?.content?.includes('```') || false;
+
+  if (!message || !message.content) return null;
 
   const handleLongPress = () => {
     if (Platform.OS !== 'web') {
