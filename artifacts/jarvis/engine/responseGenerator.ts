@@ -189,6 +189,20 @@ function buildFollowUp(topicCategory: string, questionType: QuestionType): strin
   return '\n\n' + pick(followUps[category]);
 }
 
+// ─── Ilustrații și Exemple Practice ──────────────────────────────────────────
+
+function buildIllustration(topicCategory: string): string {
+  const illustrations: Record<string, string> = {
+    stiinta: '\n\n🧪 **Experiment/Ilustrație:**\n| Componentă | Rol | Efect |\n| :--- | :--- | :--- |\n| Input | Energie/Materie | Transformare |\n| Proces | Reacție Chimică | Evoluție |\n| Output | Produs Final | Echilibru |',
+    tehnologie: '\n\n💻 **Exemplu de implementare:**\n```javascript\n// Conceptul aplicat în cod\nfunction applyLogic(input) {\n  return process(input); \n}\n```',
+    economie: '\n\n💰 **Impact economic:**\n• 📉 **Scădere:** Când oferta depășește cererea.\n• 📈 **Creștere:** Când investițiile produc valoare adăugată.\n• ⚖️ **Echilibru:** Punctul optim de piață.',
+    medicina: '\n\n🩺 **Notă importantă:**\n> Acest concept medical este crucial pentru înțelegerea funcționării organismului. Consultă întotdeauna un specialist pentru diagnostic.',
+  };
+
+  const category = Object.keys(illustrations).find(k => topicCategory.includes(k));
+  return category ? illustrations[category] : '';
+}
+
 // ─── Funcția principală — sinteză răspuns natural ─────────────────────────────
 export function synthesizeKnowledgeResponse(
   raw: string,
@@ -199,9 +213,10 @@ export function synthesizeKnowledgeResponse(
 ): string {
   const intro = buildIntro(questionType, topic, ctx.userName);
   const body = reformatRaw(raw, topic);
+  const illustration = (questionType === 'ce_este' || questionType === 'cum') ? buildIllustration(topicCategory) : '';
   const followUp = buildFollowUp(topicCategory, questionType);
 
-  return `${intro}${body}${followUp}`;
+  return `${intro}${body}${illustration}${followUp}`;
 }
 
 // ─── Sinteză răspuns de necunoaștere inteligent ────────────────────────────────

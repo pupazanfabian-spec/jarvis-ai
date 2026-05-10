@@ -148,6 +148,7 @@ const ONLINE_TRIGGERS = [
   'cauta informatii', 'caută informații', 'cauta informatii',
   'cauta pe google', 'caută pe google', 'intreaba internetul',
   'întreabă internetul', 'cauta acum', 'caută acum',
+  'vrau sa stiu despre', 'vreau sa aflu despre', 'cauta pe net despre',
 ];
 
 export function isOnlineIntent(text: string): boolean {
@@ -156,18 +157,28 @@ export function isOnlineIntent(text: string): boolean {
 }
 
 export function extractSearchQuery(text: string): string {
-  let query = text;
-  const lower = text.toLowerCase();
+  let query = text.toLowerCase();
+  
+  // Eliminăm prefixe de tip "ce este", "cine e" dacă nu sunt urmate de triggers
+  const prefixes = ['ce este ', 'ce e ', 'cine este ', 'cine e ', 'unde se afla ', 'unde e ', 'spune-mi despre '];
+  for (const p of prefixes) {
+    if (query.startsWith(p)) {
+      query = query.slice(p.length);
+    }
+  }
 
   for (const trigger of ONLINE_TRIGGERS) {
-    if (lower.includes(trigger)) {
-      const idx = lower.indexOf(trigger);
-      query = text.slice(idx + trigger.length).trim();
+    if (query.includes(trigger)) {
+      const idx = query.indexOf(trigger);
+      query = query.slice(idx + trigger.length).trim();
       break;
     }
   }
 
   query = query.replace(/[?!.,;:]+$/, '').trim();
+  // Eliminăm articole inutile la începutul query-ului extras
+  query = query.replace(/^(un|o|al|a|lui|ei|cel|cea|despre|legat de)\s+/i, '');
+
   return query.length > 2 ? query : text;
 }
 

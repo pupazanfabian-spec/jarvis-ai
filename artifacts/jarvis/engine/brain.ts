@@ -271,16 +271,36 @@ const VOCAB_MAP: Record<string, string> = {
   'np': 'nicio problema',
   'sal': 'salut',
   'bv': 'bravo',
+  'ami': 'imi',
+  'mio': 'mi-a',
+  'nam': 'nu am',
+  'nai': 'nu ai',
+  'nat': 'nu ati',
+  'nau': 'nu au',
+  'ce-i': 'ce este',
+  'cine-i': 'cine este',
+  'unde-i': 'unde este',
+  'cum-i': 'cum este',
+  'm-am': 'ma am',
+  's-a': 'se a',
 };
 
 export function normalizeInput(text: string): string {
   let normalized = text.toLowerCase().trim();
-  // Înlocuim abrevierile comune
+  
+  // Corecții preliminare pentru scriere neglijentă (fără cratimă)
+  normalized = normalized.replace(/\b(mi-a|mi-ai|mi-au|ti-a|ti-ai|ti-au|si-a|si-au|i-a|i-au|ne-a|ne-au|v-a|v-au|l-a|l-au|o-a|i-a)\b/g, (m) => m.replace('-', ' '));
+
+  // Înlocuim abrevierile comune și formele scurte
   Object.entries(VOCAB_MAP).forEach(([short, long]) => {
     const regex = new RegExp(`\\b${short}\\b`, 'g');
     normalized = normalized.replace(regex, long);
   });
-  // Corecții gramaticale de bază (opțional)
+
+  // Înlăturăm semnele de punctuație repetitive sau inutile la final pentru potrivire pattern
+  normalized = normalized.replace(/[?!.]+$/, '');
+
+  // Corecții gramaticale de bază și spații
   normalized = normalized.replace(/  +/g, ' ');
   return normalized;
 }

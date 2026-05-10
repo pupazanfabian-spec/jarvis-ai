@@ -55,6 +55,7 @@ interface BrainContextType {
   wantsOnline: boolean;
   brainState: BrainState;
   dbReady: boolean;
+  lastProvider: string;
   sendMessage: (text: string) => Promise<void>;
   clearConversation: () => void;
   addDocument: (name: string, content: string) => Promise<void>;
@@ -114,6 +115,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [webSearching, setWebSearching] = useState(false);
   const [wantsOnline, setWantsOnline] = useState(false);
   const [dbReady, setDbReady] = useState(false);
+  const [lastProvider, setLastProvider] = useState('Groq');
   const brainRef = useRef<BrainState>(createInitialBrainState());
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
   const memoryRef = useRef<MemoryStore>({ entries: [] });
@@ -660,6 +662,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             response = aiResult.text.trim();
             autoLearnFromCloud(aiResult).catch(() => {});
             aiSuccess = true;
+            
+            // Task 1: Update lastProvider
+            const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
+            setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
           } else {
             // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
             setMessages(prev => prev.filter(m => m.id !== assistantId));
@@ -676,11 +682,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
         if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
         response = await _handleOfflineFallback(text, (history as any), intent);
+        setLastProvider('Local');
       }
 
       // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
       else {
         response = await _handleOfflineFallback(text, (history as any), intent);
+        setLastProvider('Local');
       }
 
       setBrainState({ ...brainRef.current });
@@ -789,7 +797,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BrainContext.Provider value={{
-      messages, isThinking, webSearching, wantsOnline, brainState, dbReady,
+      messages, isThinking, webSearching, wantsOnline, brainState, dbReady, lastProvider,
       sendMessage, clearConversation, addDocument, removeDocument, setWantsOnline,
     }}>
       {children}

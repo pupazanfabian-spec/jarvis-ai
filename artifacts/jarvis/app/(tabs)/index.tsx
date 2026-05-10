@@ -99,7 +99,7 @@ function EmptyState() {
 
 export default function ChatScreen() {
   const {
-    messages, isThinking, webSearching, brainState,
+    messages, isThinking, webSearching, brainState, lastProvider,
     sendMessage, clearConversation, addDocument, removeDocument,
   } = useBrain();
 
@@ -322,7 +322,7 @@ export default function ChatScreen() {
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'
                 : aiProviderSettings.activeProvider !== 'none'
-                  ? `✨ ${providerLabel(aiProviderSettings.activeProvider)} • Hibrid`
+                  ? `✨ ${lastProvider} • Hibrid`
                   : docCount > 0
                     ? `${docCount} doc. • Fără net`
                     : `v3.2 • Fără net`}

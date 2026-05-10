@@ -561,6 +561,14 @@ export function buildAIContext(settings: AIProviderSettings): AIProviderSettings
   return settings;
 }
 
+function getProviderModel(name: AIProvider): string {
+  if (name === 'groq') return GROQ_MODELS[0];
+  if (name === 'gemini') return GEMINI_MODELS[0];
+  if (name === 'openai') return 'gpt-4o-mini';
+  if (name === 'openrouter') return OPENROUTER_MODELS[0];
+  return 'unknown';
+}
+
 // ─── callActiveProvider ──────────────────────────────────────────────────────
 // Apel principal către provider-ul selectat (cu retry automat de 2 ori)
 export async function callActiveProvider(
@@ -601,7 +609,10 @@ export async function callActiveProvider(
   // Forțare Groq pentru intent special
   if (intent === 'cmd_groq_direct' && settings.groqKey) {
     const res = await callWithRetry(providers[0].call, 'groq');
-    if (res) return res;
+    if (res) {
+      if (__DEV__) console.log('[Jarvis] Provider raspuns (forțat):', 'groq', getProviderModel('groq'));
+      return res;
+    }
   }
 
   if (settings.activeProvider === 'auto') {
@@ -611,7 +622,10 @@ export async function callActiveProvider(
       const p = providers.find(prov => prov.name === name);
       if (p && p.key && p.key.length > 5) {
         const res = await callWithRetry(p.call, p.name);
-        if (res) return res;
+        if (res) {
+          if (__DEV__) console.log('[Jarvis] Provider raspuns (auto):', p.name, getProviderModel(p.name));
+          return res;
+        }
       }
     }
     return null;
@@ -620,13 +634,19 @@ export async function callActiveProvider(
   const active = providers.find(p => p.name === settings.activeProvider);
   if (active?.key) {
     const res = await callWithRetry(active.call, active.name);
-    if (res) return res;
+    if (res) {
+      if (__DEV__) console.log('[Jarvis] Provider raspuns:', active.name, getProviderModel(active.name));
+      return res;
+    }
   }
 
   for (const p of providers) {
     if (p.name === settings.activeProvider || !p.key) continue;
     const res = await callWithRetry(p.call, p.name);
-    if (res) return res;
+    if (res) {
+      if (__DEV__) console.log('[Jarvis] Provider raspuns (fallback):', p.name, getProviderModel(p.name));
+      return res;
+    }
   }
 
   return null;
@@ -660,10 +680,14 @@ export async function callActiveProviderStream(
   for (const provider of providersToTry) {
     try {
       if (provider === 'gemini' && settings.geminiKey) {
-        return await streamGemini(prompt, settings.geminiKey, onChunk, sys, history);
+        const res = await streamGemini(prompt, settings.geminiKey, onChunk, sys, history);
+        if (res && __DEV__) console.log('[Jarvis] Provider raspuns (stream):', provider, getProviderModel(provider));
+        return res;
       }
       if (provider === 'groq' && settings.groqKey) {
-        return await streamGroq(prompt, settings.groqKey, onChunk, sys, history);
+        const res = await streamGroq(prompt, settings.groqKey, onChunk, sys, history);
+        if (res && __DEV__) console.log('[Jarvis] Provider raspuns (stream):', provider, getProviderModel(provider));
+        return res;
       }
     } catch (err) {
       console.warn(`[AIProvider] Streaming failed for ${provider}, trying next:`, err);
