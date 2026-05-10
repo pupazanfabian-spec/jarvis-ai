@@ -137,7 +137,8 @@ async function callGeminiModel(
   systemInstruction?: string,
   history?: ConversationTurn[],
 ): Promise<GeminiResult> {
-  const turns = (history ?? []).slice(-20);
+  const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
+  const turns = validHistory.slice(-20);
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
     ...turns.map(t => ({
       role: t.role === 'assistant' ? 'model' : 'user',
@@ -263,7 +264,8 @@ async function callOpenAICompatible(
   if (systemInstruction) {
     messages.push({ role: 'system', content: systemInstruction });
   }
-  for (const turn of (history ?? []).slice(-20)) {
+  const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
+  for (const turn of validHistory.slice(-20)) {
     messages.push({ role: turn.role, content: turn.content });
   }
   messages.push({ role: 'user', content: prompt });
@@ -706,8 +708,9 @@ async function streamGeminiModel(
   prompt: string, apiKey: string, onChunk: StreamHandler,
   system?: string, history: ConversationTurn[] = [],
 ): Promise<{ text: string; provider: AIProvider } | null> {
+  const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
   const contents = [
-    ...(history ?? []).slice(-15).map(t => ({
+    ...validHistory.slice(-15).map(t => ({
       role: t.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: t.content }],
     })),
@@ -795,7 +798,8 @@ async function streamGroq(
 ): Promise<{ text: string; provider: AIProvider } | null> {
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
-  messages.push(...(history ?? []).slice(-15).map(t => ({ role: t.role, content: t.content })));
+  const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
+  messages.push(...validHistory.slice(-15).map(t => ({ role: t.role, content: t.content })));
   messages.push({ role: 'user', content: prompt });
 
   try {
