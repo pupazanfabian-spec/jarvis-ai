@@ -1,6 +1,7 @@
 // Jarvis AI Brain v6.2 — Semantic, inferential, entity-aware, constitutionally protected, response-synthesizing
 // Imbunatatit cu gestiune avansata a memoriei si context persistent
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { findRelevantConcept, findRelevantConceptExtended, CONCEPTS, addDynamicConcept } from './knowledge';
 import {
   detectQuestionType, synthesizeKnowledgeResponse, generateSmartUnknown,
@@ -34,9 +35,10 @@ import {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'survey';
   content: string;
   timestamp: Date;
+  confidence?: number;
 }
 
 export interface LearnedDocument {
@@ -62,6 +64,7 @@ export interface BrainState {
   inferenceEngine: InferenceEngine;
   temporalMemory: TemporalMemory;
   constitutionState: ConstitutionState;
+  learnedPatterns?: LearnedPatterns;
 }
 
 export function createInitialBrainState(): BrainState {
@@ -93,7 +96,7 @@ function pick<T>(arr: T[]): T {
 
 const DICTIONAR: Record<string, string> = {
   fotosinteza: 'Fotosinteza = procesul prin care plantele convertesc lumina solară, apa și CO₂ în glucoză și oxigen. Ecuație: 6CO₂ + 6H₂O + lumină → C₆H₁₂O₆ + 6O₂. Are loc în cloroplaste.',
-  osmoza: 'Osmoza = trecerea unui solvent printr-o membrană semipermeabilă dinspre soluția diluată spre cea concentrată, până la echilibru de presiune osmotică.',
+  osmoza: 'Osmoza = trecerea unui solvent printr' + 'o membrană semipermeabilă dinspre soluția diluată spre cea concentrată, până la echilibru de presiune osmotică.',
   metabolism: 'Metabolism = totalitatea reacțiilor chimice din organism. Catabolism (descompunere, eliberare energie) + Anabolism (sinteză, consum energie). Viteza depinde de greutate, vârstă, activitate.',
   celula: 'Celula = unitatea de bază a vieții. Procariotă (bacterii, fără nucleu) sau Eucariotă (cu nucleu). Descoperită de Hooke (1665). Corpul uman are ~37 trilioane de celule.',
   adn: 'ADN = molecula ereditară cu structura dublă helix (Watson & Crick, 1953). Baze azotate: adenina (A), timina (T), guanina (G), citozina (C). Codul vieții.',
@@ -206,12 +209,12 @@ const DICTIONAR: Record<string, string> = {
   marketing: 'Marketingul = procesul de creare a valorii și comunicare cu clienții. 4P: Produs, Preț, Plasament, Promovare. Marketing digital: SEO, Social Media, Email, Ads. Content marketing > advertising clasic în 2024.',
   leadership: 'Leadershipul = influențarea altora spre un scop comun. Stiluri: autocratic, democratic, laissez-faire, transformațional. Liderii buni ascultă mai mult decât vorbesc.',
   cloud: 'Cloud computing = servicii IT la cerere prin internet. Modele: IaaS (infrastructură), PaaS (platformă), SaaS (software). Furnizori: AWS, Google Cloud, Azure. 94% din companii folosesc cloud.',
-  cybersecurity: 'Cybersecurity = protejarea sistemelor digitale. Amenințări: phishing, ransomware, DDoS, SQL injection. Principii: confidențialitate, integritate, disponibilitate (CIA triad). Parola puternică = 12+ caractere, mix de caractere.',
+  cybersecurity: 'Cybersecurity = protejarea sistemelor digitale. Amenințări: phishing, ransomware, DDoS, SQL injection. Principii: confidențialitate, integritate, disponibilitate (CIA triad). Parola puternică = 12+ caractere, min de caractere.',
   machine_learning: 'Machine Learning = AI care învață din date fără programare explicită. Supervizat (date etichetate), nesupervizat (găsire pattern-uri), reinforcement (recompense/penalizări). Baza Netflix, Spotify, recunoaștere facială.',
   python: 'Python = limbaj de programare simplu, versatil. Folosit pentru AI/ML (TensorFlow, PyTorch), web (Django, Flask), automatizare, știință de date. Al 3-lea cel mai popular limbaj (IEEE 2023).',
   javascript: 'JavaScript = limbajul web-ului. Rulează în browsere și pe server (Node.js). React, Angular, Vue = framework-uri front-end. Cel mai popular limbaj de programare (Stack Overflow, 10 ani la rând).',
   smartphone: 'Smartphone-ul = calculator de buzunar. iOS (Apple) vs Android (Google) = 99% din piață. Primul iPhone: 2007. Astăzi: >6,8 miliarde utilizatori de smartphone în lume.',
-  retele_sociale: 'Rețelele sociale: Facebook (3 miliarde utilizatori), YouTube (2,5 miliarde), Instagram (2 miliarde), TikTok (1,5 miliarde), LinkedIn (1 miliard). Pot provoca dependență prin dopamină.',
+  retele_sociale: 'Rețelele sociale: Facebook (3 miliarde utilizatori), YouTube (2,5 miliarde), Instagram (2 miliarde), TikTok (1,5 miliarde), LinkedIn (1 miliard). Pot provocar dependență prin dopamină.',
   baterie: 'Bateriile Li-ion (litiu-ion) = standard pentru electronice. Inventate de Goodenough (Nobel 2019). Degradare în timp (cicluri de încărcare). Sfat: nu lăsa la 0% sau 100% constant.',
   solar: 'Energia solară = conversie a luminii solare în electricitate (celule fotovoltaice) sau căldură. Cost scăzut de 90% în 10 ani. Acoperă tot mai mult din mixul energetic global.',
   nuclear: 'Energia nucleară = fisiune (spargerea atomilor grei, ex. uraniu) sau fuziune (unirea atomilor ușori). Fisiunea: fără emisii CO₂, dar deșeuri radioactive. Fuziunea = viitorul energetic (ITER).',
@@ -228,7 +231,7 @@ const DICTIONAR: Record<string, string> = {
   olimpiada: 'Jocurile Olimpice = competiție sportivă internațională la 4 ani. Vara (Paris 2024) și Iarna (Milano-Cortina 2026). Motto: "Citius, Altius, Fortius" (Mai repede, mai sus, mai puternic). Prima ediție modernă: Atena 1896.',
   gimnastica: 'Gimnastica = sport al eleganței și forței. România, istoric superputere mondială: Nadia Comăneci (primul 10 perfect la Montreal 1976), Daniela Silivaș, Lavinia Miloșovici.',
   nadia: 'Nadia Comăneci (n. 1961) = prima gimnastă care a obținut nota 10 perfectă la Jocurile Olimpice (Montreal, 1976). La 14 ani. A câștigat 3 medalii de aur la Montreal. Simbol al României.',
-  cinema: 'Cinematografia: Hollywood (SUA) domină global. Oscar = cea mai prestigioasă distincție (din 1929). Filmele de box-office: Avatar, Avengers, Titanic. Cannes, Berlin, Veneția = festivaluri europene de top.',
+  cinema: 'Cinematografia: Hollywood (SUA) domină global. Oscar = cea mai prestigiuasã distincție (din 1929). Filmele de box-office: Avatar, Avengers, Titanic. Cannes, Berlin, Veneția = festivaluri europene de top.',
   teatru: 'Teatrul = arta reprezentației live. Origini în Grecia Antică (Dionysus). Shakespeare: 37 de piese, cele mai jucate din lume. Teatrul românesc: Bulandra, Național, Odeon. TNB (București) = unul din cele mai mari din Europa.',
   literatura_romana: 'Literatura română: Eminescu (poetul național), Caragiale (satiră socială), Sadoveanu (epic rural), Călinescu ("Enigma Otiliei"), Rebreanu ("Ion"), Eliade (proză fantastică), Cioran (filosofie pesimistă).',
   cultura_pop: 'Cultura pop = cultura dominantă a maselor. Include muzică pop, film, TV, jocuri video, social media. K-pop (Coreea de Sud) = fenomen global. TikTok a redefinit industria muzicală.',
@@ -251,6 +254,202 @@ const DICTIONAR: Record<string, string> = {
   limba_romana: 'Limba română = limbă romanică (latină populară + elemente dacice, slave, greacă, turcă). ~28 milioane vorbitori. Alfabetul: 31 litere (5 specifice: ă, â, î, ș, ț). Dialecte: dacoromân, aromân, meglenoromân, istroromân.',
   gramatica: 'Gramatica română: 3 genuri (masculin, feminin, neutru). 5 cazuri (nominativ, acuzativ, genitiv, dativ, vocativ). Articolul hotărât se atașează la sfârșit: "om" → "omul". Verbele: 4 conjugări.',
 };
+
+// ─── Normalizer Vocabular ────────────────────────────────────────────────────
+
+const VOCAB_MAP: Record<string, string> = {
+  'pt': 'pentru',
+  'k': 'ok',
+  'nn': 'nu',
+  'pb': 'problema',
+  'fain': 'bine',
+  'ms': 'multumesc',
+  'mda': 'da',
+  'dc': 'de ce',
+  'bn': 'bine',
+  'cp': 'cu placere',
+  'np': 'nicio problema',
+  'sal': 'salut',
+  'bv': 'bravo',
+};
+
+export function normalizeInput(text: string): string {
+  let normalized = text.toLowerCase().trim();
+  // Înlocuim abrevierile comune
+  Object.entries(VOCAB_MAP).forEach(([short, long]) => {
+    const regex = new RegExp(`\\b${short}\\b`, 'g');
+    normalized = normalized.replace(regex, long);
+  });
+  // Corecții gramaticale de bază (opțional)
+  normalized = normalized.replace(/  +/g, ' ');
+  return normalized;
+}
+
+// ─── Tipuri Intenție și Confidence ───────────────────────────────────────────
+
+type Intent =
+  | 'salut' | 'ramas_bun' | 'multumesc' | 'ajutor' | 'ce_poti'
+  | 'identitate_jarvis' | 'da' | 'nu' | 'gluma' | 'motivatie' | 'sfat'
+  | 'data_ora' | 'matematica' | 'conversie_unitati'
+  | 'memorie_salveaza' | 'memorie_citeste' | 'memorie_sterge' | 'memorie_uita_specific' | 'memorie_sterge_ieri'
+  | 'folder_acorda_acces' | 'folder_listeaza' | 'folder_actualizeaza'
+  | 'documente_lista' | 'introducere_utilizator'
+  | 'creator_declare' | 'creator_verify' | 'raport_invatare'
+  | 'definitie' | 'opinie' | 'gandire_profunda'
+  | 'conversatie_anterioara' | 'entitate' | 'inferenta' | 'temporala'
+  | 'securitate' | 'constitutie' | 'follow_up' | 'cine_sunt_eu'
+  | 'cmd_scriere' | 'cmd_traducere' | 'cmd_rezumat' | 'cmd_lista'
+  | 'cmd_comparare' | 'cmd_plan' | 'cmd_creatie' | 'cmd_cod'
+  | 'cmd_groq_direct'
+  | 'unknown';
+
+export const COMMAND_INTENTS = new Set<Intent>([
+  'cmd_scriere', 'cmd_traducere', 'cmd_rezumat', 'cmd_lista',
+  'cmd_comparare', 'cmd_plan', 'cmd_creatie', 'cmd_cod',
+  'cmd_groq_direct',
+]);
+
+export function isCommandIntent(intent: string): boolean {
+  return COMMAND_INTENTS.has(intent as Intent);
+}
+
+interface IntentPattern {
+  intent: Intent;
+  patterns: RegExp[];
+  weight: number;
+  exclusive?: RegExp;
+}
+
+const INTENT_PATTERNS: IntentPattern[] = [
+  { intent: 'securitate', patterns: [/(raport securitate|securitatea mea|ai fost atacat|tentative de hack|evenimente securitate|cine a incercat|integritate sistem)/], weight: 10 },
+  { intent: 'constitutie', patterns: [/(constitutia ta|regulile tale|ce reguli ai|principiile tale|codul tau de legi|care sunt legile tale|arata-mi constitutia)/], weight: 10 },
+  { intent: 'creator_declare', patterns: [/(eu sunt creatorul|eu te-am creat|eu sunt cel care te-a creat|eu sunt stapanul|sunt creatorul tau|sunt programatorul tau|sunt cel care te-a facut)/], weight: 10 },
+  { intent: 'creator_verify', patterns: [/(cine te-a creat|cine e creatorul|cine te-a facut|cine esti proprietarul|cine te controleaza|de cine asculti|stapanul tau)/], weight: 10 },
+  { intent: 'cmd_groq_direct', patterns: [/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i], weight: 11 },
+  { intent: 'salut', patterns: [/(salut|buna|ciao|hei|servus|noroc|buna dimineata|buna ziua|buna seara|v salut|s-avem noroc|sa traiesti)/], weight: 10 },
+  { intent: 'ramas_bun', patterns: [/(pa|la revedere|noapte buna|pe curand|ne auzim|sa ne auzim cu bine|o zi buna|o seara placuta|drum bun)/], weight: 10 },
+  { intent: 'identitate_jarvis', patterns: [/(cum (te|il|va|iti) cheama|care (e|este) numele|ce nume (ai|are)|cum (te|iti) numesti|cine esti|prezinta-te|esti jarvis|ce esti tu)/], weight: 9 },
+  { intent: 'raport_invatare', patterns: [/(ce ai invatat|raport invatare|cum te-ai actualizat|versiunea inteligentei|ce ai retinut nou|progres invatare|cat de destept|ce stii acum|inteligenta versiunea)/], weight: 8 },
+  { intent: 'temporala', patterns: [/(azi|astazi|ieri|saptamana trecuta|luna trecuta|recent|ultima sesiune|de curand|ultima oara|sesiunea de)/], weight: 8 },
+  { intent: 'follow_up', patterns: [/^(si asta\??|dar asta\??|de ce asta\??|cum adica\??|adica ce\??|si\??|mai\??|continua\.?|mai departe\.?|ok dar|si totusi|spune.?mi mai mult|aprofundeaza|explica mai bine|da dar de ce|da si\??)$/], weight: 8 },
+  { intent: 'cine_sunt_eu', patterns: [/(cine sunt eu|ce stii despre mine|ce iti amintesti despre mine|ce ai retinut despre mine|ce stii despre utilizatorul tau|cu cine vorbesti|imi spui ce stii despre mine)/], weight: 9 },
+  { intent: 'conversie_unitati', patterns: [/(\d+(?:[.,]\d+)?)\s*(km|kilometri|km|metri?|cm|mm|kg|grame?|litri?|ml|ore?|minute?|secunde?|zile?|saptamani?|ani?)\s*(?:in|în|la|cat(?:i|e)?)\s*(km|kilometri|metri?|cm|mm|kg|grame?|litri?|ml|ore?|minute?|secunde?|zile?|saptamani?|ani?)/], weight: 9 },
+  { intent: 'conversatie_anterioara', patterns: [/(ce am zis|ce ti-am spus|ce am discutat|ce am vorbit|iti amintesti|iti mai amintesti|mai devreme|la inceput|inainte am|am mentionat|am spus|ai spus|ce ai raspuns|ce ai zis|anterior)/], weight: 8 },
+  { intent: 'entitate', patterns: [/(cine este|ce stii despre\s+[A-Z]|cine e|imi amintesti de|iti amintesti de|despre\s+[A-Z][a-z]+\s+ce|ce a zis\s+[A-Z])/], weight: 7 },
+  { intent: 'inferenta', patterns: [/(deci ce urmeaza|ce deduci|ce concluzie|care e concluzia|ce reiese|ce inseamna asta logic|demonstrate|prove)/], weight: 7 },
+  { intent: 'multumesc', patterns: [/(multumesc|mersi|thanks|thank you|apreciez)/], weight: 6 },
+  { intent: 'ajutor', patterns: [/(ajutor|help|comenzi disponibile|ce pot face)/], weight: 6 },
+  { intent: 'ce_poti', patterns: [/(ce poti|ce stii|ce faci|capabilitati|functii|cum ma poti ajuta)/], weight: 6 },
+  { intent: 'da', patterns: [/^(da|yes|yep|desigur|bineinteles|sigur|corect|exact)[\s!.]?$/], weight: 7 },
+  { intent: 'nu', patterns: [/^(nu|no|nope|negativ)[\s!.]?$/], weight: 7 },
+  { intent: 'gluma', patterns: [/(gluma|amuzant|fa-ma sa rad|spune-mi o gluma)/], weight: 5 },
+  { intent: 'motivatie', patterns: [/(motiveaza|motivatie|curaj|inspiratie|citat|incurajeaza)/], weight: 5 },
+  { intent: 'data_ora', patterns: [/(ce ora|ce data|azi e|astazi e|ce zi|ce an|ceasul|data de azi)/], weight: 7 },
+  { intent: 'matematica', patterns: [/(\d[\d\s]*[\+\-\*\/][\d\s]|\d+\s*(plus|minus|ori|impartit|radical|la puterea|procent))/], weight: 8 },
+  { intent: 'memorie_salveaza', patterns: [/(retine|memorizeaza|noteaza|tine minte|salveaza|aminteste-ti)/], weight: 7 },
+  { intent: 'memorie_citeste', patterns: [/(ce ai retinut|ce ti-am spus|afiseaza memoria|ce ai memorat|ce stii despre mine)/], weight: 7 },
+  { intent: 'memorie_sterge', patterns: [/(sterge (toata )?memoria|uita totul|reset(eaza)? memoria|curata memoria|sterge tot ce ai retinut)/], weight: 8 },
+  { intent: 'memorie_sterge_ieri', patterns: [/(sterge conversatia de ieri|uita ce am vorbit ieri|sterge mesajele de ieri)/], weight: 9 },
+  { intent: 'memorie_uita_specific', patterns: [/(uita ca|uita despre|sterge despre|nu mai retine|elimina din memorie|uita ce ti-am spus despre)/], weight: 9 },
+  { intent: 'folder_acorda_acces', patterns: [/(acorda acces|permite acces|deschide folder|acces la foldere|acceseaza folder)/], weight: 8 },
+  { intent: 'folder_listeaza', patterns: [/(ce fisiere ai|la ce foldere|ce foldere|listeaza folder|ce acces ai)/], weight: 8 },
+  { intent: 'folder_actualizeaza', patterns: [/(actualizeaza din foldere|re-scaneaza|scaneaza foldere|citeste folderele|actualizeaza memoria din foldere)/], weight: 8 },
+  { intent: 'documente_lista', patterns: [/(ce documente|ce fisiere|lista fisiere|documente incarcate)/], weight: 6 },
+  { intent: 'introducere_utilizator', patterns: [/(ma numesc|imi zice|cheama-ma|numele meu este|eu sunt|eu ma numesc)/], weight: 7 },
+  { intent: 'cmd_scriere', patterns: [/(^scrie(-mi)?|^redacteaza|^compune|^creeaza un (text|eseu|email|mesaj|scrisoare|poem|poezie|articol)|^fa-mi un (text|eseu|email)|^formuleaza)/], weight: 9 },
+  { intent: 'cmd_traducere', patterns: [/(^traduce|^translateaza|^in engleza|^in franceza|^in germana|^in spaniola|^cum se spune .* in|traduce asta|traducere din|translateaza asta)/], weight: 9 },
+  { intent: 'cmd_rezumat', patterns: [/(^rezuma|^fa(-mi)? un rezumat|^sumarizeaza|^pe scurt ce|^ce e esentialul|^sinteza|^scurteaza|^rezumatul)/], weight: 9 },
+  { intent: 'cmd_lista', patterns: [/(^listeaza|^da-mi o lista|^enumera|^fa(-mi)? o lista|^care sunt (toate|cele mai|principalele|top)|^top \d+|^primele \d+|^cele mai bune \d+)/], weight: 9 },
+  { intent: 'cmd_comparare', patterns: [/(^compara|^care e (diferenta|deosebirea)|^ce diferenta|avantaje.*dezavantaje|^versus|^vs\.?$|mai bun.*sau|.* vs .*)/], weight: 8 },
+  { intent: 'cmd_plan', patterns: [/(^fa(-mi)? un plan|^creeaza un plan|^planifica|^cum sa organizez|^pasi pentru|^ghid (pas cu pas|pentru)|^tutorial|^cum pot face|^cum sa fac)/], weight: 8 },
+  { intent: 'cmd_creatie', patterns: [/(^inventeaza|^imagineaza|^genereaza (o idee|idei|o poveste|o gluma|un dialog|un scenariu)|^creeaza (o poveste|un personaj|o lume)|^propune-mi|^sugereaza-mi ceva)/], weight: 8 },
+  { intent: 'cmd_cod', patterns: [
+      /(^scrie (un? )?(cod|functie|clasa|script|program|algoritm|aplicatie|api|server|bot|joc|calculator|site|pagina|componenta|modul|library|pachet)|^genereaza (cod|functia|clasa|scriptul|algoritmul)|^implementeaza|^fa-mi un script|^scrie-mi cod|^cod pentru|^program (in|care)|^fa (un program|o aplicatie|un script|o functie|un algoritm|o clasa|un api|un server|o baza de date|o interfata)|^creeaza (o aplicatie|un program|o baza|un api|un server|o pagina web|o interfata)|^ajuta-ma sa (codez|programez|scriu|implementez))/,
+      /(in python|in javascript|in typescript|in java|in c\+\+|in c#|in go|in rust|in php|in ruby|in bash|in html|in css|in sql|in kotlin|in swift)\s+(care|ce|sa|cu|pentru|care|scrie|fa|implementeaza|creeaza)/,
+    ], weight: 9 },
+  { intent: 'cmd_cod', patterns: [/(explica (codul|acest cod|algoritmul|functia|clasa)|debugeaza|optimizeaza (codul|functia|algoritmul)|refactorizeaza|ce face acest cod|cum functioneaza (codul|algoritmul|scriptul)|corecteaza (eroarea|bug-ul)|fix (bug|error|cod))/], weight: 8 },
+  { intent: 'definitie', patterns: [/(ce este|ce inseamna|defineste|ce reprezinta|explica-mi|spune-mi ce este|ce stii despre|vorbeste-mi despre|povesteste-mi despre|info despre|explica|informatii despre)/], weight: 5 },
+  { intent: 'opinie', patterns: [/(crezi|parerea ta|ce crezi|ce gandesti|opinia ta|cum vezi|ce zici despre|tu ce crezi|cum ti se pare)/], weight: 5 },
+  { intent: 'gandire_profunda', patterns: [/(de ce|cum functioneaza|care e sensul|exista|univers|viata|moarte|fericire|constiinta|timp|spatiu|gandire|minte|evolutie|liber arbitru|cum se explica|de unde vine|cum apare)/], weight: 4 },
+  { intent: 'sfat', patterns: [/(sfat|recomandare|ce sa fac|cum sa|sugestie|ma ajuti cu|ajuta-ma sa|cum pot|cum pot sa)/], weight: 4 },
+  { intent: 'matematica', patterns: [/(\d[\d\s]*[\+\-\*\/][\d\s]|\d+\s*(plus|minus|ori|impartit|radical|la puterea|procent|la patrat)|cat face|cat e|rezultatul|calculeaza)/], weight: 8 },
+];
+
+export interface IntentResult {
+  intent: Intent;
+  confidence: number; // 0-1
+}
+
+export function detectIntentWithConfidence(text: string): IntentResult {
+  const n = normalizeInput(text);
+
+  // Verificare directă pentru cuvinte cheie Groq
+  if (/(cauta online|gaseste pe net|verifica pe google|cautare online)/i.test(n)) {
+    return { intent: 'cmd_groq_direct', confidence: 0.95 };
+  }
+
+  let bestIntent: Intent = 'unknown';
+  let bestScore = 0;
+
+  for (const { intent, patterns, weight } of INTENT_PATTERNS) {
+    for (const rx of patterns) {
+      if (rx.test(n)) {
+        const matchLen = (n.match(rx)?.[0]?.length ?? 0) / n.length;
+        const score = weight * (1 + matchLen);
+        if (score > bestScore) { 
+          bestScore = score; 
+          bestIntent = intent; 
+        }
+        break;
+      }
+    }
+  }
+
+  // Calculăm confidence-ul bazat pe scorul maxim teoretic (~20)
+  const confidence = Math.min(0.99, bestScore / 18);
+
+  return { intent: bestIntent, confidence: bestIntent === 'unknown' ? 0 : confidence };
+}
+
+// ─── Pattern-uri Învățate (Persistence) ──────────────────────────────────────
+
+export interface LearnedPatterns {
+  topTopics: string[];
+  preferredStyle: string;
+  userInterests: string[];
+  lastSessionDate: number;
+}
+
+const PATTERNS_KEY = '@jarvis_learned_patterns';
+
+export async function saveLearnedPatterns(patterns: LearnedPatterns): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PATTERNS_KEY, JSON.stringify(patterns));
+  } catch {}
+}
+
+export async function loadLearnedPatterns(): Promise<LearnedPatterns | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PATTERNS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export function extractPatternsFromState(state: BrainState): LearnedPatterns {
+  const topics = Object.entries(state.selfKnowledge.topicFrequency)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([t]) => t);
+
+  return {
+    topTopics: topics,
+    preferredStyle: state.selfKnowledge.preferredStyle,
+    userInterests: state.entityTracker.entities
+      .filter(e => e.occurrences > 2)
+      .map(e => e.value),
+    lastSessionDate: Date.now(),
+  };
+}
 
 // ─── Matching semantic avansat în dicționar ──────────────────────────────────
 
@@ -377,120 +576,6 @@ function searchDictionary(text: string): string | null {
   return null;
 }
 
-// ─── Detectare intenție cu SISTEM DE SCORARE ─────────────────────────────────
-
-type Intent =
-  | 'salut' | 'ramas_bun' | 'multumesc' | 'ajutor' | 'ce_poti'
-  | 'identitate_jarvis' | 'da' | 'nu' | 'gluma' | 'motivatie' | 'sfat'
-  | 'data_ora' | 'matematica' | 'conversie_unitati'
-  | 'memorie_salveaza' | 'memorie_citeste' | 'memorie_sterge' | 'memorie_uita_specific' | 'memorie_sterge_ieri'
-  | 'folder_acorda_acces' | 'folder_listeaza' | 'folder_actualizeaza'
-  | 'documente_lista' | 'introducere_utilizator'
-  | 'creator_declare' | 'creator_verify' | 'raport_invatare'
-  | 'definitie' | 'opinie' | 'gandire_profunda'
-  | 'conversatie_anterioara' | 'entitate' | 'inferenta' | 'temporala'
-  | 'securitate' | 'constitutie' | 'follow_up' | 'cine_sunt_eu'
-  | 'cmd_scriere' | 'cmd_traducere' | 'cmd_rezumat' | 'cmd_lista'
-  | 'cmd_comparare' | 'cmd_plan' | 'cmd_creatie' | 'cmd_cod'
-  | 'cmd_groq_direct'
-  | 'unknown';
-
-export const COMMAND_INTENTS = new Set<Intent>([
-  'cmd_scriere', 'cmd_traducere', 'cmd_rezumat', 'cmd_lista',
-  'cmd_comparare', 'cmd_plan', 'cmd_creatie', 'cmd_cod',
-  'cmd_groq_direct',
-]);
-
-export function isCommandIntent(intent: string): boolean {
-  return COMMAND_INTENTS.has(intent as Intent);
-}
-
-interface IntentPattern {
-  intent: Intent;
-  patterns: RegExp[];
-  weight: number;
-  exclusive?: RegExp;
-}
-
-const INTENT_PATTERNS: IntentPattern[] = [
-  { intent: 'securitate', patterns: [/(raport securitate|securitatea mea|ai fost atacat|tentative de hack|evenimente securitate|cine a incercat|integritate sistem)/], weight: 10 },
-  { intent: 'constitutie', patterns: [/(constitutia ta|regulile tale|ce reguli ai|principiile tale|codul tau de legi|care sunt legile tale|arata-mi constitutia)/], weight: 10 },
-  { intent: 'creator_declare', patterns: [/(eu sunt creatorul|eu te-am creat|eu sunt cel care te-a creat|eu sunt stapanul|sunt creatorul tau|sunt programatorul tau|sunt cel care te-a facut)/], weight: 10 },
-  { intent: 'creator_verify', patterns: [/(cine te-a creat|cine e creatorul|cine te-a facut|cine esti proprietarul|cine te controleaza|de cine asculti|stapanul tau)/], weight: 10 },
-  { intent: 'cmd_groq_direct', patterns: [/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i], weight: 11 },
-  { intent: 'salut', patterns: [/(salut|buna|ciao|hei|servus|noroc|buna dimineata|buna ziua|buna seara|v salut|s-avem noroc|sa traiesti)/], weight: 10 },
-  { intent: 'ramas_bun', patterns: [/(pa|la revedere|noapte buna|pe curand|ne auzim|sa ne auzim cu bine|o zi buna|o seara placuta|drum bun)/], weight: 10 },
-  { intent: 'identitate_jarvis', patterns: [/(cum (te|il|va|iti) cheama|care (e|este) numele|ce nume (ai|are)|cum (te|iti) numesti|cine esti|prezinta-te|esti jarvis|ce esti tu)/], weight: 9 },
-  { intent: 'raport_invatare', patterns: [/(ce ai invatat|raport invatare|cum te-ai actualizat|versiunea inteligentei|ce ai retinut nou|progres invatare|cat de destept|ce stii acum|inteligenta versiunea)/], weight: 8 },
-  { intent: 'temporala', patterns: [/(azi|astazi|ieri|saptamana trecuta|luna trecuta|recent|ultima sesiune|de curand|ultima oara|sesiunea de)/], weight: 8 },
-  { intent: 'follow_up', patterns: [/^(si asta\??|dar asta\??|de ce asta\??|cum adica\??|adica ce\??|si\??|mai\??|continua\.?|mai departe\.?|ok dar|si totusi|spune.?mi mai mult|aprofundeaza|explica mai bine|da dar de ce|da si\??)$/], weight: 8 },
-  { intent: 'cine_sunt_eu', patterns: [/(cine sunt eu|ce stii despre mine|ce iti amintesti despre mine|ce ai retinut despre mine|ce stii despre utilizatorul tau|cu cine vorbesti|imi spui ce stii despre mine)/], weight: 9 },
-  { intent: 'conversie_unitati', patterns: [/(\d+(?:[.,]\d+)?)\s*(km|kilometri|km|metri?|cm|mm|kg|grame?|litri?|ml|ore?|minute?|secunde?|zile?|saptamani?|ani?)\s*(?:in|în|la|cat(?:i|e)?)\s*(km|kilometri|metri?|cm|mm|kg|grame?|litri?|ml|ore?|minute?|secunde?|zile?|saptamani?|ani?)/], weight: 9 },
-  { intent: 'conversatie_anterioara', patterns: [/(ce am zis|ce ti-am spus|ce am discutat|ce am vorbit|iti amintesti|iti mai amintesti|mai devreme|la inceput|inainte am|am mentionat|am spus|ai spus|ce ai raspuns|ce ai zis|anterior)/], weight: 8 },
-  { intent: 'entitate', patterns: [/(cine este|ce stii despre\s+[A-Z]|cine e|imi amintesti de|iti amintesti de|despre\s+[A-Z][a-z]+\s+ce|ce a zis\s+[A-Z])/], weight: 7 },
-  { intent: 'inferenta', patterns: [/(deci ce urmeaza|ce deduci|ce concluzie|care e concluzia|ce reiese|ce inseamna asta logic|demonstreaza|dovedeste)/], weight: 7 },
-  { intent: 'multumesc', patterns: [/(multumesc|mersi|thanks|thank you|apreciez)/], weight: 6 },
-  { intent: 'ajutor', patterns: [/(ajutor|help|comenzi disponibile|ce pot face)/], weight: 6 },
-  { intent: 'ce_poti', patterns: [/(ce poti|ce stii|ce faci|capabilitati|functii|cum ma poti ajuta)/], weight: 6 },
-  { intent: 'da', patterns: [/^(da|yes|yep|desigur|bineinteles|sigur|corect|exact)[\s!.]?$/], weight: 7 },
-  { intent: 'nu', patterns: [/^(nu|no|nope|negativ)[\s!.]?$/], weight: 7 },
-  { intent: 'gluma', patterns: [/(gluma|amuzant|fa-ma sa rad|spune-mi o gluma)/], weight: 5 },
-  { intent: 'motivatie', patterns: [/(motiveaza|motivatie|curaj|inspiratie|citat|incurajeaza)/], weight: 5 },
-  { intent: 'data_ora', patterns: [/(ce ora|ce data|azi e|astazi e|ce zi|ce an|ceasul|data de azi)/], weight: 7 },
-  { intent: 'matematica', patterns: [/(\d[\d\s]*[\+\-\*\/][\d\s]|\d+\s*(plus|minus|ori|impartit|radical|la puterea|procent))/], weight: 8 },
-  { intent: 'memorie_salveaza', patterns: [/(retine|memorizeaza|noteaza|tine minte|salveaza|aminteste-ti)/], weight: 7 },
-  { intent: 'memorie_citeste', patterns: [/(ce ai retinut|ce ti-am spus|afiseaza memoria|ce ai memorat|ce stii despre mine)/], weight: 7 },
-  { intent: 'memorie_sterge', patterns: [/(sterge (toata )?memoria|uita totul|reset(eaza)? memoria|curata memoria|sterge tot ce ai retinut)/], weight: 8 },
-  { intent: 'memorie_sterge_ieri', patterns: [/(sterge conversatia de ieri|uita ce am vorbit ieri|sterge mesajele de ieri)/], weight: 9 },
-  { intent: 'memorie_uita_specific', patterns: [/(uita ca|uita despre|sterge despre|nu mai retine|elimina din memorie|uita ce ti-am spus despre)/], weight: 9 },
-  { intent: 'folder_acorda_acces', patterns: [/(acorda acces|permite acces|deschide folder|acces la foldere|acceseaza folder)/], weight: 8 },
-  { intent: 'folder_listeaza', patterns: [/(ce fisiere ai|la ce foldere|ce foldere|listeaza folder|ce acces ai)/], weight: 8 },
-  { intent: 'folder_actualizeaza', patterns: [/(actualizeaza din foldere|re-scaneaza|scaneaza foldere|citeste folderele|actualizeaza memoria din foldere)/], weight: 8 },
-  { intent: 'documente_lista', patterns: [/(ce documente|ce fisiere|lista fisiere|documente incarcate)/], weight: 6 },
-  { intent: 'introducere_utilizator', patterns: [/(ma numesc|imi zice|cheama-ma|numele meu este|eu sunt|eu ma numesc)/], weight: 7 },
-  { intent: 'cmd_scriere', patterns: [/(^scrie(-mi)?|^redacteaza|^compune|^creeaza un (text|eseu|email|mesaj|scrisoare|poem|poezie|articol)|^fa-mi un (text|eseu|email)|^formuleaza)/], weight: 9 },
-  { intent: 'cmd_traducere', patterns: [/(^traduce|^translateaza|^in engleza|^in franceza|^in germana|^in spaniola|^cum se spune .* in|traduce asta|traducere din|translateaza asta)/], weight: 9 },
-  { intent: 'cmd_rezumat', patterns: [/(^rezuma|^fa(-mi)? un rezumat|^sumarizeaza|^pe scurt ce|^ce e esentialul|^sinteza|^scurteaza|^rezumatul)/], weight: 9 },
-  { intent: 'cmd_lista', patterns: [/(^listeaza|^da-mi o lista|^enumera|^fa(-mi)? o lista|^care sunt (toate|cele mai|principalele|top)|^top \d+|^primele \d+|^cele mai bune \d+)/], weight: 9 },
-  { intent: 'cmd_comparare', patterns: [/(^compara|^care e (diferenta|deosebirea)|^ce diferenta|avantaje.*dezavantaje|^versus|^vs\.?$|mai bun.*sau|.* vs .*)/], weight: 8 },
-  { intent: 'cmd_plan', patterns: [/(^fa(-mi)? un plan|^creeaza un plan|^planifica|^cum sa organizez|^pasi pentru|^ghid (pas cu pas|pentru)|^tutorial|^cum pot face|^cum sa fac)/], weight: 8 },
-  { intent: 'cmd_creatie', patterns: [/(^inventeaza|^imagineaza|^genereaza (o idee|idei|o poveste|o gluma|un dialog|un scenariu)|^creeaza (o poveste|un personaj|o lume)|^propune-mi|^sugereaza-mi ceva)/], weight: 8 },
-  { intent: 'cmd_cod', patterns: [
-      /(^scrie (un? )?(cod|functie|clasa|script|program|algoritm|aplicatie|api|server|bot|joc|calculator|site|pagina|componenta|modul|library|pachet)|^genereaza (cod|functia|clasa|scriptul|algoritmul)|^implementeaza|^fa-mi un script|^scrie-mi cod|^cod pentru|^program (in|care)|^fa (un program|o aplicatie|un script|o functie|un algoritm|o clasa|un api|un server|o baza de date|o interfata)|^creeaza (o aplicatie|un program|o baza|un api|un server|o pagina web|o interfata)|^ajuta-ma sa (codez|programez|scriu|implementez))/,
-      /(in python|in javascript|in typescript|in java|in c\+\+|in c#|in go|in rust|in php|in ruby|in bash|in html|in css|in sql|in kotlin|in swift)\s+(care|ce|sa|cu|pentru|care|scrie|fa|implementeaza|creeaza)/,
-    ], weight: 9 },
-  { intent: 'cmd_cod', patterns: [/(explica (codul|acest cod|algoritmul|functia|clasa)|debugeaza|optimizeaza (codul|functia|algoritmul)|refactorizeaza|ce face acest cod|cum functioneaza (codul|algoritmul|scriptul)|corecteaza (eroarea|bug-ul)|fix (bug|error|cod))/], weight: 8 },
-  { intent: 'definitie', patterns: [/(ce este|ce inseamna|defineste|ce reprezinta|explica-mi|spune-mi ce este|ce stii despre|vorbeste-mi despre|povesteste-mi despre|info despre|explica|informatii despre)/], weight: 5 },
-  { intent: 'opinie', patterns: [/(crezi|parerea ta|ce crezi|ce gandesti|opinia ta|cum vezi|ce zici despre|tu ce crezi|cum ti se pare)/], weight: 5 },
-  { intent: 'gandire_profunda', patterns: [/(de ce|cum functioneaza|care e sensul|exista|univers|viata|moarte|fericire|constiinta|timp|spatiu|gandire|minte|evolutie|liber arbitru|cum se explica|de unde vine|cum apare)/], weight: 4 },
-  { intent: 'sfat', patterns: [/(sfat|recomandare|ce sa fac|cum sa|sugestie|ma ajuti cu|ajuta-ma sa|cum pot|cum pot sa)/], weight: 4 },
-  { intent: 'matematica', patterns: [/(\d[\d\s]*[\+\-\*\/][\d\s]|\d+\s*(plus|minus|ori|impartit|radical|la puterea|procent|la patrat)|cat face|cat e|rezultatul|calculeaza)/], weight: 8 },
-];
-
-function detectIntent(text: string): Intent {
-  const n = norm(text);
-
-  // Verificare directă pentru cuvinte cheie Groq
-  if (/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i.test(n)) {
-    return 'cmd_groq_direct';
-  }
-
-  let bestIntent: Intent = 'unknown';
-  let bestScore = 0;
-
-  for (const { intent, patterns, weight } of INTENT_PATTERNS) {
-    for (const rx of patterns) {
-      if (rx.test(n)) {
-        const matchLen = (n.match(rx)?.[0]?.length ?? 0) / n.length;
-        const score = weight * (1 + matchLen);
-        if (score > bestScore) { bestScore = score; bestIntent = intent; }
-        break;
-      }
-    }
-  }
-  return bestIntent;
-}
-
 function handleMath(text: string): string | null {
   const n = norm(text);
   const patterns: [RegExp, (...a: number[]) => number | string][] = [
@@ -566,13 +651,14 @@ export function processMessage(
   state: BrainState,
   messageHistory: { role: string; content: string }[] = [],
 ): string {
-  const trimmed = text.trim();
+  const normalizedText = normalizeInput(text);
+  const trimmed = normalizedText.trim();
   if (!trimmed) return 'Spune ceva.';
 
   state.conversationCount++;
-  const intent = detectIntent(trimmed);
+  const { intent, confidence } = detectIntentWithConfidence(trimmed);
   (state as any).lastIntent = intent;
-  let response = '';
+  (state as any).lastConfidence = confidence;
 
   const constitutionCheck = checkMessage(trimmed, state.creatorId, state.isCreatorPresent, state.constitutionState);
   if (constitutionCheck.blocked) return constitutionCheck.response!;
@@ -602,7 +688,7 @@ export function processMessage(
     if (corrMatch) {
       const corrText = corrMatch[1].trim();
       addInferenceFact(state.inferenceEngine, corrText, 'user');
-      response = contradiction
+      const response = contradiction
         ? `${contradiction}\n\nAm actualizat: **"${corrText}"** ✅`
         : `Corecție reținută: **"${corrText}"**. Mulțumesc. ✅`;
       selfUpdate(trimmed, response, state.selfKnowledge, messageHistory, intent);
@@ -669,11 +755,6 @@ export function processMessage(
   const inference = inferAnswer(state.inferenceEngine, trimmed);
   if (inference) return inference;
 
-  // Dacă am ajuns aici și e o comandă de scriere/cod, returnăm un text care să forțeze fallback la LLM/Cloud
-  if (COMMAND_INTENTS.has(intent)) {
-    return `JARVIS_CMD:auto||${trimmed}`;
-  }
-
   // Mesaj final de fallback — va fi interceptat de BrainContext pentru Cloud/LLM
   return `JARVIS_CMD:auto||${trimmed}`;
 }
@@ -715,5 +796,6 @@ export function autoDetectFacts(userMessage: string): { fact: string; category: 
 }
 
 export function archiveCurrentSession(state: BrainState, messageCount: number): void {
-  // Logic for archiving session
+  const patterns = extractPatternsFromState(state);
+  saveLearnedPatterns(patterns).catch(() => {});
 }

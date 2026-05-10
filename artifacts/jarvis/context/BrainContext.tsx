@@ -45,7 +45,7 @@ import {
 import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, formatMemoriesForPrompt, type MemoryStore, type MemoryCategory } from '@/engine/memory';
 import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
-import { autoDetectFacts } from '@/engine/brain';
+import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
 
 interface BrainContextType {
@@ -187,8 +187,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           } catch {}
         }
 
-        // 7. Încarcă memoria JSON persistentă
+        // 7. Încarcă memoria JSON persistentă și pattern-urile învățate
         memoryRef.current = await loadMemory();
+        const patterns = await loadLearnedPatterns();
+        if (patterns) {
+          brainRef.current.learnedPatterns = patterns;
+        }
 
         // 8. Inițializează memoria pe fișiere (jarvis_memory/) + migrare one-time
         await initMemoryFolder();
@@ -203,10 +207,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         setDbReady(false);
         memoryRef.current = await loadMemory();
         try {
-          const [asMsgs, asState] = await Promise.all([
+          const [asMsgs, asState, asPatterns] = await Promise.all([
             AsyncStorage.getItem(MESSAGES_KEY),
             AsyncStorage.getItem(STATE_KEY),
+            loadLearnedPatterns(),
           ]);
+          if (asPatterns) brainRef.current.learnedPatterns = asPatterns;
           if (asState) {
             try {
               const parsed = migrateParsedState(JSON.parse(asState) as BrainState);
@@ -339,6 +345,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
 
+    let patternsCtx = '';
+    if (state.learnedPatterns) {
+      patternsCtx = `\n### PATTERN-URI ÎNVĂȚATE:\n` +
+        `- Topicuri preferate: ${state.learnedPatterns.topTopics.join(', ')}\n` +
+        `- Stil preferat: ${state.learnedPatterns.preferredStyle}\n` +
+        `- Interese: ${state.learnedPatterns.userInterests.join(', ')}\n`;
+    }
+
     const ctx: JarvisContext = {
       userName: state.userName || undefined,
       preferredStyle: state.selfKnowledge.preferredStyle,
@@ -349,7 +363,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       entities: state.entityTracker.entities.slice(-8).map(e => ({ value: e.value, relation: e.relation || '' })),
       recentTopics: state.lastTopics.slice(-5),
       conversationCount: state.conversationCount,
-      customContext: memoryContext, // Injectăm memoria aici
+      customContext: memoryContext + patternsCtx, // Injectăm memoria și pattern-urile
     };
     return buildRichSystemPrompt(ctx);
   }, []);
@@ -674,15 +688,26 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       // Persistează entitățile actualizate în SQLite (non-blocking)
       persistEntities(brainRef.current);
 
+      const confidence = (brainRef.current as any).lastConfidence ?? 1.0;
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response,
         timestamp: new Date(),
+        confidence,
       };
 
       setMessages(prev => {
-        const next = [...prev, aiMsg];
+        let next = [...prev, aiMsg];
+        // Dacă confidence-ul este scăzut (< 60%), adăugăm un mesaj special de tip survey
+        if (confidence < 0.6 && !response.includes('JARVIS_MEM_ACTION') && !response.includes('JARVIS_CMD')) {
+          next.push({
+            id: (Date.now() + 2).toString(),
+            role: 'survey',
+            content: 'Sondaj interactiv',
+            timestamp: new Date(),
+          });
+        }
         persist(next, brainRef.current).catch(() => {});
         return next;
       });

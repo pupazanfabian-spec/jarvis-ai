@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ChatBubble from '@/components/ChatBubble';
+import SurveyBubble from '@/components/SurveyBubble';
 import ThinkingIndicator from '@/components/ThinkingIndicator';
 import QuickActions from '@/components/QuickActions';
 import MemoryModal from '@/components/MemoryModal';
@@ -181,9 +182,12 @@ export default function ChatScreen() {
     setShowQuick(true);
   }, [clearConversation]);
 
-  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => (
-    <ChatBubble message={item} index={index} />
-  ), []);
+  const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
+    if (item.role === 'survey') {
+      return <SurveyBubble onSelect={(msg) => sendMessage(msg)} />;
+    }
+    return <ChatBubble message={item} index={index} />;
+  }, [sendMessage]);
 
   const keyExtractor = useCallback((item: Message, index: number) => `item-${index}`, []);
 
