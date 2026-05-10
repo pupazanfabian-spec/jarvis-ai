@@ -117,6 +117,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [dbReady, setDbReady] = useState(false);
   const [lastProvider, setLastProvider] = useState('Groq');
   const brainRef = useRef<BrainState>(createInitialBrainState());
+  const isProcessing = useRef(false);
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
   const memoryRef = useRef<MemoryStore>({ entries: [] });
   const loaded = useRef(false);
@@ -440,10 +441,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     return response;
   }, [dbReady, llmGenerate, llmStatus, wantsOnline, autoLearnFromWeb]);
 
-  // ─── sendMessage ──────────────────────────────────────────────────────────
-
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isThinking || webSearching) return;
+    if (!text.trim() || isProcessing.current) return;
+    isProcessing.current = true;
+    setIsThinking(true);
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -453,7 +454,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     };
 
     setMessages(prev => [...prev, userMsg]);
-    setIsThinking(true);
 
     try {
       await new Promise(r => setTimeout(r, 50));
@@ -462,6 +462,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       let currentMessages: Message[] = [];
       setMessages(prev => { currentMessages = prev; return prev; });
       const history = currentMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+
+      let response = '';
 
       // ─── Dev Mode Chain ────────────────────────────────────────────────────────
       if (isDevMode) {
@@ -522,6 +524,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   const providerName = cloudResult.provider === 'gemini' ? '✨ Gemini Dev' : '🤖 ChatGPT Dev';
                   devResponse = `${providerName}:\n\n${cloudResult.text}`;
                   autoLearnFromWeb(cloudResult.text, cloudResult.provider, text);
+                  setLastProvider(cloudResult.provider === 'gemini' ? 'Gemini' : 'ChatGPT');
                 }
               } catch { }
             }
@@ -529,168 +532,157 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             // Fallback offline pentru 'generate' fără template și fără AI
             if (!devResponse && devIntent === 'generate') {
               devResponse = `🔧 **Jarvis Dev — Mod Offline**\n\nAm detectat o cerere de generare cod pentru: **"${text.slice(0, 80)}"**\n\nÎn prezent nu am un template exact pentru această cerere și nu e configurat niciun provider AI.\n\n**Opțiuni:**\n• Conectează **Gemini** sau **ChatGPT** din setări (iconița 🔑) pentru generare cod complet\n• Încearcă formulări mai specifice:\n  — "generează app todo"\n  — "creează calculator"\n  — "scrie un timer app"\n  — "fă un QR scanner"\n  — "quiz app în React Native"\n  — "fitness tracker"\n\n**Template-uri disponibile offline:** todo, calculator, chat, notițe, weather, auth, API, landing, screen capture, QR scanner, timer, quiz, fitness tracker`;
+              setLastProvider('Local');
             }
           }
 
           if (devResponse) {
-            const aiMsg: Message = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: devResponse,
-              timestamp: new Date(),
-            };
-            setMessages(prev => {
-              const next = [...prev, aiMsg];
-              persist(next, brainRef.current).catch(() => {});
-              return next;
-            });
-            setIsThinking(false);
-            return;
+            response = devResponse;
           }
         }
       }
       // ─── End Dev Mode Chain ───────────────────────────────────────────────────
 
-      // Auto-detect fapte din mesajul utilizatorului și salvează în memorie (non-blocking)
-      const detectedFacts = autoDetectFacts(text);
-      if (detectedFacts.length > 0) {
-        let memUpdated = false;
-        detectedFacts.forEach(f => {
-          const updated = addMemoryEntry(memoryRef.current, f.fact, 'auto-detect', f.category);
-          if (updated !== memoryRef.current) {
-            memoryRef.current = updated;
-            memUpdated = true;
-          }
-          writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { });
-        });
-        if (memUpdated) saveMemory(memoryRef.current).catch(() => {});
-      }
+      if (!response) {
+        // Auto-detect fapte din mesajul utilizatorului și salvează în memorie (non-blocking)
+        const detectedFacts = autoDetectFacts(text);
+        if (detectedFacts.length > 0) {
+          let memUpdated = false;
+          detectedFacts.forEach(f => {
+            const updated = addMemoryEntry(memoryRef.current, f.fact, 'auto-detect', f.category);
+            if (updated !== memoryRef.current) {
+              memoryRef.current = updated;
+              memUpdated = true;
+            }
+            writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { });
+          });
+          if (memUpdated) saveMemory(memoryRef.current).catch(() => {});
+        }
 
-      let response = processMessage(text, brainRef.current, history);
-      const intent = (brainRef.current as any).lastIntent || 'unknown';
+        response = processMessage(text, brainRef.current, history);
+        const intent = (brainRef.current as any).lastIntent || 'unknown';
 
-      // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
-      if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
-        const isMem = response.startsWith('JARVIS_MEM_ACTION:');
-        const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
-        const [action, payload] = fullAction.split('||');
+        // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
+        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
+          const isMem = response.startsWith('JARVIS_MEM_ACTION:');
+          const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
+          const [action, payload] = fullAction.split('||');
 
-        if (isMem) {
-          if (action === 'salveaza') {
-            await writeMemoryEntry(payload, 'user', 'manual');
-            response = `Am memorat: **"${payload}"** 💾`;
-          } else if (action === 'citeste') {
-            const stats = getMemoryStats();
-            const items = listAllMemories();
-            response = `🧠 **Memoria mea (${stats.total} însemnări):**\n\n` +
-              (items.length > 0 ? items.map(m => `• ${m.fact}`).join('\n') : 'Nu am nicio însemnare memorată încă.');
-          } else if (action === 'sterge_tot') {
-            await clearAllMemory();
-            response = 'Am șters întreaga memorie persistentă. 🧼';
-          } else if (action === 'uita_specific') {
-            const deletedCount = await deleteMemoryByKeyword(payload);
-            response = deletedCount > 0
-              ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
-              : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
-          }
-        } else {
-          if (action === 'acorda_acces') {
-            const granted = await requestFolderAccess();
-            response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
-          } else if (action === 'listeaza') {
-            const folders = await getExternalFolders();
-            response = folders.length > 0
-              ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
-              : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
-          } else if (action === 'actualizeaza') {
-            const count = await scanAllFolders();
-            response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+          if (isMem) {
+            if (action === 'salveaza') {
+              await writeMemoryEntry(payload, 'user', 'manual');
+              response = `Am memorat: **"${payload}"** 💾`;
+            } else if (action === 'citeste') {
+              const stats = getMemoryStats();
+              const items = listAllMemories();
+              response = `🧠 **Memoria mea (${stats.total} însemnări):**\n\n` +
+                (items.length > 0 ? items.map(m => `• ${m.fact}`).join('\n') : 'Nu am nicio însemnare memorată încă.');
+            } else if (action === 'sterge_tot') {
+              await clearAllMemory();
+              response = 'Am șters întreaga memorie persistentă. 🧼';
+            } else if (action === 'uita_specific') {
+              const deletedCount = await deleteMemoryByKeyword(payload);
+              response = deletedCount > 0
+                ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
+                : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
+            }
+          } else {
+            if (action === 'acorda_acces') {
+              const granted = await requestFolderAccess();
+              response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
+            } else if (action === 'listeaza') {
+              const folders = await getExternalFolders();
+              response = folders.length > 0
+                ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
+                : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
+            } else if (action === 'actualizeaza') {
+              const count = await scanAllFolders();
+              response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+            }
           }
         }
-      }
 
-      // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
-      if (response.startsWith('JARVIS_CMD:')) {
-        const parts = response.slice('JARVIS_CMD:'.length).split('||');
-        const cmdLabel = parts[0] ?? 'comandă';
-        const cmdOriginal = parts[1] ?? text;
+        // ── Comandă imperativă → direct la Cloud AI ────────────────────────────────
+        if (response.startsWith('JARVIS_CMD:')) {
+          const parts = response.slice('JARVIS_CMD:'.length).split('||');
+          const cmdLabel = parts[0] ?? 'comandă';
+          const cmdOriginal = parts[1] ?? text;
 
-        // Forțăm Groq dacă este cerut explicit
-        const forceGroq = cmdLabel === 'groq' && aiProvider.settings.groqKey;
+          // Forțăm Groq dacă este cerut explicit
+          const forceGroq = cmdLabel === 'groq' && aiProvider.settings.groqKey;
 
-        if (aiProvider.settings.activeProvider !== 'none' || forceGroq) {
+          if (aiProvider.settings.activeProvider !== 'none' || forceGroq) {
+            try {
+              const assistantId = (Date.now() + 1).toString();
+              setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
+
+              // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
+              const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
+
+              const aiResult = await aiProvider.generateStream(cmdOriginal, (chunk) => {
+                setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
+              }, buildCloudCtx(text), (history as any).slice(-20), finalIntent);
+
+              if (aiResult) {
+                response = aiResult.text.trim();
+                autoLearnFromCloud(aiResult).catch(() => {});
+                
+                const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
+                setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
+              } else {
+                response = `⚠️ Provider AI nu răspunde. Verifică cheia API și conexiunea la internet.`;
+                setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+                setLastProvider('Eroare');
+              }
+            } catch (err) {
+              response = `⚠️ Eroare la executarea comenzii "${cmdLabel}". Verifică conexiunea și cheia API.`;
+              setLastProvider('Eroare');
+            }
+          } else {
+            response = `Activează **Gemini** sau **ChatGPT** din meniul ⚙️ pentru a putea folosi comenzi AI avansate (${cmdLabel}).`;
+            setLastProvider('Local');
+          }
+        }
+
+        // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
+        else if (aiProvider.settings.activeProvider !== 'none') {
+          let aiSuccess = false;
           try {
             const assistantId = (Date.now() + 1).toString();
             setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
 
-            // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
-            const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
-
-            const aiResult = await aiProvider.generateStream(cmdOriginal, (chunk) => {
+            const aiResult = await aiProvider.generateStream(text, (chunk) => {
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-            }, buildCloudCtx(text), (history as any).slice(-20), finalIntent);
+            }, buildCloudCtx(text), (history as any).slice(-20), intent);
 
-            if (aiResult) {
+            if (aiResult?.text) {
               response = aiResult.text.trim();
               autoLearnFromCloud(aiResult).catch(() => {});
+              aiSuccess = true;
               
               const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
               setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
-              
-              // Continuăm la finalul funcției pentru persistență și survey
             } else {
-              response = `⚠️ Provider AI nu răspunde. Verifică cheia API și conexiunea la internet.`;
-              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
-              setLastProvider('Eroare');
+              // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
+              setMessages(prev => prev.filter(m => m.id !== assistantId));
             }
           } catch (err) {
-            response = `⚠️ Eroare la executarea comenzii "${cmdLabel}". Verifică conexiunea și cheia API.`;
-            setLastProvider('Eroare');
+            if (__DEV__) console.warn('[BrainContext] Cloud AI failed:', err);
           }
-        } else {
-          response = `Activează **Gemini** sau **ChatGPT** din meniul ⚙️ pentru a putea folosi comenzi AI avansate (${cmdLabel}).`;
-          setLastProvider('Local');
-        }
-      }
 
-      // ── Cloud AI PRIMAR: când e activ, răspunde el la ORICE întrebare ──────────
-      else if (aiProvider.settings.activeProvider !== 'none') {
-        let aiSuccess = false;
-        try {
-          const assistantId = (Date.now() + 1).toString();
-          setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
-
-          const aiResult = await aiProvider.generateStream(text, (chunk) => {
-            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-          }, buildCloudCtx(text), (history as any).slice(-20), intent);
-
-          if (aiResult?.text) {
-            response = aiResult.text.trim();
-            autoLearnFromCloud(aiResult).catch(() => {});
-            aiSuccess = true;
-            
-            const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
-            setLastProvider(pName === 'Openrouter' ? 'OpenRouter' : (pName === 'Openai' ? 'ChatGPT' : pName));
-          } else {
-            // Eliminăm mesajul gol de asistent dacă provider-ul a eșuat
-            setMessages(prev => prev.filter(m => m.id !== assistantId));
+          if (!aiSuccess) {
+            // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
+            if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
+            response = await _handleOfflineFallback(text, (history as any), intent);
+            setLastProvider('Local');
           }
-        } catch (err) {
-          if (__DEV__) console.warn('[BrainContext] Cloud AI failed:', err);
         }
 
-        if (!aiSuccess) {
-          // Dacă AI Cloud a eșuat, continuăm cu Fallback Offline (Local)
-          if (__DEV__) console.log('[BrainContext] Cloud AI failed or returned empty, falling back to local...');
+        // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
+        else {
           response = await _handleOfflineFallback(text, (history as any), intent);
           setLastProvider('Local');
         }
-      }
-
-      // ── Fallback offline (când Cloud AI e dezactivat) ─────────────────────────
-      else {
-        response = await _handleOfflineFallback(text, (history as any), intent);
-        setLastProvider('Local');
       }
 
       setBrainState({ ...brainRef.current });
@@ -699,16 +691,33 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       persistEntities(brainRef.current);
 
       const confidence = (brainRef.current as any).lastConfidence ?? 1.0;
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-        confidence,
-      };
-
+      
+      // Dacă am afișat deja mesajul asistentului prin streaming (Cloud AI), nu-l mai adăugăm
+      // Altfel (offline/local/dev), îl adăugăm acum
       setMessages(prev => {
-        let next = [...prev, aiMsg];
+        const lastMsg = prev[prev.length - 1];
+        let next = prev;
+        
+        // Dacă ultimul mesaj nu este asistent sau este gol (posibil de la streaming), 
+        // ne asigurăm că avem un mesaj valid
+        if (lastMsg.role !== 'assistant' || (lastMsg.role === 'assistant' && lastMsg.content === '')) {
+          const aiMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: response,
+            timestamp: new Date(),
+            confidence,
+          };
+          if (lastMsg.role === 'assistant' && lastMsg.content === '') {
+             next = [...prev.slice(0, -1), aiMsg];
+          } else {
+             next = [...prev, aiMsg];
+          }
+        } else if (lastMsg.role === 'assistant') {
+          // Actualizăm doar confidence pentru mesajul de streaming existent
+          next = prev.map(m => m.id === lastMsg.id ? { ...m, confidence } : m);
+        }
+
         // Dacă confidence-ul este scăzut (< 60%), adăugăm un mesaj special de tip survey
         if (confidence < 0.6 && !response.includes('JARVIS_MEM_ACTION') && !response.includes('JARVIS_CMD')) {
           next.push({
@@ -723,9 +732,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (err) {
       if (__DEV__) console.warn('[BrainContext] sendMessage failed:', err);
-      // Optional: add an error message to chat
     } finally {
       setIsThinking(false);
+      isProcessing.current = false;
     }
   }, [persist, isThinking, webSearching, llmStatus, llmGenerate, aiProvider, autoLearnFromWeb, persistEntities, dbReady, isDevMode, refreshProject, wantsOnline, buildCloudCtx, autoLearnFromCloud, _handleOfflineFallback]);
 
