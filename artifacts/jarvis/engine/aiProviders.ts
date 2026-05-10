@@ -399,8 +399,9 @@ export async function testGroqKeyDetailed(apiKey: string): Promise<{ ok: boolean
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-  'google/gemma-2-9b-it:free',
+  'openai/gpt-oss-120b:free',
+  'qwen/qwen3-coder:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
 ];
 
 export async function callOpenRouter(
