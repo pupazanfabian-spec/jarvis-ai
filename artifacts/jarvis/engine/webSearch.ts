@@ -145,10 +145,11 @@ const ONLINE_TRIGGERS = [
   'caută online', 'cauta online', 'cauta pe internet', 'caută pe internet',
   'cauta pe net', 'caută pe net', 'găsește online', 'gaseste online',
   'ce zice internetul', 'ce stie internetul', 'ce știe internetul',
-  'cauta informatii', 'caută informații', 'cauta informatii',
-  'cauta pe google', 'caută pe google', 'intreaba internetul',
-  'întreabă internetul', 'cauta acum', 'caută acum',
-  'vrau sa stiu despre', 'vreau sa aflu despre', 'cauta pe net despre',
+  'cauta informatii', 'caută informații', 'cauta pe google',
+  'caută pe google', 'intreaba internetul', 'întreabă internetul',
+  'cauta acum', 'caută acum', 'vrau sa stiu despre', 'vreau sa aflu despre',
+  'cauta pe net despre', 'gaseste info despre', 'verifica pe google',
+  'cauta informatii recente despre', 'vezi ce se zice despre',
 ];
 
 export function isOnlineIntent(text: string): boolean {
@@ -160,7 +161,10 @@ export function extractSearchQuery(text: string): string {
   let query = text.toLowerCase();
   
   // Eliminăm prefixe de tip "ce este", "cine e" dacă nu sunt urmate de triggers
-  const prefixes = ['ce este ', 'ce e ', 'cine este ', 'cine e ', 'unde se afla ', 'unde e ', 'spune-mi despre '];
+  const prefixes = [
+    'ce este ', 'ce e ', 'cine este ', 'cine e ', 'unde se afla ', 
+    'unde e ', 'spune-mi despre ', 'da-mi detalii despre ', 'stii ceva despre '
+  ];
   for (const p of prefixes) {
     if (query.startsWith(p)) {
       query = query.slice(p.length);
@@ -177,7 +181,7 @@ export function extractSearchQuery(text: string): string {
 
   query = query.replace(/[?!.,;:]+$/, '').trim();
   // Eliminăm articole inutile la începutul query-ului extras
-  query = query.replace(/^(un|o|al|a|lui|ei|cel|cea|despre|legat de)\s+/i, '');
+  query = query.replace(/^(un|o|al|a|lui|ei|cel|cea|despre|legat de|referitor la|privind)\s+/i, '');
 
   return query.length > 2 ? query : text;
 }

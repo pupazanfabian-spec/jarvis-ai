@@ -322,7 +322,7 @@ export default function ChatScreen() {
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'
                 : aiProviderSettings.activeProvider !== 'none'
-                  ? `✨ ${lastProvider} • Hibrid`
+                  ? `${lastProvider.includes('OpenRouter') ? '🌐' : lastProvider.includes('Local') ? '🤖' : lastProvider.includes('ChatGPT') ? '🤖' : lastProvider.includes('Gemini') ? '✨' : '✨'} ${lastProvider} • Hibrid`
                   : docCount > 0
                     ? `${docCount} doc. • Fără net`
                     : `v3.2 • Fără net`}

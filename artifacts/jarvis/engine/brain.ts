@@ -283,19 +283,51 @@ const VOCAB_MAP: Record<string, string> = {
   'cum-i': 'cum este',
   'm-am': 'ma am',
   's-a': 'se a',
+  'v-a': 'va a',
+  'i-a': 'i-a',
+  'l-a': 'l-a',
+  'n-a': 'nu a',
+  'daca-i': 'daca este',
+  'ca-i': 'ca este',
+  'nu-i': 'nu este',
+  'n-ai': 'nu ai',
+  'n-am': 'nu am',
+  'n-avem': 'nu avem',
+  'n-aveti': 'nu aveti',
+  'n-au': 'nu au',
+  'vr-o': 'vreo',
+  'intr-o': 'intr-o',
+  'intr-un': 'intr-un',
+  'vrau': 'vreau',
+  'stiu': 'stiu',
+  'trb': 'trebuie',
+  'cnv': 'cineva',
+  'cv': 'ceva',
+  'dak': 'daca',
+  'ink': 'inca',
+  'sh': 'si',
+  'tz': 't',
 };
 
 export function normalizeInput(text: string): string {
   let normalized = text.toLowerCase().trim();
   
-  // Corecții preliminare pentru scriere neglijentă (fără cratimă)
+  // Corecții preliminare pentru scriere neglijentă (fără cratimă sau cu litere greșite)
   normalized = normalized.replace(/\b(mi-a|mi-ai|mi-au|ti-a|ti-ai|ti-au|si-a|si-au|i-a|i-au|ne-a|ne-au|v-a|v-au|l-a|l-au|o-a|i-a)\b/g, (m) => m.replace('-', ' '));
+  normalized = normalized.replace(/\btz\b/g, 't');
+  normalized = normalized.replace(/\bsh\b/g, 'si');
 
   // Înlocuim abrevierile comune și formele scurte
   Object.entries(VOCAB_MAP).forEach(([short, long]) => {
-    const regex = new RegExp(`\\b${short}\\b`, 'g');
+    const regex = new RegExp(`\\b${short.replace('-', '\\-')}\\b`, 'g');
     normalized = normalized.replace(regex, long);
   });
+
+  // Corecție automată întrebări comune greșite
+  normalized = normalized.replace(/ce stii sa faci/g, 'ce poti face');
+  normalized = normalized.replace(/cum te cheama/g, 'care este numele tau');
+  normalized = normalized.replace(/cine te-a facut/g, 'cine te-a creat');
+  normalized = normalized.replace(/ce e aia/g, 'ce este');
 
   // Înlăturăm semnele de punctuație repetitive sau inutile la final pentru potrivire pattern
   normalized = normalized.replace(/[?!.]+$/, '');

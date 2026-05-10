@@ -193,15 +193,20 @@ function buildFollowUp(topicCategory: string, questionType: QuestionType): strin
 
 function buildIllustration(topicCategory: string): string {
   const illustrations: Record<string, string> = {
-    stiinta: '\n\n🧪 **Experiment/Ilustrație:**\n| Componentă | Rol | Efect |\n| :--- | :--- | :--- |\n| Input | Energie/Materie | Transformare |\n| Proces | Reacție Chimică | Evoluție |\n| Output | Produs Final | Echilibru |',
-    tehnologie: '\n\n💻 **Exemplu de implementare:**\n```javascript\n// Conceptul aplicat în cod\nfunction applyLogic(input) {\n  return process(input); \n}\n```',
-    economie: '\n\n💰 **Impact economic:**\n• 📉 **Scădere:** Când oferta depășește cererea.\n• 📈 **Creștere:** Când investițiile produc valoare adăugată.\n• ⚖️ **Echilibru:** Punctul optim de piață.',
-    medicina: '\n\n🩺 **Notă importantă:**\n> Acest concept medical este crucial pentru înțelegerea funcționării organismului. Consultă întotdeauna un specialist pentru diagnostic.',
+    stiinta: '\n\n🧪 **Analiză Științifică:**\n| Fază | Acțiune | Rezultat |\n| :--- | :--- | :--- |\n| Observație | Monitorizare date | Ipoteză |\n| Experiment | Testare variabile | Validare |\n| Concluzie | Sinteză legi | Cunoaștere |',
+    tehnologie: '\n\n💻 **Logica sistemului:**\n```typescript\n// Exemplu de structură conceptuală\ninterface SystemNode {\n  input: any;\n  process: (d: any) => Result;\n  output: Result;\n}\n```',
+    economie: '\n\n💰 **Mecanism Economic:**\n• 💹 **Cerere:** Dorința de achiziție la un preț dat.\n• 📦 **Ofertă:** Cantitatea disponibilă pentru piață.\n• ⚖️ **Echilibru:** Intersecția optimă a valorii.',
+    medicina: '\n\n🩺 **Perspectivă Biologică:**\n> 💡 *Sistemul biologic funcționează ca un mecanism complex de autoreglare (homeostazie).*',
+    istorie: '\n\n⏳ **Axă Temporală:**\n`Cauză` ──▶ `Eveniment Cheie` ──▶ `Consecințe` \n*(Acest flux marchează trecerea de la context la impact istoric.)*',
+    geografie: '\n\n🌍 **Sinteză Regională:**\n• 🏔️ **Cadru Natural:** Relief și resurse.\n• 🏙️ **Cadru Uman:** Populație și așezări.\n• 🌦️ **Climat:** Factori meteorologici definitorii.',
+    psihologie: '\n\n🧠 **Proces Cognitiv:**\n1️⃣ **Stimul** (Extern/Intern)\n2️⃣ **Procesare** (Percepție/Gândire)\n3️⃣ **Reacție** (Emoție/Comportament)',
+    biologie: '\n\n🌿 **Sistem Vital:**\n`Organism` > `Sisteme` > `Organe` > `Țesuturi` > `Celule`',
   };
 
   const category = Object.keys(illustrations).find(k => topicCategory.includes(k));
   return category ? illustrations[category] : '';
 }
+
 
 // ─── Funcția principală — sinteză răspuns natural ─────────────────────────────
 export function synthesizeKnowledgeResponse(
