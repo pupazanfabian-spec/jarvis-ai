@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   container: {
     height: '80%',
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,

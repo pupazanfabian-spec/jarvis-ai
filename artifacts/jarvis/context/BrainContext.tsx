@@ -362,7 +362,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       topTopics: Object.entries(state.selfKnowledge.topicFrequency)
         .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
       learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
-      inferenceRules: state.inferenceEngine.rules.slice(-5).map(r => r.if + ' -> ' + r.then),
+      inferenceRules: (state.inferenceEngine as any).rules.slice(-5).map((r: any) => r.if + ' -> ' + r.then),
       entities: state.entityTracker.entities.slice(-8).map(e => ({ value: e.value, relation: e.relation || '' })),
       recentTopics: state.lastTopics.slice(-5),
       conversationCount: state.conversationCount,
@@ -592,7 +592,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               memoryRef.current = updated;
               memUpdated = true;
             }
-            writeMemoryEntry(f.fact, 'auto-detect', f.category).catch(() => { });
+            writeMemoryEntry(f.fact, 'auto-detect', f.category as any).catch(() => { });
           });
           if (memUpdated) saveMemory(memoryRef.current).catch(() => {});
         }
@@ -608,7 +608,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
           if (isMem) {
             if (action === 'salveaza') {
-              await writeMemoryEntry(payload, 'user', 'manual');
+              await writeMemoryEntry(payload, 'user', 'manual' as any);
               response = `Am memorat: **"${payload}"** 💾`;
             } else if (action === 'citeste') {
               const stats = getMemoryStats();
@@ -631,7 +631,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             } else if (action === 'listeaza') {
               const folders = await getExternalFolders();
               response = folders.length > 0
-                ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.path})`).join('\n')}`
+                ? `📂 **Foldere accesibile:**\n\n${folders.map(f => `• ${f.name} (${f.uri})`).join('\n')}`
                 : 'Nu am acces la niciun folder extern încă. Folosește "acordă acces" pentru a adăuga unul.';
             } else if (action === 'actualizeaza') {
               const count = await scanAllFolders();
@@ -738,7 +738,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         
         // Dacă ultimul mesaj nu este asistent sau este gol (posibil de la streaming), 
         // ne asigurăm că avem un mesaj valid
-        if (lastMsg.role !== 'assistant' || (lastMsg.role === 'assistant' && lastMsg.content === '')) {
+        if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg.role === 'assistant' && lastMsg.content === '')) {
           const aiMsg: Message = {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
@@ -746,7 +746,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             timestamp: new Date(),
             confidence,
           };
-          if (lastMsg.role === 'assistant' && lastMsg.content === '') {
+          if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === '') {
              next = [...prev.slice(0, -1), aiMsg];
           } else {
              next = [...prev, aiMsg];

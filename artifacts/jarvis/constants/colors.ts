@@ -23,6 +23,16 @@ const colors = {
   glow: 'rgba(108, 99, 255, 0.15)',
   glowStrong: 'rgba(108, 99, 255, 0.3)',
   glowAccent: 'rgba(0, 212, 255, 0.1)',
+  
+  // Gradients
+  userGradient: ['#6C63FF', '#8B84FF'] as const,
+  aiGradient: ['#1A1A28', '#22223A'] as const,
+  aiGradientGlow: ['#1A1A28', '#2A2A40'] as const,
+  
+  // Glassmorphism
+  glassBackground: 'rgba(18, 18, 26, 0.8)',
+  glassBorder: 'rgba(255, 255, 255, 0.1)',
+  glassBorderStrong: 'rgba(255, 255, 255, 0.2)',
 };
 
 export default {

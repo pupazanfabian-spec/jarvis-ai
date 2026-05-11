@@ -35,6 +35,7 @@ export interface Project {
 export async function initProjectTables(): Promise<void> {
   try {
     const db = await getDB();
+    if (!db) return;
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS dev_projects (
         id TEXT PRIMARY KEY,
@@ -75,21 +76,28 @@ export async function createProject(name: string, stack: string, description: st
   const db = await getDB();
   const id = `proj_${Date.now()}`;
   const now = Date.now();
+  const fallback = { id, name, stack, description, createdAt: now, updatedAt: now, steps: [], files: [], isActive: true };
+  if (!db) return fallback;
 
-  // Dezactivează toate proiectele existente
-  await db.runAsync('UPDATE dev_projects SET is_active = 0');
+  try {
+    // Dezactivează toate proiectele existente
+    await db.runAsync('UPDATE dev_projects SET is_active = 0');
 
-  await db.runAsync(
-    'INSERT INTO dev_projects (id, name, stack, description, created_at, updated_at, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
-    [id, name, stack, description, now, now],
-  );
+    await db.runAsync(
+      'INSERT INTO dev_projects (id, name, stack, description, created_at, updated_at, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
+      [id, name, stack, description, now, now],
+    );
+  } catch {
+    return fallback;
+  }
 
-  return { id, name, stack, description, createdAt: now, updatedAt: now, steps: [], files: [], isActive: true };
+  return fallback;
 }
 
 export async function getActiveProject(): Promise<Project | null> {
   try {
     const db = await getDB();
+    if (!db) return null;
     const row = await db.getFirstAsync<{
       id: string; name: string; stack: string; description: string;
       created_at: number; updated_at: number;
@@ -134,6 +142,7 @@ export async function getActiveProject(): Promise<Project | null> {
 export async function getAllProjects(): Promise<Project[]> {
   try {
     const db = await getDB();
+    if (!db) return [];
     const rows = await db.getAllAsync<{
       id: string; name: string; stack: string; description: string;
       created_at: number; updated_at: number; is_active: number;
@@ -158,6 +167,7 @@ export async function getAllProjects(): Promise<Project[]> {
 export async function setActiveProject(projectId: string): Promise<void> {
   try {
     const db = await getDB();
+    if (!db) return;
     await db.runAsync('UPDATE dev_projects SET is_active = 0');
     await db.runAsync('UPDATE dev_projects SET is_active = 1, updated_at = ? WHERE id = ?', [Date.now(), projectId]);
   } catch {}
@@ -169,17 +179,25 @@ export async function addProjectStep(projectId: string, description: string): Pr
   const db = await getDB();
   const id = `step_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const now = Date.now();
-  await db.runAsync(
-    'INSERT INTO project_steps (id, project_id, description, status, created_at) VALUES (?, ?, ?, "planned", ?)',
-    [id, projectId, description, now],
-  );
-  await db.runAsync('UPDATE dev_projects SET updated_at = ? WHERE id = ?', [now, projectId]);
-  return { id, description, status: 'planned', createdAt: now };
+  const fallback = { id, description, status: 'planned' as const, createdAt: now };
+  if (!db) return fallback;
+
+  try {
+    await db.runAsync(
+      'INSERT INTO project_steps (id, project_id, description, status, created_at) VALUES (?, ?, ?, "planned", ?)',
+      [id, projectId, description, now],
+    );
+    await db.runAsync('UPDATE dev_projects SET updated_at = ? WHERE id = ?', [now, projectId]);
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 
 export async function updateStepStatus(stepId: string, status: ProjectStep['status']): Promise<void> {
   try {
     const db = await getDB();
+    if (!db) return;
     const completedAt = status === 'completed' ? Date.now() : null;
     await db.runAsync(
       'UPDATE project_steps SET status = ?, completed_at = ? WHERE id = ?',
@@ -193,6 +211,7 @@ export async function updateStepStatus(stepId: string, status: ProjectStep['stat
 export async function saveProjectFile(projectId: string, path: string, language: string, content: string): Promise<void> {
   try {
     const db = await getDB();
+    if (!db) return;
     const id = `file_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const now = Date.now();
 

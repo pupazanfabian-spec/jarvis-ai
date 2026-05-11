@@ -1,9 +1,11 @@
 
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   Animated, Clipboard, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system/legacy';
 const { writeAsStringAsync, documentDirectory } = FileSystem;
 import * as Sharing from 'expo-sharing';
@@ -556,6 +558,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const isUser = message?.role === 'user';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [menuVisible, setMenuVisible] = useState(false);
   const [copied, setCopiedMsg] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
@@ -564,13 +567,16 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
-        toValue: 1, duration: 300, useNativeDriver: true,
+        toValue: 1, duration: 400, useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
-        toValue: 0, tension: 80, friction: 12, useNativeDriver: true,
+        toValue: 0, tension: 100, friction: 10, useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1, tension: 100, friction: 10, useNativeDriver: true,
       }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, [fadeAnim, slideAnim, scaleAnim]);
 
   const timestamp = message?.timestamp instanceof Date ? message.timestamp : new Date(message?.timestamp || Date.now());
   const timeStr = timestamp.toLocaleTimeString('ro-RO', {
@@ -613,6 +619,44 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
     }
   };
 
+  const BubbleWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
+    if (isUser) {
+      return (
+        <LinearGradient
+          colors={['#6366f1', '#818cf8']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.bubble,
+            styles.userBubble,
+          ]}
+        >
+          {children}
+        </LinearGradient>
+      );
+    }
+
+    return (
+      <View style={[styles.aiBubbleWrapper, hasCode && styles.codeBubbleWrapper]}>
+        <LinearGradient
+          colors={['#1f2937', '#374151']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.bubble,
+            styles.aiBubble,
+            hasCode && styles.codeBubble,
+          ]}
+        >
+          {Platform.OS === 'ios' && (
+            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          {children}
+        </LinearGradient>
+      </View>
+    );
+  }, [isUser, hasCode]);
+
   return (
     <>
       <MessageContextMenu
@@ -625,7 +669,13 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
         style={[
           styles.container,
           isUser ? styles.userContainer : styles.aiContainer,
-          { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
+          { 
+            opacity: fadeAnim, 
+            transform: [
+              { translateY: slideAnim },
+              { scale: scaleAnim }
+            ] 
+          },
         ]}
       >
         {!isUser && (
@@ -638,11 +688,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
           onLongPress={handleLongPress}
           delayLongPress={400}
         >
-          <View style={[
-            styles.bubble,
-            isUser ? styles.userBubble : styles.aiBubble,
-            hasCode && !isUser && styles.codeBubble,
-          ]}>
+          <BubbleWrapper>
             <MarkdownContent text={message.content} isUser={isUser} />
             <View style={styles.footer}>
               <Text style={[styles.time, isUser ? styles.userTime : styles.aiTime]}>
@@ -652,9 +698,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
                 <Text style={styles.copiedLabel}>✓ Copiat</Text>
               )}
             </View>
-          </View>
-          {isUser && <View style={styles.userTail} />}
-          {!isUser && <View style={styles.aiTail} />}
+          </BubbleWrapper>
         </TouchableOpacity>
       </Animated.View>
       <FeedbackToast visible={showCopyToast} icon="check-circle" label="Copiat!" color={colors.success} />
@@ -709,60 +753,50 @@ const menuStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row', marginVertical: 4, paddingHorizontal: 12, alignItems: 'flex-end',
+    flexDirection: 'row', marginVertical: 6, paddingHorizontal: 12, alignItems: 'flex-end',
   },
   userContainer: { justifyContent: 'flex-end' },
   aiContainer: { justifyContent: 'flex-start' },
   avatar: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
-    marginRight: 8, marginBottom: 4,
+    marginRight: 8, marginBottom: 2,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   avatarText: { color: '#fff', fontSize: 14, fontFamily: 'Inter_700Bold' },
   bubble: {
-    maxWidth: Dimensions.get('window').width * 0.85, borderRadius: 18, paddingHorizontal: 14,
-    paddingVertical: 10, paddingBottom: 6,
+    maxWidth: Dimensions.get('window').width * 0.82, 
+    borderRadius: 20, 
+    paddingHorizontal: 16,
+    paddingVertical: 12, 
+    paddingBottom: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  codeBubble: { maxWidth: '95%', paddingHorizontal: 8 },
+  aiBubbleWrapper: {
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  codeBubbleWrapper: {
+    maxWidth: '96%',
+  },
+  codeBubble: { maxWidth: '100%', paddingHorizontal: 12 },
   userBubble: {
-    backgroundColor: colors.userBubble,
-    borderBottomRightRadius: 4,
+    // borderRadius: 20
   },
   aiBubble: {
-    backgroundColor: colors.aiBubble,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: 'transparent',
   },
-  userTail: {
-    position: 'absolute',
-    bottom: 0,
-    right: -5,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderLeftColor: colors.userBubble,
-    borderTopWidth: 8,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-    borderRightWidth: 0,
-  },
-  aiTail: {
-    position: 'absolute',
-    bottom: 0,
-    left: -5,
-    width: 0,
-    height: 0,
-    borderRightWidth: 8,
-    borderRightColor: colors.aiBubble,
-    borderTopWidth: 8,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-    borderLeftWidth: 0,
-  },
-  text: { fontSize: 15, lineHeight: 22 },
+  text: { fontSize: 16, lineHeight: 24 },
   userText: { color: colors.userBubbleText, fontFamily: 'Inter_400Regular' },
   aiText: { color: colors.aiBubbleText, fontFamily: 'Inter_400Regular' },
   bold: { fontFamily: 'Inter_700Bold' },
@@ -771,17 +805,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     color: '#CE9178', borderRadius: 4, paddingHorizontal: 4,
   },
-  heading: { fontFamily: 'Inter_700Bold', color: colors.text, marginTop: 8, marginBottom: 4 },
-  h1: { fontSize: 20 },
-  h2: { fontSize: 17 },
-  h3: { fontSize: 15, color: colors.primary },
+  heading: { fontFamily: 'Inter_700Bold', color: colors.text, marginTop: 10, marginBottom: 6 },
+  h1: { fontSize: 22 },
+  h2: { fontSize: 19 },
+  h3: { fontSize: 16, color: colors.accent },
   userHeading: { color: '#fff' },
-  bulletRow: { flexDirection: 'row', marginVertical: 2, alignItems: 'flex-start' },
-  bulletDot: { color: colors.primary, fontSize: 15, marginRight: 6, fontFamily: 'Inter_700Bold' },
-  bulletText: { flex: 1, color: colors.aiBubbleText, fontSize: 15, lineHeight: 22, fontFamily: 'Inter_400Regular' },
-  footer: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginTop: 4 },
+  bulletRow: { flexDirection: 'row', marginVertical: 3, alignItems: 'flex-start' },
+  bulletDot: { color: colors.primaryLight, fontSize: 16, marginRight: 8, fontFamily: 'Inter_700Bold' },
+  bulletText: { flex: 1, color: colors.aiBubbleText, fontSize: 16, lineHeight: 24, fontFamily: 'Inter_400Regular' },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginTop: 6 },
   time: { fontSize: 10, fontFamily: 'Inter_400Regular' },
-  userTime: { color: 'rgba(255,255,255,0.6)' },
+  userTime: { color: 'rgba(255,255,255,0.7)' },
   aiTime: { color: colors.textMuted },
   copiedLabel: { fontSize: 10, color: colors.success, fontFamily: 'Inter_500Medium' },
 });

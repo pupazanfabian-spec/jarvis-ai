@@ -13,66 +13,64 @@ export default function ThinkingIndicator({ webSearch = false }: ThinkingIndicat
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (webSearch) {
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      anim.start();
-      return () => anim.stop();
-    }
-
     const animate = (dot: Animated.Value, delay: number) => {
       return Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
-          Animated.delay(600 - delay),
+          Animated.timing(dot, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.2, duration: 500, useNativeDriver: true }),
+          Animated.delay(400 - (delay % 400)),
         ])
       );
     };
 
     const a1 = animate(dot1, 0);
-    const a2 = animate(dot2, 200);
-    const a3 = animate(dot3, 400);
-    a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
-  }, [webSearch]);
+    const a2 = animate(dot2, 150);
+    const a3 = animate(dot3, 300);
+
+    a1.start();
+    a2.start();
+    a3.start();
+
+    return () => {
+      a1.stop();
+      a2.stop();
+      a3.stop();
+    };
+  }, []);
 
   const dots = [dot1, dot2, dot3];
-  const dotColor = webSearch ? colors.accent : colors.primary;
-  const avatarBg = webSearch ? colors.accent : colors.primary;
+  const label = webSearch ? '🔍 Caută online...' : '✨ Jarvis scrie...';
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.avatar, { backgroundColor: avatarBg, transform: webSearch ? [{ scale: pulse }] : [] }]}>
-        <Text style={styles.avatarText}>{webSearch ? '📡' : 'A'}</Text>
-      </Animated.View>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>{webSearch ? '🔍' : 'J'}</Text>
+      </View>
 
-      <View style={[styles.bubble, webSearch && styles.bubbleWeb]}>
-        {webSearch ? (
-          <Text style={[styles.webLabel, { color: colors.accent }]}>Caut pe internet...</Text>
-        ) : (
-          dots.map((dot, i) => (
+      <View style={styles.content}>
+        <Text style={styles.statusText}>{label}</Text>
+        <View style={[styles.bubble, webSearch && styles.bubbleWeb]}>
+          {dots.map((dot, i) => (
             <Animated.View
-              key={`item-${i}`}
+              key={`dot-${i}`}
               style={[
                 styles.dot,
                 {
-                  backgroundColor: dotColor,
                   opacity: dot,
-                  transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }],
-                },
+                  transform: [{
+                    scale: dot.interpolate({
+                      inputRange: [0.2, 1],
+                      outputRange: [0.7, 1.1],
+                    })
+                  }]
+                }
               ]}
             />
-          ))
-        )}
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -82,47 +80,56 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    marginVertical: 4,
+    paddingHorizontal: 16,
+    marginVertical: 10,
   },
   avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
-    marginBottom: 4,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   avatarText: {
-    color: '#fff',
+    color: colors.text,
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
   },
+  content: {
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: 'Inter_500Medium',
+    marginLeft: 4,
+  },
   bubble: {
     flexDirection: 'row',
-    backgroundColor: colors.aiBubble,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 18,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+    minWidth: 60,
+    justifyContent: 'center',
   },
   bubbleWeb: {
-    borderColor: colors.accent + '44',
-    backgroundColor: colors.accent + '11',
+    borderColor: colors.accent + '33',
   },
   dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  webLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    letterSpacing: 0.3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primaryLight,
   },
 });

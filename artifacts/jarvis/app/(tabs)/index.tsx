@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -128,9 +129,19 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
 
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 120);
-  }, []);
+  const scrollToBottom = useCallback((animated = true) => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated });
+      }, 100);
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom(true);
+    }
+  }, [messages.length, scrollToBottom]);
 
   const openProjectSwitcher = useCallback(async () => {
     try {
@@ -503,7 +514,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {isEmpty && !isThinking && !webSearching ? (
           <View style={styles.flex}>
@@ -517,44 +528,52 @@ export default function ChatScreen() {
             keyExtractor={keyExtractor}
             contentContainerStyle={styles.messageList}
             showsVerticalScrollIndicator={false}
-            keyboardDismissMode="interactive"
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!!messages.length}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
             initialNumToRender={15}
-            maxToRenderPerBatch={8}
-            windowSize={8}
-            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             updateCellsBatchingPeriod={50}
             ListFooterComponent={
               webSearching
                 ? <ThinkingIndicator webSearch={true} />
                 : isThinking
                   ? <ThinkingIndicator />
-                  : null
+                  : <View style={{ height: 10 }} />
             }
           />
         )}
 
         <QuickActions onPress={handleQuickAction} devMode={isDevMode} visible={showQuick && !isThinking && !webSearching} />
 
-        <View style={[styles.inputContainer, { paddingBottom: bottomInset + 8 }]}>
-          <TouchableOpacity style={styles.attachBtn} onPress={() => setShowFiles(true)}>
+        <View style={[styles.inputContainer, { paddingBottom: bottomInset + 4 }]}>
+          <TouchableOpacity 
+            style={styles.attachBtn} 
+            onPress={() => setShowFiles(true)}
+            activeOpacity={0.7}
+          >
             <Feather name="paperclip" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Scrie un mesaj..."
-            placeholderTextColor={colors.textMuted}
-            multiline
-            maxLength={1000}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-            blurOnSubmit={false}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder="Scrie un mesaj..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={2000}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onFocus={() => scrollToBottom()}
+            />
+          </View>
 
           <TouchableOpacity
             style={[styles.sendBtn, (!inputText.trim() || isThinking || webSearching) && styles.sendBtnDisabled]}
@@ -562,11 +581,16 @@ export default function ChatScreen() {
             disabled={!inputText.trim() || isThinking || webSearching}
             activeOpacity={0.8}
           >
-            <Feather
-              name="send"
-              size={18}
-              color={inputText.trim() && !isThinking && !webSearching ? '#fff' : colors.textMuted}
-            />
+            <LinearGradient
+              colors={inputText.trim() && !isThinking && !webSearching ? colors.userGradient : [colors.surfaceHigh, colors.surfaceHigh]}
+              style={styles.sendBtnGradient}
+            >
+              <Feather
+                name={isThinking || webSearching ? 'more-horizontal' : 'arrow-up'}
+                size={20}
+                color={inputText.trim() && !isThinking && !webSearching ? '#fff' : colors.textMuted}
+              />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -746,10 +770,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     maxHeight: 120,
   },
+  inputWrapper: {
+    flex: 1,
+  },
   sendBtn: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
+    overflow: 'hidden',
+  },
+  sendBtnGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.surfaceHigh },
   pinTip: {
