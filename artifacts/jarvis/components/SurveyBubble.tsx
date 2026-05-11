@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
@@ -21,12 +21,53 @@ const OPTIONS: SurveyOption[] = [
 
 interface Props {
   onSelect: (message: string) => void;
+  isPermissionOnly?: boolean;
 }
 
-export default function SurveyBubble({ onSelect }: Props) {
+export default function SurveyBubble({ onSelect, isPermissionOnly = true }: Props) {
+  const [showOptions, setShowOptions] = useState(!isPermissionOnly);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  const handleNo = () => {
+    setDismissed(true);
+  };
+
+  const handleYes = () => {
+    setShowOptions(true);
+  };
+
+  if (!showOptions) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Feather name="help-circle" size={18} color={colors.primary} />
+          <Text style={styles.title}>Pot să îți pun câteva întrebări pentru a răspunde mai bine?</Text>
+        </View>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.yesBtn]}
+            onPress={handleYes}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.yesBtnText}>Da, începe</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.noBtn]}
+            onPress={handleNo}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.noBtnText}>Nu, mersi</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Nu sunt sigur ce vrei să spui. Ce ai nevoie?</Text>
+      <Text style={styles.title}>Cum te pot ajuta mai departe?</Text>
       <View style={styles.optionsContainer}>
         {OPTIONS.map((opt, i) => (
           <TouchableOpacity
@@ -47,20 +88,60 @@ export default function SurveyBubble({ onSelect }: Props) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
-    marginVertical: 8,
-    marginHorizontal: 12,
+    marginVertical: 10,
+    marginHorizontal: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignSelf: 'flex-start',
-    maxWidth: '90%',
+    maxWidth: '92%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
   },
   title: {
     color: colors.text,
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    marginBottom: 12,
+    flex: 1,
+    lineHeight: 20,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yesBtn: {
+    backgroundColor: colors.primary,
+  },
+  noBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  yesBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  noBtnText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
   },
   optionsContainer: {
     gap: 8,
@@ -72,7 +153,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
     minHeight: 48,
   },
   buttonText: {

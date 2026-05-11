@@ -45,7 +45,7 @@ import {
 import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, formatMemoriesForPrompt, type MemoryStore, type MemoryCategory } from '@/engine/memory';
 import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
-import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns } from '@/engine/brain';
+import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
 
 interface BrainContextType {
@@ -756,12 +756,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           next = prev.map(m => m.id === lastMsg.id ? { ...m, confidence } : m);
         }
 
-        // Dacă confidence-ul este scăzut (< 60%), adăugăm un mesaj special de tip survey
-        if (confidence < 0.6 && !response.includes('JARVIS_MEM_ACTION') && !response.includes('JARVIS_CMD')) {
+        // Dacă răspunsul este vag sau are confidence scăzut, cerem permisiunea pentru un sondaj
+        const needsClarification = isResponseVague(response, confidence);
+        
+        if (needsClarification && !response.includes('JARVIS_MEM_ACTION') && !response.includes('JARVIS_CMD')) {
           next.push({
             id: (Date.now() + 2).toString(),
-            role: 'survey',
-            content: 'Sondaj interactiv',
+            role: 'survey_permission',
+            content: 'Cerere permisiune sondaj',
             timestamp: new Date(),
           });
         }

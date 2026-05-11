@@ -194,7 +194,10 @@ export default function ChatScreen() {
 
   const renderItem = useCallback(({ item, index }: { item: Message; index: number }) => {
     if (item.role === 'survey') {
-      return <SurveyBubble onSelect={(msg) => sendMessage(msg)} />;
+      return <SurveyBubble onSelect={(msg) => sendMessage(msg)} isPermissionOnly={false} />;
+    }
+    if (item.role === 'survey_permission') {
+      return <SurveyBubble onSelect={(msg) => sendMessage(msg)} isPermissionOnly={true} />;
     }
     return <ChatBubble message={item} index={index} />;
   }, [sendMessage]);

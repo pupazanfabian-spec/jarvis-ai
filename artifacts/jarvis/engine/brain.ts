@@ -35,10 +35,28 @@ import {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'survey';
+  role: 'user' | 'assistant' | 'survey' | 'survey_permission';
   content: string;
   timestamp: Date;
   confidence?: number;
+}
+
+export function isResponseVague(content: string, confidence: number): boolean {
+  if (confidence < 0.6) return true;
+  
+  // Dacă e foarte scurt, probabil e vag sau generic
+  const wordCount = content.trim().split(/\s+/).length;
+  if (wordCount < 15) return true;
+
+  // Dacă e sub 150 cuvinte, verificăm dacă are cuvinte "vage"
+  if (wordCount < 150) {
+    const vagueKeywords = ['poate', 'probabil', 'depinde', 'nu sunt sigur', 'în general', 'unele', 'niște'];
+    const lower = content.toLowerCase();
+    const hasVagueKeyword = vagueKeywords.some(kw => lower.includes(kw));
+    if (hasVagueKeyword) return true;
+  }
+
+  return false;
 }
 
 export interface LearnedDocument {
