@@ -554,6 +554,7 @@ function FeedbackToast({ visible, icon, label, color }: { visible: boolean; icon
 }
 
 const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
+  // 1. Hooks first (Always called in the same order)
   const isUser = message?.role === 'user';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
@@ -563,29 +564,19 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
 
+  const hasCode = message?.content?.includes('```') || false;
+
   const BubbleWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
     if (isUser) {
       return (
-        <View
-          style={[
-            styles.bubble,
-            styles.userBubble,
-          ]}
-        >
+        <View style={[styles.bubble, styles.userBubble]}>
           {children}
         </View>
       );
     }
-
     return (
       <View style={[styles.aiBubbleWrapper, hasCode && styles.codeBubbleWrapper]}>
-        <View
-          style={[
-            styles.bubble,
-            styles.aiBubble,
-            hasCode && styles.codeBubble,
-          ]}
-        >
+        <View style={[styles.bubble, styles.aiBubble, hasCode && styles.codeBubble]}>
           {Platform.OS === 'ios' && (
             <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
           )}
@@ -597,21 +588,48 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 400, useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0, tension: 100, friction: 10, useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1, tension: 100, friction: 10, useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 100, friction: 10, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 100, friction: 10, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim, scaleAnim]);
 
+  // 2. Early return AFTER all hooks
   if (!message || !message.content) return null;
 
-  const timestamp = message?.timestamp instanceof Date ? message.timestamp : new Date(message?.timestamp || Date.now());
+  // 3. Derived variables and helper functions
+  const timestamp = message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp || Date.now());
+  const timeStr = timestamp.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+
+  const handleLongPress = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    setMenuVisible(true);
+  };
+
+  const handleCopyMsg = () => {
+    Clipboard.setString(message.content);
+    setMenuVisible(false);
+    setCopiedMsg(true);
+    setShowCopyToast(true);
+    setTimeout(() => {
+      setCopiedMsg(false);
+      setShowCopyToast(false);
+    }, 2000);
+  };
+
+  const handleShareMsg = async () => {
+    setMenuVisible(false);
+    try {
+      const path = `${documentDirectory ?? ''}jarvis_msg_${Date.now()}.txt`;
+      await writeAsStringAsync(path, message.content);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/plain', dialogTitle: 'Trimite mesajul' });
+      setShowShareToast(true);
+      setTimeout(() => setShowShareToast(false), 2000);
+    } catch { /* ignore */ }
+  };
 
   return (
     <>
