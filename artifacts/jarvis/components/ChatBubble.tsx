@@ -4,7 +4,7 @@ import {
   Animated, Clipboard, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system/legacy';
 const { writeAsStringAsync, documentDirectory } = FileSystem;
