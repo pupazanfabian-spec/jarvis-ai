@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
 import { Feather } from '@expo/vector-icons';
-import LinearGradient from 'expo-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
