@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -581,16 +580,18 @@ export default function ChatScreen() {
             disabled={!inputText.trim() || isThinking || webSearching}
             activeOpacity={0.8}
           >
-            <LinearGradient
-              colors={inputText.trim() && !isThinking && !webSearching ? colors.userGradient : [colors.surfaceHigh, colors.surfaceHigh]}
-              style={styles.sendBtnGradient}
+            <View
+              style={[
+                styles.sendBtnGradient,
+                { backgroundColor: inputText.trim() && !isThinking && !webSearching ? colors.primary : colors.surfaceHigh }
+              ]}
             >
               <Feather
                 name={isThinking || webSearching ? 'more-horizontal' : 'arrow-up'}
                 size={20}
                 color={inputText.trim() && !isThinking && !webSearching ? '#fff' : colors.textMuted}
               />
-            </LinearGradient>
+            </View>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

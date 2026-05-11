@@ -4,7 +4,6 @@ import {
   Animated, Clipboard, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system/legacy';
 const { writeAsStringAsync, documentDirectory } = FileSystem;
@@ -622,26 +621,20 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const BubbleWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
     if (isUser) {
       return (
-        <LinearGradient
-          colors={['#6366f1', '#818cf8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={[
             styles.bubble,
             styles.userBubble,
           ]}
         >
           {children}
-        </LinearGradient>
+        </View>
       );
     }
 
     return (
       <View style={[styles.aiBubbleWrapper, hasCode && styles.codeBubbleWrapper]}>
-        <LinearGradient
-          colors={['#1f2937', '#374151']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={[
             styles.bubble,
             styles.aiBubble,
@@ -652,7 +645,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
             <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
           )}
           {children}
-        </LinearGradient>
+        </View>
       </View>
     );
   }, [isUser, hasCode]);
@@ -791,10 +784,10 @@ const styles = StyleSheet.create({
   },
   codeBubble: { maxWidth: '100%', paddingHorizontal: 12 },
   userBubble: {
-    // borderRadius: 20
+    backgroundColor: '#6366f1',
   },
   aiBubble: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#1f2937',
   },
   text: { fontSize: 16, lineHeight: 24 },
   userText: { color: colors.userBubbleText, fontFamily: 'Inter_400Regular' },
