@@ -563,61 +563,6 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 400, useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0, tension: 100, friction: 10, useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1, tension: 100, friction: 10, useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim, scaleAnim]);
-
-  const timestamp = message?.timestamp instanceof Date ? message.timestamp : new Date(message?.timestamp || Date.now());
-  const timeStr = timestamp.toLocaleTimeString('ro-RO', {
-    hour: '2-digit', minute: '2-digit',
-  });
-
-  const hasCode = message?.content?.includes('```') || false;
-
-  if (!message || !message.content) return null;
-
-  const handleLongPress = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-    setMenuVisible(true);
-  };
-
-  const handleCopyMsg = () => {
-    Clipboard.setString(message.content);
-    setMenuVisible(false);
-    setCopiedMsg(true);
-    setShowCopyToast(true);
-    setTimeout(() => {
-      setCopiedMsg(false);
-      setShowCopyToast(false);
-    }, 2000);
-  };
-
-  const handleShareMsg = async () => {
-    setMenuVisible(false);
-    try {
-      const path = `${documentDirectory ?? ''}jarvis_msg_${Date.now()}.txt`;
-      await writeAsStringAsync(path, message.content);
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/plain', dialogTitle: 'Trimite mesajul' });
-      setShowShareToast(true);
-      setTimeout(() => setShowShareToast(false), 2000);
-    } catch {
-      /* ignore share failures */
-    }
-  };
-
   const BubbleWrapper = useCallback(({ children }: { children: React.ReactNode }) => {
     if (isUser) {
       return (
@@ -649,6 +594,24 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
       </View>
     );
   }, [isUser, hasCode]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1, duration: 400, useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0, tension: 100, friction: 10, useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1, tension: 100, friction: 10, useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim, scaleAnim]);
+
+  if (!message || !message.content) return null;
+
+  const timestamp = message?.timestamp instanceof Date ? message.timestamp : new Date(message?.timestamp || Date.now());
 
   return (
     <>
