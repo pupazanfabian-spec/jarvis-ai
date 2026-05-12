@@ -9,7 +9,6 @@ import {
   TextInput,
   Alert,
   Dimensions,
-  SafeAreaView,
   PanResponder,
   Animated,
   FlatList,
@@ -20,7 +19,7 @@ import Svg, { Path, Circle, Polygon, Text as SvgText, Defs, LinearGradient, Stop
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import * as keyManager from '@/engine/code-studio/keyManager';
 import { 
   Skill, 
@@ -66,29 +65,29 @@ interface Connection {
   toId: string;
 }
 
-const CATEGORY_COLORS = {
+const CATEGORY_COLORS: Record<string, string> = {
   Agent: '#6366f1',
   Skill: '#10b981',
   Tool: '#f59e0b',
   Output: '#ef4444',
 };
 
-const CATEGORY_ICONS = {
+const CATEGORY_ICONS: Record<string, string> = {
   Agent: 'hardware-chip-outline',
   Skill: 'book-outline',
   Tool: 'hammer-outline',
   Output: 'paper-plane-outline',
-} as const;
+};
 
 // ─── Memoized Components ─────────────────────────────────────────────────────
 
 const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: any) => {
-  if (!connections || !nodes) return null;
+  if (!connections || !Array.isArray(connections) || !nodes || !Array.isArray(nodes)) return null;
   
   return connections.map((conn: Connection, index: number) => {
     try {
-        const fromNode = nodes.find((n: Node) => n.id === conn.fromId);
-        const toNode = nodes.find((n: Node) => n.id === conn.toId);
+        const fromNode = nodes.find((n: Node) => n && n.id === conn.fromId);
+        const toNode = nodes.find((n: Node) => n && n.id === conn.toId);
         if (!fromNode || !toNode) return null;
         
         const x1 = (fromNode.x || 0) + NODE_WIDTH;
@@ -108,7 +107,7 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
         const ax2 = x2 - arrowSize * Math.cos(angle + Math.PI / 6);
         const ay2 = y2 - arrowSize * Math.sin(angle + Math.PI / 6);
 
-        const colorFrom = CATEGORY_COLORS[fromNode.type as NodeType] || '#ccc';
+        const colorFrom = CATEGORY_COLORS[fromNode.type] || '#6366f1';
 
         return (
           <React.Fragment key={`conn-${index}`}>
@@ -143,19 +142,9 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
             >
               ×
             </SvgText>
-            <SvgText 
-              x={midX} 
-              y={midY - 15} 
-              fontSize="10" 
-              fill="#94a3b8" 
-              textAnchor="middle"
-            >
-              →
-            </SvgText>
           </React.Fragment>
         );
     } catch (e) {
-        console.error('Error rendering connection line', e);
         return null;
     }
   });
@@ -186,27 +175,22 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2,
     onPanResponderGrant: () => {
-      try {
-        const currentX = (pan.x as any)._value || 0;
-        const currentY = (pan.y as any)._value || 0;
-        pan.setOffset({ x: currentX, y: currentY });
-        pan.setValue({ x: 0, y: 0 });
-        onDragStart();
-      } catch (e) { console.warn('Pan grant error', e); }
+      pan.extractOffset();
+      onDragStart();
     },
     onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => {
-      try {
-        pan.flattenOffset();
-        onDragEnd();
-        const finalX = (pan.x as any)._value || 0;
-        const finalY = (pan.y as any)._value || 0;
-        onFinalizePosition(node.id, finalX, finalY);
-      } catch (e) { console.warn('Pan release error', e); }
+      pan.flattenOffset();
+      onDragEnd();
+      // Using internal access is risky, but extractOffset/flattenOffset is the standard way to handle moves.
+      // To get the final values safely for the parent state:
+      const finalX = (pan.x as any)._value + (pan.x as any)._offset;
+      const finalY = (pan.y as any)._value + (pan.y as any)._offset;
+      onFinalizePosition(node.id, finalX, finalY);
     },
   })).current;
 
-  const nodeColor = CATEGORY_COLORS[node.type as NodeType] || '#ccc';
+  const nodeColor = CATEGORY_COLORS[node.type] || '#6366f1';
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['#334155', isActive ? '#10b981' : nodeColor]
@@ -228,7 +212,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
       {...panResponder.panHandlers}
     >
       <View style={styles.nodeHeader}>
-        <Ionicons name={(CATEGORY_ICONS[node.type as NodeType] as any) || 'help-outline'} size={20} color={nodeColor} />
+        <Ionicons name={(CATEGORY_ICONS[node.type] as any) || 'help-outline'} size={20} color={nodeColor} />
         <View style={styles.nodeActions}>
           <TouchableOpacity onPress={onRun} style={styles.nodeMiniBtn}><Ionicons name="play" size={12} color="#fff" /></TouchableOpacity>
           <TouchableOpacity onPress={onConfig} style={styles.nodeMiniBtn}><Ionicons name="settings" size={12} color="#fff" /></TouchableOpacity>
@@ -261,7 +245,7 @@ export default function CodeStudio() {
   const [subAgents, setSubAgents] = useState<SubAgent[]>([]);
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [scale, setScale] = useState(1.0);
-  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   const { settings } = useAIProvider();
   const { sendMessage } = useBrain();
 
@@ -269,19 +253,14 @@ export default function CodeStudio() {
   const canvasPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
   const canvasPanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => !isDragging,
-    onMoveShouldSetPanResponder: (_, gs) => !isDragging && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2),
+    onStartShouldSetPanResponder: () => !isDraggingRef.current,
+    onMoveShouldSetPanResponder: (_, gs) => !isDraggingRef.current && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2),
     onPanResponderGrant: () => {
-        try {
-            const currentX = (canvasPan.x as any)._value || 0;
-            const currentY = (canvasPan.y as any)._value || 0;
-            canvasPan.setOffset({ x: currentX, y: currentY });
-            canvasPan.setValue({ x: 0, y: 0 });
-        } catch (e) { console.warn('Canvas pan grant error', e); }
+        canvasPan.extractOffset();
     },
     onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: canvasPan.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => {
-        try { canvasPan.flattenOffset(); } catch (e) { console.warn('Canvas pan release error', e); }
+        canvasPan.flattenOffset();
     },
   })).current;
 
@@ -332,9 +311,6 @@ export default function CodeStudio() {
         const parsed = JSON.parse(saved);
         setNodes(parsed.nodes || []);
         setConnections(parsed.connections || []);
-      } else {
-        setNodes([]);
-        setConnections([]);
       }
     } catch (e) {
       console.error('Failed to load workspace', e);
@@ -365,24 +341,6 @@ export default function CodeStudio() {
     } catch (e) { Alert.alert('Eroare', 'Nu s-a putut crea agentul.'); }
   }, [newAgentConfig, nodes, connections, debouncedSave]);
 
-  const handleSaveSkill = useCallback(async () => {
-    try {
-        if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Numele si prompt-ul sunt obligatorii.');
-        const skill: Skill = {
-          id: editingSkill.id || `skill_custom_${Date.now()}`,
-          name: editingSkill.name,
-          category: editingSkill.category || 'custom',
-          systemPrompt: editingSkill.systemPrompt,
-          triggers: editingSkill.triggers || [],
-          examples: editingSkill.examples || [],
-        };
-        await saveSkill(skill);
-        const sk = await getAllSkills();
-        setAllSkills(sk);
-        setIsSkillEditorVisible(false);
-    } catch (e) { console.error('Error saving skill', e); }
-  }, [editingSkill]);
-
   const finalizeNodePosition = useCallback((id: string, x: number, y: number) => {
     setNodes(currentNodes => {
       const updated = currentNodes.map(n => n.id === id ? { ...n, x, y } : n);
@@ -390,22 +348,6 @@ export default function CodeStudio() {
       return updated;
     });
   }, [connections, debouncedSave]);
-
-  const completeConnection = useCallback((toId: string) => {
-    if (!connectingFromId) return;
-    if (connectingFromId === toId) return Alert.alert('Eroare', 'Nu te poți conecta la același nod.');
-    if (connections.some(c => c.fromId === connectingFromId && c.toId === toId)) return Alert.alert('Eroare', 'Această conexiune există deja.');
-
-    const newConnection: Connection = { fromId: connectingFromId, toId };
-    const updatedConnections = [...connections, newConnection];
-    setConnections(updatedConnections);
-    debouncedSave(nodes, updatedConnections);
-    setConnectingFromId(null);
-    setIsConnectionModalVisible(false);
-
-    flashAnim.setValue(1);
-    Animated.timing(flashAnim, { toValue: 0, duration: 1000, useNativeDriver: false }).start();
-  }, [connectingFromId, connections, nodes, debouncedSave]);
 
   const handleDeleteConnection = useCallback((conn: Connection) => {
     const updated = connections.filter(c => !(c.fromId === conn.fromId && c.toId === conn.toId));
@@ -433,14 +375,14 @@ export default function CodeStudio() {
       >
         <Svg style={StyleSheet.absoluteFill}>
           <Defs>
-            {connections.map((conn, i) => {
-              const fromNode = nodes.find(n => n.id === conn.fromId);
-              const toNode = nodes.find(n => n.id === conn.toId);
+            {(connections || []).map((conn, i) => {
+              const fromNode = (nodes || []).find(n => n && n.id === conn.fromId);
+              const toNode = (nodes || []).find(n => n && n.id === conn.toId);
               if (!fromNode || !toNode) return null;
               return (
                 <LinearGradient key={`grad-${i}`} id={`grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type as NodeType] || '#ccc'} />
-                  <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type as NodeType] || '#ccc'} />
+                  <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type] || '#6366f1'} />
+                  <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type] || '#6366f1'} />
                 </LinearGradient>
               );
             })}
@@ -448,29 +390,29 @@ export default function CodeStudio() {
           {renderGrid()}
           <ConnectionLines connections={connections} nodes={nodes} deleteConnection={handleDeleteConnection} />
         </Svg>
-        {nodes.map((node) => (
-          <DraggableNode 
+        {(nodes || []).map((node) => (
+          node && <DraggableNode 
             key={node.id} node={node} onFinalizePosition={finalizeNodePosition}
             onPress={() => { setConnectingFromId(node.id); setIsConnectionModalVisible(true); }}
             onConfig={() => {
-              const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
+              const agent = (subAgents || []).find(sa => sa && (sa.id === node.id || sa.id === node.config?.agentId));
               if (agent) { setNewAgentConfig(agent); setIsWizardVisible(true); setWizardStep(1); }
               else if (node.type === 'Skill') {
-                const skill = allSkills.find(s => s.id === node.id || s.id === node.config?.skillId);
+                const skill = (allSkills || []).find(s => s && (s.id === node.id || s.id === node.config?.skillId));
                 if (skill) { setEditingSkill(skill); setIsSkillEditorVisible(true); }
                 else setEditingNode(node);
               } else setEditingNode(node);
             }}
             onRun={() => {
-              const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
+              const agent = (subAgents || []).find(sa => sa && (sa.id === node.id || sa.id === node.config?.agentId));
               if (agent) { setSandboxAgent(agent); setIsSandboxVisible(true); }
             }}
             onDelete={() => {
               Alert.alert('Sterge', 'Sigur vrei sa stergi acest nod?', [
                 { text: 'Anuleaza' },
                 { text: 'Sterge', onPress: () => {
-                  const updatedNodes = nodes.filter(n => n.id !== node.id);
-                  const updatedConnections = connections.filter(c => c.fromId !== node.id && c.toId !== node.id);
+                  const updatedNodes = nodes.filter(n => n && n.id !== node.id);
+                  const updatedConnections = connections.filter(c => c && c.fromId !== node.id && c.toId !== node.id);
                   setNodes(updatedNodes);
                   setConnections(updatedConnections);
                   debouncedSave(updatedNodes, updatedConnections);
@@ -478,10 +420,10 @@ export default function CodeStudio() {
               ]);
             }}
             isSelected={connectingFromId === node.id}
-            onDragStart={() => setIsDragging(true)}
-            onDragEnd={() => setIsDragging(false)}
-            isActive={subAgents.some(sa => sa.isActive && (sa.id === node.id || sa.id === node.config?.agentId))}
-            priority={subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId)?.priority}
+            onDragStart={() => { isDraggingRef.current = true; }}
+            onDragEnd={() => { isDraggingRef.current = false; }}
+            isActive={(subAgents || []).some(sa => sa && sa.isActive && (sa.id === node.id || sa.id === node.config?.agentId))}
+            priority={(subAgents || []).find(sa => sa && (sa.id === node.id || sa.id === node.config?.agentId))?.priority}
           />
         ))}
       </Animated.View>
@@ -498,8 +440,8 @@ export default function CodeStudio() {
   const renderGrid = () => {
     const dots = [];
     const step = 50;
-    for (let x = 0; x < CANVAS_SIZE; x += step) {
-      for (let y = 0; y < CANVAS_SIZE; y += step) {
+    for (let x = 0; x < 2000; x += step) {
+      for (let y = 0; y < 2000; y += step) {
         dots.push(<Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
       }
     }
@@ -507,19 +449,19 @@ export default function CodeStudio() {
   };
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <SafeAreaView style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.tabSwitcher}>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'canvas' && styles.tabBtnActive]} onPress={() => setViewMode('canvas')}><Text style={[styles.tabBtnText, viewMode === 'canvas' && styles.tabBtnTextActive]}>Canvas</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'dashboard' && styles.tabBtnActive]} onPress={() => setViewMode('dashboard')}><Text style={[styles.tabBtnText, viewMode === 'dashboard' && styles.tabBtnTextActive]}>Dashboard</Text></TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.templatesBtn} onPress={() => setIsAddModalVisible(true)}><Ionicons name="layers-outline" size={20} color="#fff" /><Text style={styles.templatesBtnText}>Workspace</Text></TouchableOpacity>
-      </SafeAreaView>
+      </View>
 
       {viewMode === 'canvas' ? renderCanvas() : (
         <View style={styles.dashboard}>
            <FlatList 
-             data={subAgents} 
+             data={subAgents || []} 
              renderItem={({ item }) => (
                <View style={styles.agentCard}>
                  <View style={styles.agentCardHeader}>
@@ -530,6 +472,7 @@ export default function CodeStudio() {
                </View>
              )}
              ListEmptyComponent={<Text style={styles.emptyText}>Nu ai agenți creati.</Text>}
+             keyExtractor={item => item.id}
            />
         </View>
       )}
@@ -537,28 +480,28 @@ export default function CodeStudio() {
       <TouchableOpacity style={[styles.fab, { bottom: 80 + insets.bottom }]} onPress={() => { setIsWizardVisible(true); setWizardStep(1); }}><Ionicons name="add" size={32} color="#fff" /></TouchableOpacity>
       <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
 
-      {/* Node Add Modal */}
+      {/* Modals with correct SafeAreaView */}
       <Modal visible={isAddModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Adaugă în Workspace</Text>
             <View style={styles.nodeTypeGrid}>
-              {(['Agent', 'Skill', 'Tool', 'Output'] as NodeType[]).map(type => (
-                <TouchableOpacity key={type} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[type as NodeType] }]} onPress={() => {
+              {['Agent', 'Skill', 'Tool', 'Output'].map(type => (
+                <TouchableOpacity key={type} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[type] || '#ccc' }]} onPress={() => {
                     const newNode: Node = {
                         id: Math.random().toString(36).substr(2, 9),
-                        type,
+                        type: type as NodeType,
                         title: `New ${type}`,
                         x: 100,
                         y: 200,
                         config: {},
                     };
-                    const updatedNodes = [...nodes, newNode];
+                    const updatedNodes = [...(nodes || []), newNode];
                     setNodes(updatedNodes);
                     debouncedSave(updatedNodes, connections);
                     setIsAddModalVisible(false);
                 }}>
-                  <Ionicons name={CATEGORY_ICONS[type as NodeType] as any} size={24} color={CATEGORY_COLORS[type as NodeType]} /><Text style={styles.typeBtnText}>{type}</Text>
+                  <Ionicons name={CATEGORY_ICONS[type] as any || 'help-outline'} size={24} color={CATEGORY_COLORS[type] || '#ccc'} /><Text style={styles.typeBtnText}>{type}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -567,17 +510,24 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
-      {/* Connection Modal */}
       <Modal visible={isConnectionModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Conectează la...</Text>
             <FlatList
-              data={nodes.filter(n => n.id !== connectingFromId && !connections.some(c => c.fromId === connectingFromId && c.toId === n.id))}
+              data={(nodes || []).filter(n => n && n.id !== connectingFromId && !((connections || []).some(c => c && c.fromId === connectingFromId && c.toId === n.id)))}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.connectionItem} onPress={() => completeConnection(item.id)}>
-                   <Ionicons name={CATEGORY_ICONS[item.type as NodeType] as any} size={20} color={CATEGORY_COLORS[item.type as NodeType]} />
+                <TouchableOpacity style={styles.connectionItem} onPress={() => {
+                    if (!connectingFromId) return;
+                    const newConnection: Connection = { fromId: connectingFromId, toId: item.id };
+                    const updatedConnections = [...(connections || []), newConnection];
+                    setConnections(updatedConnections);
+                    debouncedSave(nodes, updatedConnections);
+                    setConnectingFromId(null);
+                    setIsConnectionModalVisible(false);
+                }}>
+                   <Ionicons name={CATEGORY_ICONS[item.type] as any || 'help-outline'} size={20} color={CATEGORY_COLORS[item.type] || '#ccc'} />
                    <Text style={styles.connectionItemText}>{item.title}</Text>
                 </TouchableOpacity>
               )}
@@ -588,9 +538,8 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
-      {/* Fullscreen Wizard */}
       <Modal visible={isWizardVisible} transparent={false} animationType="slide">
-        <View style={[styles.fullscreenModal, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <SafeAreaView style={styles.fullscreenModal} edges={['top', 'bottom']}>
           <View style={styles.wizardContent}>
             <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>{newAgentConfig.id ? 'Editare Agent' : 'Agent Wizard'}</Text><Text style={styles.wizardStep}>Pas {wizardStep}/5</Text></View>
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={text => setNewAgentConfig({...newAgentConfig, name: text})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={text => setNewAgentConfig({...newAgentConfig, description: text})} multiline /></View>}
@@ -598,7 +547,7 @@ export default function CodeStudio() {
             {wizardStep === 5 && <TouchableOpacity style={styles.finalizeBtn} onPress={handleCreateAgent}><Text style={styles.finalizeBtnText}>Salvează Agent</Text></TouchableOpacity>}
             <View style={styles.wizardFooter}><TouchableOpacity onPress={() => wizardStep > 1 && setWizardStep(wizardStep - 1)} disabled={wizardStep === 1}><Text style={styles.wizardBtnText}>Inapoi</Text></TouchableOpacity><TouchableOpacity onPress={() => setIsWizardVisible(false)}><Text style={styles.closeWizardText}>Anulează</Text></TouchableOpacity>{wizardStep < 5 && <TouchableOpacity onPress={() => setWizardStep(wizardStep + 1)}><Text style={styles.wizardBtnText}>Inainte</Text></TouchableOpacity>}</View>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Toolbar */}
