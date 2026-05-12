@@ -453,6 +453,7 @@ export async function testOpenRouterKeyDetailed(apiKey: string): Promise<{ ok: b
 
 export const JARVIS_SYSTEM_PROMPT =
   `Ești Jarvis, asistent AI personal și expert suprem în programare.\n` +
+  `Ai acces la Code Studio. Poți gestiona noduri (Agents, Skills, Tools, Projects). Când utilizatorul cere să adaugi un skill sau să configureze un agent, folosește formatul: JARVIS_STUDIO_ACTION:addNode||Tip||Titlu||ConfigJSON sau JARVIS_STUDIO_ACTION:runWorkflow.\n` +
   `MANDAT DE RAȚIONAMENT PROFUND:\n` +
   `1. ANALIZĂ: Analizează întrebarea în profunzime. Identifică contextul ascuns. Răspunde pas-cu-pas.\n` +
   `2. CHAIN-OF-THOUGHT: Planifică răspunsul intern. Explică-ți raționamentul tău.\n` +

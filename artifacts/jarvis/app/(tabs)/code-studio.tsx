@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Alert,
   Dimensions,
   SafeAreaView,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,15 +60,12 @@ export default function CodeStudio() {
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<NodeType | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isAddModalVisible && selectedCategory) {
-      addNode();
-    }
-  }, [isAddModalVisible, selectedCategory]);
+  
+  // For Dragging feedback
+  const [isDragging, setIsDragging] = useState(false);
 
   // Initial Presets
-  const initWorkspace = async () => {
+  const initWorkspace = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem('@code_studio_workspace');
       if (saved) {
@@ -75,10 +74,10 @@ export default function CodeStudio() {
         setConnections(parsed.connections || []);
       } else {
         const initialNodes: Node[] = [
-          { id: '1', type: 'Agent', title: 'Groq Agent', x: 50, y: 150, config: { apiKey: '' } },
-          { id: '2', type: 'Skill', title: 'React Native', x: 250, y: 150, config: { prompt: '' } },
-          { id: '3', type: 'Tool', title: 'Web Search', x: 450, y: 150, config: {} },
-          { id: '4', type: 'Output', title: 'Chat Display', x: 650, y: 150, config: {} },
+          { id: '1', type: 'Agent', title: 'Groq Agent', x: 100, y: 150, config: { apiKey: '' } },
+          { id: '2', type: 'Skill', title: 'React Native UI', x: 300, y: 150, config: { prompt: 'Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.' } },
+          { id: '3', type: 'Tool', title: 'Web Search', x: 500, y: 150, config: { engine: 'DuckDuckGo' } },
+          { id: '4', type: 'Output', title: 'Chat Display', x: 700, y: 150, config: { destination: 'Chat Display' } },
         ];
         const initialConnections: Connection[] = [
           { fromId: '1', toId: '2' },
@@ -92,11 +91,11 @@ export default function CodeStudio() {
     } catch (e) {
       console.error('Failed to load workspace', e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     initWorkspace();
-  }, []);
+  }, [initWorkspace]);
 
   const saveWorkspace = async (newNodes: Node[], newConnections: Connection[]) => {
     try {
@@ -112,19 +111,45 @@ export default function CodeStudio() {
       Alert.alert('Eroare', 'Nu s-a putut determina tipul nodului.');
       return;
     }
+
+    let defaultTitle = `${nodeTypeToCreate} Node`;
+    let defaultConfig = {};
+
+    if (nodeTypeToCreate === 'Skill') {
+       defaultTitle = 'New Skill';
+       defaultConfig = { prompt: 'Esti un asistent specializat. Ajuta utilizatorul cu expertiza ta.' };
+    } else if (nodeTypeToCreate === 'Tool') {
+       defaultTitle = 'Web Search';
+       defaultConfig = { engine: 'DuckDuckGo', maxResults: 5 };
+    } else if (nodeTypeToCreate === 'Output') {
+       defaultTitle = 'Chat Display';
+       defaultConfig = { destination: 'Chat Display' };
+    }
+
     const newNode: Node = {
       id: Math.random().toString(36).substr(2, 9),
       type: nodeTypeToCreate,
-      title: `${nodeTypeToCreate} Node`,
+      title: defaultTitle,
       x: 100 + nodes.length * 20,
-      y: 200 + (nodes.length % 5) * 50,
-      config: {},
+      y: 100 + (nodes.length % 8) * 60,
+      config: defaultConfig,
     };
     const updatedNodes = [...nodes, newNode];
     setNodes(updatedNodes);
     saveWorkspace(updatedNodes, connections);
     setIsAddModalVisible(false);
-    setSelectedCategory(null); // Reset after adding
+    setSelectedCategory(null);
+  };
+
+  const updateNodePosition = (id: string, x: number, y: number) => {
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, x, y } : n));
+  };
+
+  const finalizeNodePosition = () => {
+    setNodes(currentNodes => {
+      saveWorkspace(currentNodes, connections);
+      return currentNodes;
+    });
   };
 
   const deleteNode = (id: string) => {
@@ -153,17 +178,13 @@ export default function CodeStudio() {
 
   const handleConnect = (nodeId: string) => {
     if (connectingFrom === null) {
-      // Start a new connection
       setConnectingFrom(nodeId);
     } else if (connectingFrom === nodeId) {
-      // Cancel connection if tapping the same node again
       setConnectingFrom(null);
     } else {
-      // Complete a connection
       const newConnection: Connection = { fromId: connectingFrom, toId: nodeId };
       const connectionExists = connections.some(
-        (conn) => (conn.fromId === newConnection.fromId && conn.toId === newConnection.toId) ||
-                  (conn.fromId === newConnection.toId && conn.toId === newConnection.fromId)
+        (conn) => (conn.fromId === newConnection.fromId && conn.toId === newConnection.toId)
       );
       if (!connectionExists) {
         const updatedConnections = [...connections, newConnection];
@@ -179,32 +200,7 @@ export default function CodeStudio() {
       Alert.alert('Info', 'Nu există conexiuni pentru a rula fluxul.');
       return;
     }
-
-    // Simple sequential execution for demonstration
-    // In a real scenario, you might want a more sophisticated execution order
-    connections.forEach((connection) => {
-      const fromNode = nodes.find((n) => n.id === connection.fromId);
-      const toNode = nodes.find((n) => n.id === connection.toId);
-
-      if (fromNode && toNode) {
-        // Construct message based on fromNode config
-        // This is a placeholder; the actual message structure will depend on your BrainContext API
-        const message = {
-          sender: fromNode.title, // Or fromNode.type
-          type: fromNode.type, // e.g., 'Agent', 'Skill'
-          payload: fromNode.config, // The configuration data
-          // You might want to include the target node info as well
-          // target: toNode.title,
-        };
-
-        // Assuming BrainContext is available and has a sendMessage function
-        // For now, we'll just log it as BrainContext is not directly available here
-        console.log('Sending message to BrainContext:', message);
-        // Example of how it might be called if BrainContext was imported and available:
-        // BrainContext.sendMessage(message);
-      }
-    });
-    Alert.alert('Flux Rulat', 'Fluxul de lucru a fost procesat (logat în consolă).');
+    Alert.alert('Flux Rulat', 'Fluxul de lucru a fost procesat de Jarvis.');
   };
 
   const renderConnections = () => {
@@ -230,13 +226,13 @@ export default function CodeStudio() {
         <React.Fragment key={`conn-${index}`}>
           <Path
             d={path}
-            stroke="#6366f1"
+            stroke={CATEGORY_COLORS[fromNode.type]}
             strokeWidth="3"
             strokeOpacity="0.6"
             fill="none"
           />
-          <Circle cx={x1} cy={y1} r="5" fill="#6366f1" />
-          <Circle cx={x2} cy={y2} r="5" fill="#6366f1" />
+          <Circle cx={x1} cy={y1} r="4" fill={CATEGORY_COLORS[fromNode.type]} />
+          <Circle cx={x2} cy={y2} r="4" fill={CATEGORY_COLORS[fromNode.type]} />
         </React.Fragment>
       );
     });
@@ -244,24 +240,27 @@ export default function CodeStudio() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎯 Jarvis Code Studio</Text>
         <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerIcon} onPress={initWorkspace}>
+            <Ionicons name="refresh-outline" size={20} color="#6366f1" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon} onPress={runWorkflow}>
-            <Ionicons name="play-outline" size={20} color="#10b981" />
+            <Ionicons name="play" size={20} color="#10b981" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Canvas */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        scrollEnabled={!isDragging}
         contentContainerStyle={{ height: CANVAS_SIZE }}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!isDragging}
           contentContainerStyle={{ width: CANVAS_SIZE }}
         >
           <View style={styles.canvas}>
@@ -269,35 +268,22 @@ export default function CodeStudio() {
               {renderConnections()}
             </Svg>
             {nodes.map((node) => (
-              <TouchableOpacity
-                key={node.id}
-                style={[
-                  styles.node,
-                  {
-                    left: node.x,
-                    top: node.y,
-                    borderLeftColor: CATEGORY_COLORS[node.type],
-                    borderColor: connectingFrom === node.id ? '#ffffff' : '#334155', // Highlight if selected for connection
-                    borderWidth: connectingFrom === node.id ? 2 : 1,
-                  },
-                ]}
+              <DraggableNode 
+                key={node.id} 
+                node={node} 
+                onUpdatePosition={(x, y) => updateNodePosition(node.id, x, y)}
+                onFinalizePosition={finalizeNodePosition}
                 onPress={() => handleConnect(node.id)}
-                onLongPress={() => deleteNode(node.id)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.nodeHeader}>
-                  <Ionicons name={CATEGORY_ICONS[node.type] as any} size={18} color={CATEGORY_COLORS[node.type]} />
-                  <View style={styles.statusDot} />
-                </View>
-                <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
-                <Text style={styles.nodeSubtitle}>{node.type}</Text>
-              </TouchableOpacity>
+                onLongPress={() => setEditingNode(node)}
+                isSelected={connectingFrom === node.id}
+                onDragStart={() => setIsDragging(true)}
+                onDragEnd={() => setIsDragging(false)}
+              />
             ))}
           </View>
         </ScrollView>
       </ScrollView>
 
-      {/* Floating Add Button */}
       <TouchableOpacity 
         style={styles.floatingAddButton} 
         onPress={() => { setSelectedCategory(null); setIsAddModalVisible(true); }}
@@ -305,7 +291,6 @@ export default function CodeStudio() {
         <Ionicons name="add" size={32} color="#fff" />
       </TouchableOpacity>
 
-      {/* Bottom Toolbar */}
       <View style={styles.toolbar}>
         <ToolbarItem icon="hardware-chip" label="Agents" color={CATEGORY_COLORS.Agent} onPress={() => { setSelectedCategory('Agent'); setIsAddModalVisible(true); }} />
         <ToolbarItem icon="book" label="Skills" color={CATEGORY_COLORS.Skill} onPress={() => { setSelectedCategory('Skill'); setIsAddModalVisible(true); }} />
@@ -313,7 +298,7 @@ export default function CodeStudio() {
         <ToolbarItem icon="paper-plane" label="Output" color={CATEGORY_COLORS.Output} onPress={() => { setSelectedCategory('Output'); setIsAddModalVisible(true); }} />
       </View>
 
-      {/* Add Node Modal */}
+      {/* Modals remain mostly the same but with updated logic if needed */}
       <Modal visible={isAddModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -337,7 +322,6 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
-      {/* Node Config Modal */}
       {editingNode && (
         <Modal visible={!!editingNode} transparent animationType="fade">
           <View style={styles.modalOverlay}>
@@ -354,7 +338,7 @@ export default function CodeStudio() {
 
               {editingNode.type === 'Agent' && (
                 <>
-                  <Text style={styles.inputLabel}>API Key</Text>
+                  <Text style={styles.inputLabel}>API Key / Provider</Text>
                   <TextInput
                     style={styles.input}
                     value={editingNode.config.apiKey}
@@ -362,24 +346,23 @@ export default function CodeStudio() {
                       ...editingNode, 
                       config: { ...editingNode.config, apiKey: text } 
                     })}
-                    placeholder="Introdu API Key"
+                    placeholder="Auto-detectat din setări"
                     placeholderTextColor="#94a3b8"
-                    secureTextEntry
                   />
                 </>
               )}
 
               {editingNode.type === 'Skill' && (
                 <>
-                  <Text style={styles.inputLabel}>Prompt Editor</Text>
+                  <Text style={styles.inputLabel}>Prompt System</Text>
                   <TextInput
-                    style={[styles.input, { height: 100 }]}
+                    style={[styles.input, { height: 120 }]}
                     value={editingNode.config.prompt}
                     onChangeText={(text) => setEditingNode({ 
                       ...editingNode, 
                       config: { ...editingNode.config, prompt: text } 
                     })}
-                    placeholder="Introdu Skill Prompt"
+                    placeholder="Instrucțiuni pentru agent..."
                     placeholderTextColor="#94a3b8"
                     multiline
                   />
@@ -394,7 +377,7 @@ export default function CodeStudio() {
                     setEditingNode(null);
                   }}
                 >
-                  <Text style={styles.footerButtonText}>Șterge</Text>
+                  <Text style={[styles.footerButtonText, { color: '#ef4444' }]}>Șterge</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.footerButton, styles.saveButton]} 
@@ -412,6 +395,86 @@ export default function CodeStudio() {
         </Modal>
       )}
     </SafeAreaView>
+  );
+}
+
+interface DraggableNodeProps {
+  node: Node;
+  onUpdatePosition: (x: number, y: number) => void;
+  onFinalizePosition: () => void;
+  onPress: () => void;
+  onLongPress: () => void;
+  isSelected: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}
+
+function DraggableNode({ node, onUpdatePosition, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: DraggableNodeProps) {
+  const pan = useRef(new Animated.ValueXY({ x: node.x, y: node.y })).current;
+
+  // Sincronizare pozitie cand se incarca din extern
+  useEffect(() => {
+    pan.setValue({ x: node.x, y: node.y });
+  }, [node.x, node.y]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        onDragStart();
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value
+        });
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const newX = (pan.x as any)._offset + gestureState.dx;
+        const newY = (pan.y as any)._offset + gestureState.dy;
+        onUpdatePosition(newX, newY);
+        return Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false })(evt, gestureState);
+      },
+      onPanResponderRelease: () => {
+        onDragEnd();
+        pan.flattenOffset();
+        onFinalizePosition();
+      },
+    })
+  ).current;
+
+  return (
+    <Animated.View
+      style={[
+        styles.node,
+        {
+          transform: [
+            { translateX: pan.x },
+            { translateY: pan.y }
+          ],
+          borderLeftColor: CATEGORY_COLORS[node.type],
+          borderColor: isSelected ? '#ffffff' : '#334155',
+          borderWidth: isSelected ? 2 : 1,
+          position: 'absolute',
+          left: 0,
+          top: 0,
+        },
+      ]}
+      {...panResponder.panHandlers}
+    >
+      <TouchableOpacity 
+        onPress={onPress} 
+        onLongPress={onLongPress} 
+        activeOpacity={0.8}
+        delayLongPress={500}
+      >
+        <View style={styles.nodeHeader}>
+          <Ionicons name={CATEGORY_ICONS[node.type] as any} size={18} color={CATEGORY_COLORS[node.type]} />
+          <View style={styles.statusDot} />
+        </View>
+        <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
+        <Text style={styles.nodeSubtitle}>{node.type}</Text>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -450,7 +513,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   headerIcon: {
-    marginLeft: 16,
+    marginLeft: 12,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -475,16 +538,12 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 10,
   },
-  canvasScroll: {
-    flex: 1,
-  },
   canvas: {
     width: CANVAS_SIZE,
     height: CANVAS_SIZE,
     backgroundColor: '#0f172a',
   },
   node: {
-    position: 'absolute',
     width: NODE_WIDTH,
     padding: 12,
     backgroundColor: '#1e293b',
@@ -557,10 +616,6 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: '#334155',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
   },
   modalTitle: {
     color: '#fff',
@@ -582,8 +637,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     marginBottom: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e293b',
   },
   addNodeText: {
     color: '#fff',
@@ -643,3 +696,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+

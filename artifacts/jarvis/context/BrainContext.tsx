@@ -48,6 +48,8 @@ import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engin
 import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
 
+import * as studioManager from '@/engine/code-studio/studioManager';
+
 interface BrainContextType {
   messages: Message[];
   isThinking: boolean;
@@ -61,6 +63,7 @@ interface BrainContextType {
   addDocument: (name: string, content: string) => Promise<void>;
   removeDocument: (id: string) => void;
   setWantsOnline: (val: boolean) => void;
+  studio: typeof studioManager;
 }
 
 const BrainContext = createContext<BrainContextType | null>(null);
@@ -600,11 +603,20 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         response = processMessage(text, brainRef.current, history);
         const intent = (brainRef.current as any).lastIntent || 'unknown';
 
-        // ── Execuție Acțiuni Speciale (Memorie & Foldere) ─────────────────────────
-        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:')) {
+        // ── Execuție Acțiuni Speciale (Memorie & Foldere & Code Studio) ──────────
+        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:') || response.startsWith('JARVIS_STUDIO_ACTION:')) {
           const isMem = response.startsWith('JARVIS_MEM_ACTION:');
-          const fullAction = response.slice(isMem ? 'JARVIS_MEM_ACTION:'.length : 'JARVIS_FOLDER_ACTION:'.length);
-          const [action, payload] = fullAction.split('||');
+          const isFolder = response.startsWith('JARVIS_FOLDER_ACTION:');
+          const isStudio = response.startsWith('JARVIS_STUDIO_ACTION:');
+          
+          let prefix = '';
+          if (isMem) prefix = 'JARVIS_MEM_ACTION:';
+          else if (isFolder) prefix = 'JARVIS_FOLDER_ACTION:';
+          else if (isStudio) prefix = 'JARVIS_STUDIO_ACTION:';
+
+          const fullAction = response.slice(prefix.length);
+          const [action, ...payloadParts] = fullAction.split('||');
+          const payload = payloadParts.join('||');
 
           if (isMem) {
             if (action === 'salveaza') {
@@ -624,7 +636,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                 ? `Am eliminat din memorie referințele la: **"${payload}"**. 🗑️`
                 : `Nu am găsit nimic despre **"${payload}"** în memorie.`;
             }
-          } else {
+          } else if (isFolder) {
             if (action === 'acorda_acces') {
               const granted = await requestFolderAccess();
               response = granted ? 'Acces la foldere acordat cu succes! ✅' : 'Accesul la foldere a fost refuzat.';
@@ -636,6 +648,17 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             } else if (action === 'actualizeaza') {
               const count = await scanAllFolders();
               response = `Am scanat folderele și am găsit/actualizat **${count}** fișiere în memoria mea locală. 🔄`;
+            }
+          } else if (isStudio) {
+            if (action === 'addNode') {
+              const [type, title, configStr] = payload.split('||');
+              let config = {};
+              try { if (configStr) config = JSON.parse(configStr); } catch {}
+              await studioManager.addNode(type as any, title, config);
+              response = `Am adăugat nodul **${title}** (${type}) în Code Studio. 🎯`;
+            } else if (action === 'runWorkflow') {
+              await studioManager.runWorkflow();
+              response = `Am pornit execuția fluxului în Code Studio. 🚀`;
             }
           }
         }
@@ -850,6 +873,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     <BrainContext.Provider value={{
       messages, isThinking, webSearching, wantsOnline, brainState, dbReady, lastProvider,
       sendMessage, clearConversation, addDocument, removeDocument, setWantsOnline,
+      studio: studioManager,
     }}>
       {children}
     </BrainContext.Provider>
