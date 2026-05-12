@@ -13,14 +13,12 @@ import {
   PanResponder,
   Animated,
 } from 'react-native';
-import Svg, { Path, Circle, Defs, Marker, Polygon } from 'react-native-svg';
+import Svg, { Path, Circle, Polygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as keyManager from '@/engine/code-studio/keyManager';
-import { SKILLS, Skill } from '@/engine/code-studio/skills';
-import { createSubAgent } from '@/engine/code-studio/subAgentManager';
-import { useAIProvider } from '@/context/AIProviderContext';
-
+import { SKILLS } from '@/engine/code-studio/skills';
+import { SubAgent, getSubAgents, deleteSubAgent as deleteSA, toggleSubAgent, createSubAgent } from '@/engine/code-studio/subAgentManager';
 import { useAIProvider } from '@/context/AIProviderContext';
 import { useBrain } from '@/context/BrainContext';
 
