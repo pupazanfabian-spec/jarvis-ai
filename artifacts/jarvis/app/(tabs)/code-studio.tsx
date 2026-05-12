@@ -382,7 +382,7 @@ export default function CodeStudio() {
           scrollEnabled={!isDragging} 
           contentContainerStyle={{ width: CANVAS_SIZE * scale, height: CANVAS_SIZE * scale }}
         >
-          <View style={[styles.canvas, { transform: [{ scale }], transformOrigin: ['0%', '0%'], width: CANVAS_SIZE, height: CANVAS_SIZE }]}>
+          <View style={[styles.canvas, { transform: [{ scale }], transformOrigin: ['0%', '0%', 0], width: CANVAS_SIZE, height: CANVAS_SIZE }]}>
             <Svg style={StyleSheet.absoluteFill}>
               <Defs>
                 {connections.map((conn, i) => {
