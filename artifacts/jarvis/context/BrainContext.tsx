@@ -46,12 +46,9 @@ import { useDevMode } from '@/context/DevModeContext';
 import * as studioManager from '@/engine/code-studio/studioManager';
 import { getSubAgents, callSubAgent, SubAgent } from '@/engine/code-studio/subAgentManager';
 import { orchestrator } from '@/engine/orchestrator';
-import { useAIProvider } from '@/context/AIProviderContext'; // Importul existent este corect
+import { useAIProvider } from '@/context/AIProviderContext';
 
-// Re-export useAIProvider din AIProviderContext pentru a fi accesibil prin BrainContext, conform instrucțiunii
-export { useAIProvider }; 
-
-// ... (restul codului din BrainContext.tsx, inclusiv BrainContextType, BrainProvider, useBrain) ...
+export { useAIProvider };
 
 interface BrainContextType {
   messages: Message[];
@@ -77,7 +74,7 @@ const STATE_KEY = '@jarvis_v3_state';
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠
+  content: `Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠
 
 **Ce pot face:**
 🤔 Răspund din 270+ subiecte din memorie
@@ -86,7 +83,7 @@ const WELCOME: Message = {
 👤 Rețin persoanele și entitățile menționate
 💾 Memorie persistentă: îmi amintesc cine ești și ce preferi între sesiuni
 
-**Cum te cheamă?** Sau întreab-mă orice.',
+**Cum te cheamă?** Sau întreabă-mă orice.`,
   timestamp: new Date(),
 };
 
@@ -118,7 +115,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const memoryRef = useRef<MemoryStore>({ entries: [] });
   const loaded = useRef(false);
   const { generate: llmGenerate, status: llmStatus, skipped: llmSkipped } = useLLM();
-  const aiProvider = useAIProvider(); // This hook is used here
+  const aiProvider = useAIProvider();
   const { isDevMode, toggleDevMode, activeProject, refreshProject } = useDevMode();
 
   useEffect(() => {
@@ -286,7 +283,7 @@ Deschide tab-ul **Studio** să îl vezi! 🤖`;
                           ws.connections.push({ fromId: n1.id, toId: n2.id });
                           await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
                       }
-                      response = `✅ Am conectat **${n1.title}** → **${n2.title}** pe canvas! 🔗`;
+                      response = `✅ Am conectat **${n1.title}** ➡️ **${n2.title}** pe canvas! 🔗`;
                   } else { response = `❌ Nu am găsit nodurile. Pe canvas ai: ${ws.nodes.map((n: any) => n.title).join(', ') || 'nimic'}`; }
               } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
           }
@@ -298,7 +295,7 @@ Deschide tab-ul **Studio** să îl vezi! 🤖`;
               await deleteSubAgent(agent.id); 
               const saved = await AsyncStorage.getItem(canvasKey);
               if (saved) {
-                  const ws = JSON.JSON.parse(saved);
+                  const ws = JSON.parse(saved);
                   ws.nodes = ws.nodes.filter((n: any) => n.id !== agent.id && n.config?.agentId !== agent.id);
                   ws.connections = ws.connections.filter((c: any) => c.fromId !== agent.id && c.toId !== agent.id);
                   await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
@@ -329,11 +326,11 @@ Deschide tab-ul **Studio** să îl vezi! 🤖`;
 
       // 2. Orchestrator Routing
       const intent = await orchestrator.analyzeIntent(text);
-      console.log('[Brain] Intent complexity:', intent.complexity, 'skill:', intent.skill.id);
+      console.log(`[Brain] Intent complexity: ${intent.complexity}, skill: ${intent.skill.id}`);
       
       if (intent.complexity !== 'simple') {
           const result = await orchestrator.route(text);
-          console.log('[Brain] Orchestrator result success:', result.success, 'agent:', result.agentUsed, 'response length:', result.response?.length);
+          console.log(`[Brain] Orchestrator result success: ${result.success}, agent: ${result.agentUsed}, response length: ${result.response?.length}`);
           
           if (result.success && result.response && result.response.trim().length > 0) {
               let content = result.response;
