@@ -49,6 +49,7 @@ import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearne
 import { useDevMode } from '@/context/DevModeContext';
 
 import * as studioManager from '@/engine/code-studio/studioManager';
+import { getSubAgents, callSubAgent, SubAgent } from '@/engine/code-studio/subAgentManager';
 
 interface BrainContextType {
   messages: Message[];
@@ -344,7 +345,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     await autoLearnFromWeb(result.text, result.provider, '');
   }, [autoLearnFromWeb]);
 
-  const buildCloudCtx = useCallback((query?: string): string => {
+  const buildCloudCtx = useCallback(async (query?: string): Promise<string> => {
     const state = brainRef.current;
     
     // Obținem amintirile relevante pentru query-ul curent
@@ -359,7 +360,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         `- Interese: ${state.learnedPatterns.userInterests.join(', ')}\n`;
     }
 
-    const ctx: JarvisContext = {
+    // Informații despre sub-agenți
+    const activeSubAgents = (await getSubAgents()).filter(a => a.isActive);
+    const subAgentsCtx = activeSubAgents.length > 0 
+      ? activeSubAgents.map(a => `- ${a.name} (ID: ${a.id}): Expert in ${a.skills.join(', ')}`).join('\n')
+      : 'Nu sunt sub-agenți activi.';
+
+    const ctx: any = {
       userName: state.userName || undefined,
       preferredStyle: state.selfKnowledge.preferredStyle,
       topTopics: Object.entries(state.selfKnowledge.topicFrequency)
@@ -370,6 +377,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       recentTopics: state.lastTopics.slice(-5),
       conversationCount: state.conversationCount,
       customContext: memoryContext + patternsCtx, // Injectăm memoria și pattern-urile
+      subAgents: subAgentsCtx,
     };
     return buildRichSystemPrompt(ctx);
   }, []);
@@ -479,8 +487,34 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
       let response = '';
 
+      // ─── Sub-Agent Delegation Logic ──────────────────────────────────────────
+      const activeSubAgents = (await getSubAgents()).filter(a => a.isActive);
+      const lowerText = text.toLowerCase();
+      
+      // Manual delegation detection (e.g. "intreaba-l pe Python Expert...")
+      let targetAgent: SubAgent | undefined;
+      for (const agent of activeSubAgents) {
+        if (lowerText.includes(agent.name.toLowerCase()) || lowerText.includes(`agent ${agent.name.toLowerCase()}`)) {
+          targetAgent = agent;
+          break;
+        }
+      }
+
+      if (targetAgent) {
+        try {
+          const agentId = targetAgent.id;
+          const agentName = targetAgent.name;
+          setLastProvider(`SubAgent: ${agentName}`);
+          
+          const agentResponse = await callSubAgent(agentId, text);
+          response = `[SubAgent: ${agentName}]\n\n${agentResponse}`;
+        } catch (err) {
+          if (__DEV__) console.warn(`[BrainContext] Delegation to ${targetAgent.name} failed:`, err);
+        }
+      }
+
       // ─── Survey Handler: Căutare Online Forțată ────────────────────────────────
-      if (text === 'Caută online despre asta') {
+      if (!response && text === 'Caută online despre asta') {
         const lastUserMsg = [...currentMessages].reverse().find(m => m.role === 'user' && m.content !== text);
         const searchQuery = lastUserMsg ? lastUserMsg.content : '';
         
@@ -677,6 +711,23 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             } else if (action === 'runWorkflow') {
               await studioManager.runWorkflow();
               response = `Am pornit execuția fluxului în Code Studio. 🚀`;
+            } else if (action === 'add_key') {
+              // Detecție provider și cheie din payload
+              const lowerPayload = payload.toLowerCase();
+              let provider = 'Groq';
+              if (lowerPayload.includes('openrouter')) provider = 'OpenRouter';
+              else if (lowerPayload.includes('gemini')) provider = 'Gemini';
+              else if (lowerPayload.includes('openai')) provider = 'OpenAI';
+              
+              const keyMatch = payload.match(/[a-z0-9]{32,}/i); // Căutăm ceva ce seamănă cu o cheie API
+              if (keyMatch) {
+                const key = keyMatch[0];
+                const keyManager = await import('@/engine/code-studio/keyManager');
+                await keyManager.addKey(provider, key);
+                response = `Am salvat cheia API pentru **${provider}** în Managerul Code Studio. 🔑`;
+              } else {
+                response = `Nu am putut extrage cheia API din mesaj. Te rog să incluzi cheia completă.`;
+              }
             }
           }
         }
@@ -698,12 +749,28 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               // Dacă forțăm Groq, folosim intent-ul pentru a semnaliza provider-ului
               const finalIntent = forceGroq ? 'cmd_groq_direct' : intent;
 
+              const cloudCtx = await buildCloudCtx(text);
               const aiResult = await aiProvider.generateStream(cmdOriginal, (chunk) => {
                 setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-              }, buildCloudCtx(text), (history as any).slice(-20), finalIntent);
+              }, cloudCtx, (history as any).slice(-20), finalIntent);
 
               if (aiResult) {
                 response = aiResult.text.trim();
+                
+                // Verificare delegare autonomă în modul comandă
+                if (response.includes('DELEGATE_TO:')) {
+                  const match = response.match(/DELEGATE_TO:([a-z0-9]+)/i);
+                  if (match) {
+                    const agentId = match[1];
+                    const agent = activeSubAgents.find(a => a.id === agentId);
+                    if (agent) {
+                      const agentResp = await callSubAgent(agentId, text);
+                      response = `[SubAgent: ${agent.name}]\n\n${agentResp}`;
+                      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+                    }
+                  }
+                }
+
                 autoLearnFromCloud(aiResult).catch(() => {});
                 
                 const pName = aiResult.provider.charAt(0).toUpperCase() + aiResult.provider.slice(1);
@@ -730,12 +797,28 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             const assistantId = (Date.now() + 1).toString();
             setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
 
+            const cloudCtx = await buildCloudCtx(text);
             const aiResult = await aiProvider.generateStream(text, (chunk) => {
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-            }, buildCloudCtx(text), (history as any).slice(-20), intent);
+            }, cloudCtx, (history as any).slice(-20), intent);
 
             if (aiResult?.text) {
               response = aiResult.text.trim();
+              
+              // Verificăm dacă AI-ul a decis să delege (detectăm formatul special sau ID-ul)
+              if (response.includes('DELEGATE_TO:')) {
+                const match = response.match(/DELEGATE_TO:([a-z0-9]+)/i);
+                if (match) {
+                  const agentId = match[1];
+                  const agent = activeSubAgents.find(a => a.id === agentId);
+                  if (agent) {
+                    const agentResp = await callSubAgent(agentId, text);
+                    response = `[SubAgent: ${agent.name}]\n\n${agentResp}`;
+                    setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: response } : m));
+                  }
+                }
+              }
+
               autoLearnFromCloud(aiResult).catch(() => {});
               aiSuccess = true;
               

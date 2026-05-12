@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -17,6 +16,10 @@ import {
 import Svg, { Path, Circle, Defs, Marker, Polygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as keyManager from '@/engine/code-studio/keyManager';
+import { SKILLS, Skill } from '@/engine/code-studio/skills';
+import { createSubAgent } from '@/engine/code-studio/subAgentManager';
+import { useAIProvider } from '@/context/AIProviderContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CANVAS_SIZE = 2000;
@@ -60,6 +63,7 @@ export default function CodeStudio() {
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<NodeType | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const { settings } = useAIProvider();
   
   // For Dragging feedback
   const [isDragging, setIsDragging] = useState(false);
@@ -67,6 +71,9 @@ export default function CodeStudio() {
   // Initial Presets
   const initWorkspace = useCallback(async () => {
     try {
+      // Sync keys from context on init
+      await keyManager.syncKeysFromContext(settings);
+
       const saved = await AsyncStorage.getItem('@code_studio_workspace');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -74,8 +81,8 @@ export default function CodeStudio() {
         setConnections(parsed.connections || []);
       } else {
         const initialNodes: Node[] = [
-          { id: '1', type: 'Agent', title: 'Groq Agent', x: 100, y: 150, config: { apiKey: '' } },
-          { id: '2', type: 'Skill', title: 'React Native UI', x: 350, y: 150, config: { prompt: 'Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.' } },
+          { id: '1', type: 'Agent', title: 'Groq Agent', x: 100, y: 150, config: { provider: 'Groq', apiKey: '' } },
+          { id: '2', type: 'Skill', title: 'React Native UI', x: 350, y: 150, config: { skillId: 'skill_react_native', prompt: 'Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.' } },
           { id: '3', type: 'Tool', title: 'Web Search', x: 600, y: 150, config: { engine: 'DuckDuckGo' } },
           { id: '4', type: 'Output', title: 'Chat Display', x: 850, y: 150, config: { destination: 'Chat Display' } },
         ];
@@ -91,7 +98,7 @@ export default function CodeStudio() {
     } catch (e) {
       console.error('Failed to load workspace', e);
     }
-  }, []);
+  }, [settings]);
 
   useEffect(() => {
     initWorkspace();
@@ -115,9 +122,12 @@ export default function CodeStudio() {
     let defaultTitle = `${nodeTypeToCreate} Node`;
     let defaultConfig = {};
 
-    if (nodeTypeToCreate === 'Skill') {
+    if (nodeTypeToCreate === 'Agent') {
+      defaultTitle = 'AI Agent';
+      defaultConfig = { provider: 'Groq', apiKey: '' };
+    } else if (nodeTypeToCreate === 'Skill') {
        defaultTitle = 'New Skill';
-       defaultConfig = { prompt: 'Esti un asistent specializat. Ajuta utilizatorul cu expertiza ta.' };
+       defaultConfig = { skillId: '', prompt: 'Esti un asistent specializat. Ajuta utilizatorul cu expertiza ta.' };
     } else if (nodeTypeToCreate === 'Tool') {
        defaultTitle = 'Web Search';
        defaultConfig = { engine: 'DuckDuckGo', maxResults: 5 };
@@ -156,10 +166,6 @@ export default function CodeStudio() {
     saveWorkspace(updatedNodes, connections);
     setIsAddModalVisible(false);
     setSelectedCategory(null);
-  };
-
-  const updateNodePosition = (id: string, x: number, y: number) => {
-    setNodes(prev => prev.map(n => n.id === id ? { ...n, x, y } : n));
   };
 
   const finalizeNodePosition = (id: string, x: number, y: number) => {
@@ -213,12 +219,39 @@ export default function CodeStudio() {
     }
   };
 
-  const runWorkflow = () => {
+  const runWorkflow = async () => {
     if (connections.length === 0) {
       Alert.alert('Info', 'Nu există conexiuni pentru a rula fluxul.');
       return;
     }
-    Alert.alert('Flux Rulat', 'Fluxul de lucru a fost procesat de Jarvis.');
+
+    // Identify the chain: Agent -> Skill -> Tool -> Output
+    const agentNode = nodes.find(n => n.type === 'Agent');
+    if (!agentNode) {
+      Alert.alert('Eroare', 'Lipsește un nod de tip Agent.');
+      return;
+    }
+
+    // Collect skills connected to the agent
+    const connectedSkills = connections
+      .filter(c => c.fromId === agentNode.id)
+      .map(c => nodes.find(n => n.id === c.toId))
+      .filter(n => n && n.type === 'Skill');
+
+    // Create a sub-agent from the flow
+    try {
+      const subAgent = await createSubAgent({
+        name: agentNode.title,
+        agentProvider: agentNode.config.provider.toLowerCase(),
+        apiKey: agentNode.config.apiKey,
+        skills: connectedSkills.map(s => s?.config.skillId).filter(Boolean),
+        systemPrompt: connectedSkills.map(s => s?.config.prompt).join('\n\n'),
+      });
+
+      Alert.alert('Succes', `Sub-Agentul "${subAgent.name}" a fost salvat și este gata de utilizare în chat.`);
+    } catch (e) {
+      Alert.alert('Eroare', 'Nu s-a putut crea Sub-Agentul.');
+    }
   };
 
   const renderGrid = () => {
@@ -256,7 +289,7 @@ export default function CodeStudio() {
       // Calculate arrowhead
       const t = 0.95; // Point near the end for tangent
       const tx = (1-t)**3 * x1 + 3*(1-t)**2*t*cx1 + 3*(1-t)*t**2*cx2 + t**3*x2;
-      const ty = (1-t)**3 * y1 + 3*(1-t)**2*t*cy1 + 3*(1-t)*t**2*cy2 + t**3*y2;
+      const ty = (1-t)**3 * y1 + 3*(1-t)**2*t*cy1 + 3*(1-t)*t**2*cx2 + t**3*y2;
       const angle = Math.atan2(y2 - ty, x2 - tx);
       const arrowSize = 8;
       const arrowP1 = `${x2},${y2}`;
@@ -291,7 +324,7 @@ export default function CodeStudio() {
             <Ionicons name="refresh-outline" size={22} color="#6366f1" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon} onPress={runWorkflow}>
-            <Ionicons name="play" size={22} color="#10b981" />
+            <Ionicons name="save-outline" size={22} color="#10b981" />
           </TouchableOpacity>
         </View>
       </View>
@@ -316,7 +349,6 @@ export default function CodeStudio() {
               <NodeCard 
                 key={node.id} 
                 node={node} 
-                updateNodePosition={updateNodePosition}
                 onFinalizePosition={finalizeNodePosition}
                 onPress={() => handleConnect(node.id)}
                 onLongPress={() => setEditingNode(node)}
@@ -383,23 +415,68 @@ export default function CodeStudio() {
 
               {editingNode.type === 'Agent' && (
                 <>
-                  <Text style={styles.inputLabel}>API Key / Provider</Text>
+                  <Text style={styles.inputLabel}>Provider</Text>
+                  <View style={styles.providerGrid}>
+                    {['Groq', 'OpenRouter', 'Gemini', 'OpenAI'].map(p => (
+                      <TouchableOpacity 
+                        key={p}
+                        style={[styles.providerTab, editingNode.config.provider === p && styles.providerTabActive]}
+                        onPress={() => setEditingNode({
+                          ...editingNode,
+                          config: { ...editingNode.config, provider: p }
+                        })}
+                      >
+                        <Text style={[styles.providerTabText, editingNode.config.provider === p && styles.providerTabTextActive]}>{p}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.inputLabel}>API Key (opțional)</Text>
                   <TextInput
                     style={styles.input}
                     value={editingNode.config.apiKey}
+                    secureTextEntry
                     onChangeText={(text) => setEditingNode({ 
                       ...editingNode, 
                       config: { ...editingNode.config, apiKey: text } 
                     })}
-                    placeholder="Auto-detectat din setări"
+                    placeholder="Folosește cheia globală dacă e gol"
                     placeholderTextColor="#94a3b8"
                   />
+                  <TouchableOpacity 
+                    style={styles.saveKeyButton}
+                    onPress={async () => {
+                      if (editingNode.config.apiKey) {
+                        await keyManager.addKey(editingNode.config.provider, editingNode.config.apiKey);
+                        Alert.alert('Succes', `Cheia pentru ${editingNode.config.provider} a fost salvată.`);
+                      }
+                    }}
+                  >
+                    <Text style={styles.saveKeyButtonText}>Salvează Cheia în Manager</Text>
+                  </TouchableOpacity>
                 </>
               )}
 
               {editingNode.type === 'Skill' && (
                 <>
-                  <Text style={styles.inputLabel}>Prompt System</Text>
+                  <Text style={styles.inputLabel}>Selectează Skill Predefinit</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.skillScroll}>
+                    {SKILLS.map(skill => (
+                      <TouchableOpacity 
+                        key={skill.id}
+                        style={[styles.skillChip, editingNode.config.skillId === skill.id && styles.skillChipActive]}
+                        onPress={() => setEditingNode({
+                          ...editingNode,
+                          title: skill.name,
+                          config: { ...editingNode.config, skillId: skill.id, prompt: skill.systemPrompt }
+                        })}
+                      >
+                        <Text style={[styles.skillChipText, editingNode.config.skillId === skill.id && styles.skillChipTextActive]}>{skill.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  <Text style={styles.inputLabel}>Prompt System Personalizat</Text>
                   <TextInput
                     style={[styles.input, { height: 120 }]}
                     value={editingNode.config.prompt}
@@ -445,7 +522,6 @@ export default function CodeStudio() {
 
 interface NodeCardProps {
   node: Node;
-  updateNodePosition: (id: string, x: number, y: number) => void;
   onFinalizePosition: (id: string, x: number, y: number) => void;
   onPress: () => void;
   onLongPress: () => void;
@@ -454,8 +530,8 @@ interface NodeCardProps {
   onDragEnd: () => void;
 }
 
-function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: NodeCardProps) {
-  const startPos = useRef({ x: 0, y: 0 });
+function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: NodeCardProps) {
+  const pan = useRef(new Animated.ValueXY({ x: node.x, y: node.y })).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -471,6 +547,11 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
     }
   }, [isSelected]);
 
+  // Sync pan value if node prop changes (e.g. from init)
+  useEffect(() => {
+    pan.setValue({ x: node.x, y: node.y });
+  }, [node.x, node.y]);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -478,21 +559,26 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
         return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
       },
       onPanResponderGrant: () => {
-        startPos.current = { x: node.x, y: node.y };
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value
+        });
+        pan.setValue({ x: 0, y: 0 });
         onDragStart();
       },
-      onPanResponderMove: (_, gestureState) => {
-        const newX = startPos.current.x + gestureState.dx;
-        const newY = startPos.current.y + gestureState.dy;
-        updateNodePosition(node.id, newX, newY);
-      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: pan.x, dy: pan.y }],
+        { useNativeDriver: false }
+      ),
       onPanResponderRelease: (_, gestureState) => {
+        pan.flattenOffset();
         onDragEnd();
-        const finalX = startPos.current.x + gestureState.dx;
-        const finalY = startPos.current.y + gestureState.dy;
+        const finalX = (pan.x as any)._value;
+        const finalY = (pan.y as any)._value;
         onFinalizePosition(node.id, finalX, finalY);
       },
       onPanResponderTerminate: () => {
+        pan.flattenOffset();
         onDragEnd();
       },
     })
@@ -509,8 +595,8 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
         styles.node,
         {
           position: 'absolute',
-          left: node.x,
-          top: node.y,
+          left: pan.x,
+          top: pan.y,
           borderLeftColor: CATEGORY_COLORS[node.type],
           borderColor: isSelected ? borderColor : '#334155',
           borderWidth: isSelected ? 2 : 1,
@@ -761,6 +847,68 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  providerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  providerTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  providerTabActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  providerTabText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  providerTabTextActive: {
+    color: '#fff',
+  },
+  saveKeyButton: {
+    backgroundColor: '#334155',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  saveKeyButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  skillScroll: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  skillChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#0f172a',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  skillChipActive: {
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+  },
+  skillChipText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  skillChipTextActive: {
+    color: '#fff',
+  },
 });
-
-
