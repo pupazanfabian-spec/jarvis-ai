@@ -181,6 +181,8 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     model = 'mistralai/mistral-7b-instruct:free';
   }
 
+  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${model})`);
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -198,7 +200,10 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     const data = await response.json();
     const duration = Date.now() - startTime;
     
-    if (!response.ok) throw new Error(data.error?.message || `API Error ${response.status}`);
+    if (!response.ok) {
+        const errorMsg = data.error?.message || `API Error ${response.status}`;
+        throw new Error(errorMsg);
+    }
 
     const resultText = data.choices[0]?.message?.content || 'Fără răspuns.';
 

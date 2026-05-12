@@ -22,14 +22,16 @@ export class JarvisOrchestrator {
     const allSkills = await getAllSkills();
     const skill = detectSkill(message, allSkills);
     
-    // Logic to determine complexity
-    const wordCount = message.split(' ').length;
+    const wordCount = message.split(/\s+/).length;
     let complexity: 'simple' | 'medium' | 'complex' = 'simple';
     
-    if (wordCount > 15 || skill.category !== 'conversatie') {
+    // logic refinement: more sensitive
+    if (wordCount > 5 || skill.category !== 'conversatie') {
         complexity = 'medium';
     }
-    if (skill.tools.length > 0 || message.toLowerCase().includes('planifica') || message.toLowerCase().includes('workflow')) {
+    
+    const complexKeywords = ['planifica', 'creeaza', 'scrie cod', 'cauta', 'workflow', 'organizeaza', 'analiza'];
+    if (skill.tools.length > 0 || complexKeywords.some(k => message.toLowerCase().includes(k))) {
         complexity = 'complex';
     }
 
@@ -43,12 +45,15 @@ export class JarvisOrchestrator {
 
   async findBestAgent(skillId: string): Promise<SubAgent | null> {
     const agents = await getSubAgents();
-    const activeAgents = (agents || []).filter(a => a.isActive && a.skills.includes(skillId));
+    const activeAgents = (agents || []).filter(a => a.isActive);
     
     if (activeAgents.length === 0) return null;
-    
-    // Sort by priority DESC, then lastUsed ASC (prefer least recently used for load balancing or most for context? 
-    // Usually priority is best indicator)
+
+    // 1. Try perfect skill match
+    const withSkill = activeAgents.filter(a => a.skills.includes(skillId));
+    if (withSkill.length > 0) return withSkill[0];
+
+    // 2. Fallback: Return highest priority active agent
     return activeAgents[0]; 
   }
 
@@ -67,11 +72,12 @@ export class JarvisOrchestrator {
 
   async route(message: string): Promise<RouteResult> {
     try {
-      const intent = await analyzeIntentLocal(message);
-      
+      const intent = await this.analyzeIntent(message);
+      console.log(`[Orchestrator] Intent: ${intent.skill.name}, Complexity: ${intent.complexity}`);
+
       if (intent.complexity === 'simple' && intent.skill.id === 'conversatie') {
           return {
-              response: '', // Let BrainContext handle normal flow
+              response: '', 
               agentUsed: null,
               skillUsed: 'conversatie',
               wasAutoCreated: false,
@@ -97,6 +103,7 @@ export class JarvisOrchestrator {
         success: result.success
       };
     } catch (e: any) {
+        console.error('[Orchestrator] Route error:', e);
         return {
             response: `Eroare orchestrator: ${e.message}`,
             agentUsed: null,
@@ -106,12 +113,6 @@ export class JarvisOrchestrator {
         };
     }
   }
-}
-
-// Helper for local access in class
-async function analyzeIntentLocal(message: string) {
-    const o = new JarvisOrchestrator();
-    return await o.analyzeIntent(message);
 }
 
 export const orchestrator = new JarvisOrchestrator();

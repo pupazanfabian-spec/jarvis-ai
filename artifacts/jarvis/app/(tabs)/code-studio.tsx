@@ -51,6 +51,8 @@ const CATEGORY_ICONS: Record<string, string> = {
   Agent: 'hardware-chip-outline', Skill: 'book-outline', Tool: 'hammer-outline', Output: 'paper-plane-outline',
 };
 
+const SKILL_CATEGORIES = ['conversatie', 'scriptare', 'codare', 'cercetare', 'verificare', 'rulare', 'memorie', 'orchestrare', 'custom'];
+
 // ─── MEMOIZED COMPONENTS ─────────────────────────────────────────────────────
 
 const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: any) => {
@@ -70,8 +72,8 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
       <React.Fragment key={`c-${index}`}>
         <Path d={path} stroke={`url(#g-${index})`} strokeWidth="3" fill="none" opacity={0.8} />
         <Polygon points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} fill={CATEGORY_COLORS[from.type] || '#6366f1'} />
-        <Circle cx={midX} cy={midY} r="10" fill="#1e293b" stroke="#ef4444" strokeWidth="1" />
-        <SvgText x={midX} y={midY + 4} fontSize="12" fill="#ef4444" textAnchor="middle" fontWeight="bold" onPress={() => deleteConnection(conn)}>×</SvgText>
+        <Circle cx={midX} cy={midY} r="12" fill="#1e293b" stroke="#ef4444" strokeWidth="1" />
+        <SvgText x={midX} y={midY + 4} fontSize="14" fill="#ef4444" textAnchor="middle" fontWeight="bold" onPress={() => deleteConnection(conn)}>×</SvgText>
       </React.Fragment>
     );
   });
@@ -104,7 +106,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
       </View>
       <Text style={styles.nodeTitle} numberOfLines={1}>{node.title || 'Untitled'}</Text>
       <Text style={styles.nodeType}>{node.type}</Text>
-      {priority && <View style={styles.priorityBadge}><Text style={styles.priorityText}>P{priority}</Text></View>}
+      {priority !== undefined && <View style={styles.priorityBadge}><Text style={styles.priorityText}>P{priority}</Text></View>}
       <TouchableOpacity style={styles.connectPlusBtn} onPress={onPress}><Ionicons name="add" size={14} color="#fff" /></TouchableOpacity>
     </Animated.View>
   );
@@ -139,11 +141,21 @@ export default function CodeStudio() {
   const [editingSkill, setEditingSkill] = useState<Partial<Skill>>({ name: '', category: 'custom', systemPrompt: '', triggers: [] });
   const [isLogsVisible, setIsLogsVisible] = useState(false);
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([]);
+  const [logFilter, setLogFilter] = useState<'all' | 'success' | 'failed'>('all');
+  
   const [isSandboxVisible, setIsSandboxVisible] = useState(false);
   const [sandboxAgent, setSandboxAgent] = useState<SubAgent | null>(null);
   const [sandboxMsg, setSandboxMsg] = useState('');
   const [sandboxResp, setSandboxResp] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+
+  const saveWS = useCallback((n: Node[], c: Connection[]) => {
+    AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: n, connections: c }));
+  }, []);
+
+  const debouncedSave = useCallback((n: Node[], c: Connection[]) => {
+      saveWS(n, c);
+  }, [saveWS]);
 
   const initWorkspace = useCallback(async () => {
     try {
@@ -151,15 +163,41 @@ export default function CodeStudio() {
       await seedDefaultAgents();
       const [sa, sk, saved] = await Promise.all([getSubAgents(), getAllSkills(), AsyncStorage.getItem('@code_studio_workspace')]);
       setSubAgents(sa || []); setAllSkills(sk || []);
-      if (saved) { const p = JSON.parse(saved); setNodes(p.nodes || []); setConnections(p.connections || []); }
+      
+      if (saved) { 
+          const p = JSON.parse(saved); 
+          const existingNodes = p.nodes || [];
+          if (existingNodes.length === 0 && sa && sa.length > 0) {
+              const autoNodes = sa.map((agent, i) => ({
+                id: agent.id,
+                type: 'Agent' as NodeType,
+                title: agent.name,
+                x: 100 + (i % 3) * 220,
+                y: 100 + Math.floor(i / 3) * 180,
+                config: { agentId: agent.id }
+              }));
+              setNodes(autoNodes);
+              saveWS(autoNodes, []);
+          } else {
+              setNodes(existingNodes); 
+              setConnections(p.connections || []); 
+          }
+      } else if (sa && sa.length > 0) {
+          const autoNodes = sa.map((agent, i) => ({
+            id: agent.id,
+            type: 'Agent' as NodeType,
+            title: agent.name,
+            x: 100 + (i % 3) * 220,
+            y: 100 + Math.floor(i / 3) * 180,
+            config: { agentId: agent.id }
+          }));
+          setNodes(autoNodes);
+          saveWS(autoNodes, []);
+      }
     } catch (e) { console.error('[Studio] Init error', e); }
-  }, [settings]);
+  }, [settings, saveWS]);
 
   useFocusEffect(useCallback(() => { initWorkspace(); }, [initWorkspace]));
-
-  const saveWS = useCallback((n: Node[], c: Connection[]) => {
-    AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: n, connections: c }));
-  }, []);
 
   const canvasPanResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => !isDraggingRef.current,
@@ -175,25 +213,51 @@ export default function CodeStudio() {
     return dots;
   }, []);
 
-  const handleSaveAgent = async () => {
-    if (!newAgentConfig.name) return Alert.alert('Eroare', 'Numele este obligatoriu.');
+  const handleCreateAgent = async () => {
     try {
-      const agent = await createSubAgent(newAgentConfig);
-      const newNode: Node = { id: agent.id, type: 'Agent', title: agent.name, x: 200, y: 200, config: { agentId: agent.id } };
+      if (!newAgentConfig.name?.trim()) {
+        Alert.alert('Eroare', 'Numele agentului este obligatoriu!');
+        return;
+      }
+      const agent = await createSubAgent({
+        ...newAgentConfig,
+        isActive: true,
+      });
+      const newNode: Node = { 
+          id: agent.id, 
+          type: 'Agent', 
+          title: agent.name, 
+          x: 200 + Math.random() * 100, 
+          y: 200 + Math.random() * 100, 
+          config: { agentId: agent.id, provider: agent.agentProvider } 
+      };
       const updatedNodes = [...nodes, newNode];
-      setNodes(updatedNodes); saveWS(updatedNodes, connections);
-      await initWorkspace(); setIsWizardVisible(false); setWizardStep(1);
-    } catch { Alert.alert('Eroare', 'Salvare eșuată.'); }
+      setNodes(updatedNodes); 
+      saveWS(updatedNodes, connections);
+      const refreshed = await getSubAgents();
+      setSubAgents(refreshed);
+      setIsWizardVisible(false);
+      setWizardStep(1);
+      setNewAgentConfig({ name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 });
+      Alert.alert('Succes', `Agentul "${agent.name}" a fost creat!`);
+    } catch(e: any) { Alert.alert('Eroare', e.message || 'Salvare eșuată.'); }
   };
 
   const handleSaveSkill = async () => {
-    if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Completează câmpurile.');
-    await saveSkill({ ...editingSkill as Skill, id: editingSkill.id || `sk-${Date.now()}` });
-    await initWorkspace(); setIsSkillEditorVisible(false);
+    if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Completează câmpurile obligatorii.');
+    try {
+        await saveSkill({ 
+            ...editingSkill as Skill, 
+            id: editingSkill.id || `sk-${Date.now()}`,
+            triggers: Array.isArray(editingSkill.triggers) ? editingSkill.triggers : (editingSkill.triggers as any || "").split(',').map((t: string)=>t.trim()).filter(Boolean)
+        });
+        await initWorkspace(); 
+        setIsSkillEditorVisible(false);
+    } catch (e) { Alert.alert('Eroare', 'Nu s-a putut salva skill-ul.'); }
   };
 
   const handleTestAgent = async () => {
-    if (!sandboxAgent || !sandboxMsg) return;
+    if (!sandboxAgent || !sandboxMsg.trim()) return;
     setIsThinking(true); setSandboxResp('');
     try {
       const res = await callSubAgent(sandboxAgent.id, sandboxMsg);
@@ -207,6 +271,12 @@ export default function CodeStudio() {
       const prompt = selected.map(s => `### ${s.name}\n${s.systemPrompt}`).join('\n\n');
       setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });
   };
+
+  const filteredLogs = useMemo(() => {
+      if (logFilter === 'success') return agentLogs.filter(l => l.success);
+      if (logFilter === 'failed') return agentLogs.filter(l => !l.success);
+      return agentLogs;
+  }, [agentLogs, logFilter]);
 
   const renderCanvas = () => (
     <View style={styles.canvasContainer} {...canvasPanResponder.panHandlers}>
@@ -251,26 +321,30 @@ export default function CodeStudio() {
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'canvas' && styles.tabBtnActive]} onPress={() => setViewMode('canvas')}><Text style={[styles.tabBtnText, viewMode === 'canvas' && styles.tabBtnTextActive]}>Canvas</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'dashboard' && styles.tabBtnActive]} onPress={() => setViewMode('dashboard')}><Text style={[styles.tabBtnText, viewMode === 'dashboard' && styles.tabBtnTextActive]}>Dashboard</Text></TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.templatesBtn} onPress={() => setIsAddModalVisible(true)}><Ionicons name="layers-outline" size={20} color="#fff" /><Text style={styles.templatesBtnText}>Workspace</Text></TouchableOpacity>
+        <View style={styles.row}>
+            <TouchableOpacity style={styles.headerBtn} onPress={() => { setEditingSkill({ name: '', category: 'custom', systemPrompt: '', triggers: [] }); setIsSkillEditorVisible(true); }}><Ionicons name="flash-outline" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity style={styles.headerBtn} onPress={async () => { const l = await getAgentLogs(); setAgentLogs(l); setIsLogsVisible(true); }}><Ionicons name="list-outline" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity style={styles.templatesBtn} onPress={() => setIsAddModalVisible(true)}><Ionicons name="add-outline" size={20} color="#fff" /><Text style={styles.templatesBtnText}>Add</Text></TouchableOpacity>
+        </View>
       </View>
 
       {viewMode === 'canvas' ? renderCanvas() : (
         <View style={styles.dashboard}>
           <View style={styles.row}>
               <Text style={styles.dashboardTitle}>Agenți ({subAgents.length})</Text>
-              <TouchableOpacity onPress={async () => { const l = await getAgentLogs(); setAgentLogs(l); setIsLogsVisible(true); }}><Text style={styles.logsLink}>Vezi Logs</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsAddModalVisible(true)}><Text style={styles.logsLink}>+ Adaugă Node</Text></TouchableOpacity>
           </View>
           <FlatList data={subAgents} keyExtractor={item => item.id} renderItem={({ item }) => (
             <View style={styles.agentCard}>
               <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(initWorkspace)} /></View>
-              <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority} • {item.skills.length} skills</Text>
+              <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority} • {item.skills?.length || 0} skills</Text>
               <View style={styles.agentCardActions}>
                   <TouchableOpacity style={styles.actionBtn} onPress={() => { setSandboxAgent(item); setIsSandboxVisible(true); }}><Text style={styles.actionBtnText}>Test</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={() => { setNewAgentConfig(item); setIsWizardVisible(true); setWizardStep(1); }}><Text style={styles.actionBtnText}>Edit</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444' }]} onPress={() => deleteSubAgent(item.id).then(initWorkspace)}><Ionicons name="trash" size={14} color="#fff" /></TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444' }]} onPress={() => Alert.alert('Sterge', 'Stergi acest agent?', [{text:'Anuleaza'}, {text:'Sterge', onPress: () => deleteSubAgent(item.id).then(initWorkspace)}])}><Ionicons name="trash" size={14} color="#fff" /></TouchableOpacity>
               </View>
             </View>
-          )} ListEmptyComponent={<Text style={styles.emptyText}>Niciun agent activ.</Text>} />
+          )} ListEmptyComponent={<Text style={styles.emptyText}>Niciun agent creat.</Text>} />
         </View>
       )}
 
@@ -279,7 +353,7 @@ export default function CodeStudio() {
       {/* MODALS */}
       <Modal visible={isAddModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Adaugă Node</Text>
+            <Text style={styles.modalTitle}>Adaugă Node în Workspace</Text>
             <View style={styles.nodeTypeGrid}>{['Agent', 'Skill', 'Tool', 'Output'].map(t => (
               <TouchableOpacity key={t} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[t] }]} onPress={() => { const id = Math.random().toString(36).substr(2,9); const n = [...nodes, { id, type: t as any, title: `New ${t}`, x: 100, y: 100, config: {} }]; setNodes(n); saveWS(n, connections); setIsAddModalVisible(false); }}>
                 <Ionicons name={CATEGORY_ICONS[t] as any} size={24} color={CATEGORY_COLORS[t]} /><Text style={styles.typeBtnText}>{t}</Text>
@@ -306,41 +380,51 @@ export default function CodeStudio() {
           <View style={styles.wizardContent}>
             <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>{newAgentConfig.id ? 'Editare Agent' : 'Agent Wizard'}</Text><Text style={styles.wizardStep}>Pas {wizardStep}/5</Text></View>
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume Agent</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={t => setNewAgentConfig({...newAgentConfig, name: t})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={t => setNewAgentConfig({...newAgentConfig, description: t})} multiline /></View>}
-            {wizardStep === 2 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Provider</Text><View style={styles.row}>{['groq', 'openrouter'].map(p => (<TouchableOpacity key={p} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View></View>}
-            {wizardStep === 3 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Selectează Skills</Text><ScrollView style={{ height: 300 }}>{allSkills.map(s => (
-                <TouchableOpacity key={s.id} style={[styles.selectableItem, newAgentConfig.skills?.includes(s.id) && styles.selectedItem]} onPress={() => { const sk = newAgentConfig.skills || []; setNewAgentConfig({...newAgentConfig, skills: sk.includes(s.id) ? sk.filter(x=>x!==s.id) : [...sk, s.id]}); }}>
-                  <Text style={styles.selectableText}>{s.name}</Text>
+            {wizardStep === 2 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>AI Provider</Text><View style={styles.row}>{['groq', 'openrouter'].map(p => (<TouchableOpacity key={p} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View></View>}
+            {wizardStep === 3 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Selectează Skills</Text><ScrollView style={{ height: 400 }}>{allSkills.map(s => {
+                const isSel = newAgentConfig.skills?.includes(s.id);
+                return <TouchableOpacity key={s.id} style={[styles.selectableItem, isSel && styles.selectedItem]} onPress={() => { const sk = newAgentConfig.skills || []; setNewAgentConfig({...newAgentConfig, skills: isSel ? sk.filter(x=>x!==s.id) : [...sk, s.id]}); }}>
+                  <View style={styles.row}><Text style={styles.selectableText}>{s.name}</Text><Ionicons name={isSel ? "checkbox" : "square-outline"} size={20} color={isSel ? "#10b981" : "#475569"} /></View>
+                  <Text style={styles.selectableSub}>{s.category}</Text>
                 </TouchableOpacity>
-            ))}</ScrollView></View>}
-            {wizardStep === 4 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Unelte (Tools)</Text>{['webSearch', 'memory', 'codeRunner'].map(t => (
+            })}</ScrollView></View>}
+            {wizardStep === 4 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Unelte active (Tools)</Text>{['webSearch', 'memory', 'codeRunner'].map(t => (
                 <View key={t} style={styles.toolRow}><Text style={styles.toolText}>{t}</Text><Switch value={newAgentConfig.tools?.includes(t)} onValueChange={v => { const ts = newAgentConfig.tools || []; setNewAgentConfig({...newAgentConfig, tools: v ? [...ts, t] : ts.filter(x=>x!==t)}); }} /></View>
-            ))}<Text style={styles.inputLabel}>Prioritate: {newAgentConfig.priority}</Text><View style={styles.row}>{[1,3,5,8,10].map(p => (<TouchableOpacity key={p} style={[styles.priorityBtn, newAgentConfig.priority === p && styles.priorityBtnActive]} onPress={() => setNewAgentConfig({...newAgentConfig, priority: p})}><Text style={styles.priorityBtnText}>{p}</Text></TouchableOpacity>))}</View></View>}
-            {wizardStep === 5 && <View style={styles.wizardBody}><View style={styles.row}><Text style={styles.inputLabel}>System Prompt</Text><TouchableOpacity onPress={autoGeneratePrompt}><Text style={styles.autoGenLink}>Auto-generează din Skills</Text></TouchableOpacity></View><TextInput style={[styles.input, { height: 200 }]} value={newAgentConfig.systemPrompt} onChangeText={t => setNewAgentConfig({...newAgentConfig, systemPrompt: t})} multiline /><TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveAgent}><Text style={styles.finalizeBtnText}>Salvează Agent</Text></TouchableOpacity></View>}
+            ))}<Text style={styles.inputLabel}>Prioritate Execuție: {newAgentConfig.priority}</Text><View style={styles.row}>{[1,3,5,8,10].map(p => (<TouchableOpacity key={p} style={[styles.priorityBtn, newAgentConfig.priority === p && styles.priorityBtnActive]} onPress={() => setNewAgentConfig({...newAgentConfig, priority: p})}><Text style={styles.priorityBtnText}>{p}</Text></TouchableOpacity>))}</View></View>}
+            {wizardStep === 5 && <View style={styles.wizardBody}><View style={styles.row}><Text style={styles.inputLabel}>Personalitate (System Prompt)</Text><TouchableOpacity onPress={autoGeneratePrompt}><Text style={styles.autoGenLink}>Generate from Skills</Text></TouchableOpacity></View><TextInput style={[styles.input, { height: 250 }]} value={newAgentConfig.systemPrompt} onChangeText={t => setNewAgentConfig({...newAgentConfig, systemPrompt: t})} multiline placeholder="Instrucțiuni pentru acest agent..." placeholderTextColor="#475569" /><TouchableOpacity style={styles.finalizeBtn} onPress={handleCreateAgent}><Text style={styles.finalizeBtnText}>Finalizează & Salvează Agent</Text></TouchableOpacity></View>}
             <View style={styles.wizardFooter}><TouchableOpacity onPress={() => wizardStep > 1 && setWizardStep(wizardStep - 1)} disabled={wizardStep === 1}><Text style={styles.wizardBtnText}>Înapoi</Text></TouchableOpacity><TouchableOpacity onPress={() => setIsWizardVisible(false)}><Text style={styles.closeWizardText}>Anulează</Text></TouchableOpacity>{wizardStep < 5 && <TouchableOpacity onPress={() => setWizardStep(wizardStep + 1)}><Text style={styles.wizardBtnText}>Înainte</Text></TouchableOpacity>}</View>
           </View>
         </SafeAreaView>
       </Modal>
 
       <Modal visible={isSkillEditorVisible} transparent animationType="slide"><View style={styles.modalOverlay}><View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>Editor Skill</Text>
-        <TextInput style={styles.input} placeholder="Nume Skill" value={editingSkill.name} onChangeText={t => setEditingSkill({...editingSkill, name: t})} />
-        <TextInput style={[styles.input, { height: 150, marginTop: 10 }]} placeholder="System Prompt" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline />
-        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Triggers (comma separated)" value={editingSkill.triggers?.join(',')} onChangeText={t => setEditingSkill({...editingSkill, triggers: t.split(',')})} />
-        <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
+        <Text style={styles.modalTitle}>Configurare Skill</Text>
+        <TextInput style={styles.input} placeholder="Nume Skill" value={editingSkill.name} onChangeText={t => setEditingSkill({...editingSkill, name: t})} placeholderTextColor="#475569" />
+        <Text style={styles.inputLabel}>Categorie</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{SKILL_CATEGORIES.map(c => (
+            <TouchableOpacity key={c} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
+        ))}</ScrollView>
+        <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
+        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (triggers, separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
+        <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează Skill</Text></TouchableOpacity>
+        {editingSkill.id && <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 8 }]} onPress={async () => { await deleteSkill(editingSkill.id!); await initWorkspace(); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>}
+        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
       </View></View></Modal>
 
       <Modal visible={isSandboxVisible} transparent={false} animationType="fade"><SafeAreaView style={styles.fullscreenModal}><View style={styles.sandboxContent}>
-        <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>Sandbox: {sandboxAgent?.name}</Text><TouchableOpacity onPress={() => setIsSandboxVisible(false)}><Ionicons name="close" size={28} color="#fff" /></TouchableOpacity></View>
-        <ScrollView style={styles.sandboxOutput}><Text style={styles.responseText}>{sandboxResp || 'Aștept mesaj de test...'}</Text>{isThinking && <ActivityIndicator color="#6366f1" />}</ScrollView>
-        <View style={styles.sandboxInputRow}><TextInput style={styles.sandboxInput} value={sandboxMsg} onChangeText={setSandboxMsg} placeholder="Mesaj test..." placeholderTextColor="#475569" /><TouchableOpacity style={styles.sendBtn} onPress={handleTestAgent}><Ionicons name="send" size={20} color="#fff" /></TouchableOpacity></View>
+        <View style={styles.wizardHeader}><View><Text style={styles.wizardTitle}>Sandbox: {sandboxAgent?.name}</Text><Text style={styles.catChipText}>{sandboxAgent?.agentProvider}</Text></View><TouchableOpacity onPress={() => setIsSandboxVisible(false)}><Ionicons name="close" size={28} color="#fff" /></TouchableOpacity></View>
+        <ScrollView style={styles.sandboxOutput}><Text style={styles.responseText}>{sandboxResp || 'Introdu un mesaj mai jos pentru a testa agentul...'}</Text>{isThinking && <ActivityIndicator color="#6366f1" style={{ marginTop: 20 }} />}</ScrollView>
+        <View style={styles.sandboxInputRow}><TextInput style={styles.sandboxInput} value={sandboxMsg} onChangeText={setSandboxMsg} placeholder="Scrie ceva pentru agent..." placeholderTextColor="#475569" /><TouchableOpacity style={[styles.sendBtn, (!sandboxMsg.trim() || isThinking) && { opacity: 0.5 }]} onPress={handleTestAgent} disabled={!sandboxMsg.trim() || isThinking}><Ionicons name="send" size={20} color="#fff" /></TouchableOpacity></View>
       </View></SafeAreaView></Modal>
 
       <Modal visible={isLogsVisible} transparent animationType="fade"><View style={styles.modalOverlay}><View style={styles.modalContent}>
-        <View style={styles.row}><Text style={styles.modalTitle}>Logs Sistem</Text><TouchableOpacity onPress={async () => { await clearAgentLogs(); setAgentLogs([]); }}><Text style={styles.clearLogs}>Șterge tot</Text></TouchableOpacity></View>
-        <FlatList style={{ maxHeight: 400 }} data={agentLogs} keyExtractor={(item, index) => index.toString()} renderItem={({ item }) => (
-          <View style={styles.logItem}><Text style={styles.logTime}>{new Date(item.timestamp).toLocaleTimeString()} - {item.agentName}</Text><Text style={styles.logText} numberOfLines={1}>IN: {item.input}</Text><Text style={[styles.logStatus, { color: item.success ? '#10b981' : '#ef4444' }]}>{item.success ? 'Success' : 'Fail'} • {item.durationMs}ms</Text></View>
-        )} />
+        <View style={styles.row}><Text style={styles.modalTitle}>Activitate Agenți</Text><TouchableOpacity onPress={async () => { await clearAgentLogs(); setAgentLogs([]); }}><Text style={styles.clearLogs}>Golește</Text></TouchableOpacity></View>
+        <View style={[styles.row, { marginBottom: 10 }]}>{['all', 'success', 'failed'].map(f => (
+            <TouchableOpacity key={f} style={[styles.catChip, logFilter === f && styles.catChipActive]} onPress={() => setLogFilter(f as any)}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
+        ))}</View>
+        <FlatList style={{ maxHeight: 500 }} data={filteredLogs} keyExtractor={(item, index) => index.toString()} renderItem={({ item }) => (
+          <View style={styles.logItem}><View style={styles.row}><Text style={styles.logTime}>{new Date(item.timestamp).toLocaleTimeString()}</Text><Text style={[styles.logStatus, { color: item.success ? '#10b981' : '#ef4444' }]}>{item.success ? 'OK' : 'FAIL'}</Text></View><Text style={styles.agentCardName}>{item.agentName}</Text><Text style={styles.logText} numberOfLines={2}>MSG: {item.input}</Text><Text style={styles.logTime}>Durată: {item.durationMs}ms</Text></View>
+        )} ListEmptyComponent={<Text style={styles.emptyText}>Niciun log disponibil.</Text>} />
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogsVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
       </View></View></Modal>
     </View>
@@ -355,80 +439,85 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#334155' },
   tabBtnText: { color: '#94a3b8', fontSize: 12, fontWeight: 'bold' },
   tabBtnTextActive: { color: '#fff' },
-  templatesBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6366f1', padding: 8, borderRadius: 8 },
+  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  templatesBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6366f1', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   templatesBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
   canvasContainer: { flex: 1, position: 'relative', overflow: 'hidden' },
   canvas: { backgroundColor: '#0f172a' },
   node: { width: NODE_WIDTH, padding: 10, backgroundColor: '#1e293b', borderRadius: 10, borderLeftWidth: 4, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 8, elevation: 10 },
   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   nodeActions: { flexDirection: 'row' },
-  nodeMiniBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
-  nodeTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  nodeType: { color: '#94a3b8', fontSize: 9, textTransform: 'uppercase' },
-  priorityBadge: { position: 'absolute', bottom: -6, left: -6, backgroundColor: '#f59e0b', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 },
-  priorityText: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
+  nodeMiniBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginLeft: 6 },
+  nodeTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  nodeType: { color: '#94a3b8', fontSize: 10, textTransform: 'uppercase' },
+  priorityBadge: { position: 'absolute', bottom: -6, left: -6, backgroundColor: '#f59e0b', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  priorityText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   connectPlusBtn: { position: 'absolute', right: -12, top: 48, width: 24, height: 24, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#1e293b', zIndex: 10 },
   dashboard: { flex: 1, padding: 16 },
-  dashboardTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  logsLink: { color: '#6366f1', fontWeight: 'bold' },
-  agentCard: { backgroundColor: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 10 },
+  dashboardTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  logsLink: { color: '#6366f1', fontWeight: 'bold', fontSize: 13 },
+  agentCard: { backgroundColor: '#1e293b', borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#334155' },
   agentCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  agentCardName: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  agentCardMeta: { color: '#94a3b8', fontSize: 11, marginTop: 4 },
-  agentCardActions: { flexDirection: 'row', marginTop: 12 },
-  actionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#334155', marginRight: 8 },
+  agentCardName: { color: '#fff', fontWeight: 'bold', fontSize: 17 },
+  agentCardMeta: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  agentCardActions: { flexDirection: 'row', marginTop: 14 },
+  actionBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#334155', marginRight: 10 },
   actionBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  zoomControls: { position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 5, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5, zIndex: 1001 },
-  zoomBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
+  zoomControls: { position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 6, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5, zIndex: 1001 },
+  zoomBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3 },
   zoomLevel: { paddingHorizontal: 10 },
   zoomLevelText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 8, zIndex: 1000 },
+  fab: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 10, zIndex: 1000 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, maxHeight: '90%' },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  typeBtn: { width: '100%', backgroundColor: '#0f172a', padding: 14, borderRadius: 10, borderLeftWidth: 4, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
-  typeBtnText: { color: '#fff', marginLeft: 10, fontWeight: 'bold' },
+  modalContent: { backgroundColor: '#1e293b', borderRadius: 24, padding: 24, maxHeight: '90%' },
+  modalTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  typeBtn: { width: '100%', backgroundColor: '#0f172a', padding: 16, borderRadius: 12, borderLeftWidth: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
+  typeBtnText: { color: '#fff', marginLeft: 12, fontWeight: 'bold', fontSize: 15 },
   nodeTypeGrid: { width: '100%' },
-  connectionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 14, borderRadius: 10, marginBottom: 10 },
-  connectionItemText: { color: '#fff', marginLeft: 12, fontWeight: 'bold' },
-  closeBtn: { marginTop: 16, alignItems: 'center' },
-  closeBtnText: { color: '#94a3b8', fontWeight: 'bold' },
+  connectionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 16, borderRadius: 12, marginBottom: 12 },
+  connectionItemText: { color: '#fff', marginLeft: 14, fontWeight: 'bold', fontSize: 15 },
+  closeBtn: { marginTop: 18, alignItems: 'center' },
+  closeBtnText: { color: '#94a3b8', fontWeight: 'bold', fontSize: 14 },
   fullscreenModal: { flex: 1, backgroundColor: '#0f172a' },
   wizardContent: { flex: 1, padding: 20 },
-  wizardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  wizardTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  wizardStep: { color: '#6366f1', fontWeight: 'bold' },
+  wizardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  wizardTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  wizardStep: { color: '#6366f1', fontWeight: 'bold', fontSize: 14 },
   wizardBody: { flex: 1 },
-  inputLabel: { color: '#94a3b8', fontSize: 14, marginBottom: 8, marginTop: 16 },
-  input: { backgroundColor: '#1e293b', borderRadius: 12, padding: 14, color: '#fff', borderWidth: 1, borderColor: '#334155' },
+  inputLabel: { color: '#94a3b8', fontSize: 14, marginBottom: 8, marginTop: 18, fontWeight: 'bold' },
+  input: { backgroundColor: '#1e293b', borderRadius: 14, padding: 16, color: '#fff', borderWidth: 1, borderColor: '#334155', fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  providerTab: { padding: 12, borderRadius: 10, backgroundColor: '#1e293b', flex: 0.48, alignItems: 'center' },
-  providerTabActive: { backgroundColor: '#6366f1' },
-  providerTabText: { color: '#fff', fontWeight: 'bold' },
-  selectableItem: { padding: 14, borderRadius: 12, backgroundColor: '#1e293b', marginBottom: 8 },
-  selectedItem: { borderColor: '#6366f1', borderWidth: 2 },
-  selectableText: { color: '#fff' },
-  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  toolText: { color: '#fff' },
-  priorityBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center' },
+  providerTab: { padding: 16, borderRadius: 12, backgroundColor: '#1e293b', flex: 0.48, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  providerTabActive: { backgroundColor: '#6366f1', borderColor: '#fff' },
+  providerTabText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  selectableItem: { padding: 16, borderRadius: 14, backgroundColor: '#1e293b', marginBottom: 10, borderWidth: 1, borderColor: '#334155' },
+  selectedItem: { borderColor: '#10b981', backgroundColor: '#1e293b' },
+  selectableText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  selectableSub: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#334155' },
+  toolText: { color: '#fff', fontSize: 15 },
+  priorityBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' },
   priorityBtnActive: { backgroundColor: '#f59e0b' },
-  priorityBtnText: { color: '#fff', fontWeight: 'bold' },
-  autoGenLink: { color: '#10b981', fontWeight: 'bold', fontSize: 12 },
-  finalizeBtn: { backgroundColor: '#10b981', padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 20 },
-  finalizeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  wizardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
-  wizardBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 16 },
-  closeWizardText: { color: '#ef4444', fontWeight: 'bold' },
+  priorityBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  autoGenLink: { color: '#10b981', fontWeight: 'bold', fontSize: 13 },
+  finalizeBtn: { backgroundColor: '#10b981', padding: 20, borderRadius: 16, alignItems: 'center', marginTop: 24 },
+  finalizeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  wizardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingBottom: 20 },
+  wizardBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 17 },
+  closeWizardText: { color: '#ef4444', fontWeight: 'bold', fontSize: 16 },
+  catChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#334155', marginRight: 8 },
+  catChipActive: { backgroundColor: '#10b981' },
+  catChipText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   sandboxContent: { flex: 1, padding: 20 },
-  sandboxOutput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 16 },
-  responseText: { color: '#fff', fontSize: 15, lineHeight: 22 },
+  sandboxOutput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 20, padding: 20, marginBottom: 20 },
+  responseText: { color: '#fff', fontSize: 16, lineHeight: 24 },
   sandboxInputRow: { flexDirection: 'row', alignItems: 'center' },
-  sandboxInput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 14, color: '#fff', marginRight: 12 },
-  sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
-  logItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  logTime: { color: '#6366f1', fontSize: 10 },
-  logText: { color: '#fff', fontSize: 12 },
-  logStatus: { fontSize: 10, fontWeight: 'bold' },
-  clearLogs: { color: '#ef4444', fontSize: 12, fontWeight: 'bold' },
-  emptyText: { color: '#475569', textAlign: 'center', marginTop: 40 },
+  sandboxInput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 16, padding: 18, color: '#fff', marginRight: 12, fontSize: 16, borderWidth: 1, borderColor: '#334155' },
+  sendBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  logItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#334155' },
+  logTime: { color: '#6366f1', fontSize: 11, fontWeight: 'bold' },
+  logText: { color: '#fff', fontSize: 13, marginTop: 4 },
+  logStatus: { fontSize: 11, fontWeight: 'black' },
+  clearLogs: { color: '#ef4444', fontSize: 13, fontWeight: 'bold' },
+  emptyText: { color: '#475569', textAlign: 'center', marginTop: 60, fontSize: 15 },
 });
