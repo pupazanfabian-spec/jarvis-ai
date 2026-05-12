@@ -495,8 +495,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         if (m) {
           const name = m[1].trim();
           const skillName = m[2].trim();
-          const { SKILLS } = await import('@/engine/code-studio/skills');
-          const skill = SKILLS.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
+          const { getAllSkills } = await import('@/engine/code-studio/skills');
+          const allSkills = await getAllSkills();
+          const skill = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
           if (skill) {
             const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
             const sa = await createSubAgent({ name, skills: [skill.id] });
@@ -545,7 +546,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           
           if (activeAgents.length > 0) {
             const { matchSkillFromMessage } = await import('@/engine/code-studio/skills');
-            const matchedSkill = matchSkillFromMessage(text, activeAgents);
+            const matchedSkill = await matchSkillFromMessage(text, activeAgents);
             
             if (matchedSkill) {
               setLastProvider(`SubAgent: ${matchedSkill.agentName}`);
