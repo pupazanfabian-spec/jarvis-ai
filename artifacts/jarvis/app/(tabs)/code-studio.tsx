@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
   TextInput, Alert, Dimensions, PanResponder, Animated, FlatList,
@@ -353,10 +353,7 @@ export default function CodeStudio() {
 
   const autoGeneratePrompt = () => {
       const selected = allSkills.filter(s => newAgentConfig.skills?.includes(s.id));
-      const prompt = selected.map(s => `### ${s.name}
-${s.systemPrompt}`).join('
-
-');
+      const prompt = selected.map(s => '### ' + s.name + '\n' + (s.systemPrompt || '')).join('\n\n');
       setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });
   };
 
