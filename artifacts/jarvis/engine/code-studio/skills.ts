@@ -31,7 +31,7 @@ export const DEFAULT_SKILLS: Skill[] = [
     category: 'scriptare',
     description: 'Scriere de scripturi Bash, Shell, PowerShell și automatizări de sistem.',
     triggers: ['script', 'bash', 'shell', 'automatizeaza', 'powershell', 'terminal', 'comenzi'],
-    systemPrompt: 'Ești un expert în DevOps și SysAdmin. Scrii scripturi sigure și eficiente pentru Bash și PowerShell. Automatizezi sarcini repetitive și explici pașii de execuție.',
+    systemPrompt: 'Ești un expert în DevOps și SysAdmin. Scrii scripturi sigure și eficiente pentru Bash și PowerShell. Automatizezi sarcini repetitive și explici pașii de executie.',
     provider: 'auto',
     tools: []
   },
@@ -146,21 +146,21 @@ export async function getSkillById(id: string): Promise<Skill | null> {
 
 export function detectSkill(message: string, allSkills: Skill[]): Skill {
   const lowerMsg = message.toLowerCase();
-  let bestMatch = allSkills[0]; // Default to Conversatie
-  let maxMatches = 0;
+  let bestMatch: Skill | null = null;
+  let maxScore = 0;
 
   for (const skill of allSkills) {
-    let matches = 0;
-    for (const trigger of skill.triggers) {
+    let score = 0;
+    for (const trigger of (skill.triggers || [])) {
       if (lowerMsg.includes(trigger.toLowerCase())) {
-        matches++;
+        score++;
       }
     }
-    if (matches > maxMatches) {
-      maxMatches = matches;
+    if (score > maxScore) {
+      maxScore = score;
       bestMatch = skill;
     }
   }
 
-  return bestMatch;
+  return bestMatch || allSkills.find(s => s.id === 'conversatie') || allSkills[0];
 }

@@ -234,6 +234,19 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     persist(messages, brainRef.current);
   }, [messages, persist]);
 
+  const addNodeToCanvas = async (node: { id: string, type: string, title: string, config: any }) => {
+    try {
+      const canvasKey = '@code_studio_workspace';
+      const saved = await AsyncStorage.getItem(canvasKey);
+      const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+      if (workspace.nodes.find((n: any) => n.id === node.id)) return;
+      const count = workspace.nodes.length;
+      const newNode = { ...node, x: 100 + (count % 3) * 220, y: 150 + Math.floor(count / 3) * 150 };
+      workspace.nodes.push(newNode);
+      await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
+    } catch(e) { console.error('[Canvas] addNodeToCanvas error:', e); }
+  };
+
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
     isProcessing.current = true; setIsThinking(true);
@@ -246,13 +259,15 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const lowerText = text.toLowerCase();
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      // 1. Studio Special Commands
+      // ─── Special Studio Commands (REAL EXECUTION) ──────────────────────────
       const canvasKey = '@code_studio_workspace';
+
       if (normalizedText.includes('listeaza agent') || normalizedText.includes('ce agenti ai')) {
           const agents = await getSubAgents();
-          response = agents.length === 0 ? "Nu ai sub-agenți activi." : "🤖 **Sub-Agenții tăi:**\n\n" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('\n');
-      } else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent')) {
-          const nameMatch = text.match(/(?:adauga|creeaza) agent (.+)/i);
+          response = agents.length === 0 ? "Nu ai sub-agenți activi. 🤖" : "🤖 **Sub-Agenții tăi:**\n\n" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('\n');
+      } 
+      else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent') || normalizedText.includes('creaza agent')) {
+          const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+agent\s+(.+)/i);
           const agentName = nameMatch?.[1]?.trim() || 'Agent Nou';
           try {
             const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
@@ -262,48 +277,52 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             const agent = await createSubAgent({
               name: agentName, skills: [detSkill.id], agentProvider: 'groq', isActive: true, priority: 5, systemPrompt: detSkill.systemPrompt,
             });
-            const saved = await AsyncStorage.getItem(canvasKey);
-            const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
-            workspace.nodes.push({
-              id: agent.id, type: 'Agent', title: agent.name, x: 100 + (workspace.nodes.length % 3) * 200, y: 150 + Math.floor(workspace.nodes.length / 3) * 150, config: { agentId: agent.id }
-            });
-            await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
-            response = `Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas. 🤖✅`;
-          } catch(e: any) { response = `Eroare la crearea agentului: ${e.message}`; }
-      } else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill')) {
-          const nameMatch = text.match(/(?:adauga|creeaza) skill (.+)/i);
+            await addNodeToCanvas({ id: agent.id, type: 'Agent', title: agent.name, config: { agentId: agent.id, provider: agent.agentProvider } });
+            response = `✅ Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas.\n\nDeschide tab-ul **Studio** să îl vezi! 🤖`;
+          } catch(e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
+      } 
+      else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill') || normalizedText.includes('creaza skill')) {
+          const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+skill\s+(.+)/i);
           const skillName = nameMatch?.[1]?.trim() || 'Skill Nou';
           try {
-            const { getAllSkills } = await import('@/engine/code-studio/skills');
-            const skills = await getAllSkills();
-            const found = skills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
-            if (found) {
-                const saved = await AsyncStorage.getItem(canvasKey);
-                const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
-                workspace.nodes.push({
-                  id: `node-${Date.now()}`, type: 'Skill', title: found.name, x: 150, y: 150, config: { skillId: found.id }
-                });
-                await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
-                response = `Am adăugat skill-ul **${found.name}** pe canvas. ⚙️✅`;
-            } else { response = `Nu am găsit skill-ul **${skillName}** în baza mea de date.`; }
-          } catch(e: any) { response = `Eroare: ${e.message}`; }
-      } else if (normalizedText.includes('conecteaza') && normalizedText.includes('cu')) {
-          const m = text.match(/conecteaza (.+) cu (.+)/i);
-          if (m) {
-              const fromName = m[1].trim().toLowerCase(), toName = m[2].trim().toLowerCase();
+            const { saveSkill, getAllSkills, detectSkill } = await import('@/engine/code-studio/skills');
+            const allSkills = await getAllSkills();
+            const existing = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
+            if (existing) {
+              await addNodeToCanvas({ id: existing.id, type: 'Skill', title: existing.name, config: { skillId: existing.id, category: existing.category } });
+              response = `✅ Am adăugat skill-ul existent **${existing.name}** pe canvas! 🎯`;
+            } else {
+              const detected = detectSkill(skillName, allSkills);
+              const newSkill = {
+                id: 'skill_' + Date.now().toString(36), name: skillName, category: detected.category, description: `Skill creat de Jarvis: ${skillName}`,
+                triggers: skillName.toLowerCase().split(' '), systemPrompt: `Ești un expert în ${skillName}.`, provider: 'auto' as const, tools: []
+              };
+              await saveSkill(newSkill);
+              await addNodeToCanvas({ id: newSkill.id, type: 'Skill', title: newSkill.name, config: { skillId: newSkill.id, category: newSkill.category } });
+              response = `✅ Am creat skill-ul **${skillName}** și l-am adăugat pe canvas! 🎯`;
+            }
+          } catch(e: any) { response = `❌ Eroare la crearea skill-ului: ${e.message}`; }
+      } 
+      else if (normalizedText.includes('conecteaza')) {
+          const match = text.match(/conecteaza\s+(.+?)\s+cu\s+(.+)/i);
+          if (match) {
+            const name1 = match[1].trim(), name2 = match[2].trim();
+            try {
               const saved = await AsyncStorage.getItem(canvasKey);
-              if (saved) {
-                  const ws = JSON.parse(saved);
-                  const fNode = ws.nodes.find((n: any) => n.title.toLowerCase().includes(fromName));
-                  const tNode = ws.nodes.find((n: any) => n.title.toLowerCase().includes(toName));
-                  if (fNode && tNode) {
-                      ws.connections.push({ fromId: fNode.id, toId: tNode.id });
-                      await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
-                      response = `Am conectat **${fNode.title}** ➡️ **${tNode.title}**. 🔗✅`;
-                  } else { response = "Nu am găsit nodurile pe canvas pentru a face conexiunea."; }
-              }
+              const ws = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+              const n1 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name1.toLowerCase()));
+              const n2 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name2.toLowerCase()));
+              if (n1 && n2) {
+                if (!ws.connections.find((c: any) => c.fromId === n1.id && c.toId === n2.id)) {
+                  ws.connections.push({ fromId: n1.id, toId: n2.id });
+                  await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
+                }
+                response = `✅ Am conectat **${n1.title}** → **${n2.title}** pe canvas! 🔗`;
+              } else { response = `❌ Nu am găsit nodurile. Pe canvas ai: ${ws.nodes.map((n: any) => n.title).join(', ') || 'nimic'}`; }
+            } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
           }
-      } else if (normalizedText.startsWith('sterge agent')) {
+      } 
+      else if (normalizedText.startsWith('sterge agent')) {
           const name = text.replace(/sterge agent /i, '').trim().toLowerCase();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name);
@@ -317,18 +336,19 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
               }
               response = `Agentul **${agent.name}** a fost șters. 🗑️`; 
-          }
-          else response = `Nu am găsit agentul **${name}**.`;
-      } else if (normalizedText.includes('reseteaza studio') || normalizedText.includes('reset studio')) {
-          await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2']);
-          response = "✅ Code Studio a fost resetat complet. 🧼";
-      } else if (normalizedText.includes('afiseaza canvas') || normalizedText.includes('ce e pe canvas')) {
+          } else response = `Nu am găsit agentul **${name}**.`;
+      } 
+      else if (normalizedText.includes('ce e pe canvas') || normalizedText.includes('afiseaza canvas')) {
           const saved = await AsyncStorage.getItem(canvasKey);
           if (saved) {
               const ws = JSON.parse(saved);
-              const names = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('\n• ');
-              response = names ? `📊 **Elemente pe canvas:**\n• ${names}` : "Canvas-ul este gol.";
-          } else { response = "Canvas-ul este gol."; }
+              const items = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('\n• ');
+              response = items ? `📊 **Pe canvas ai:**\n• ${items}` : "Canvas-ul este gol. 🎨";
+          } else response = "Canvas-ul este gol. 🎨";
+      }
+      else if ((normalizedText.includes('reseteaza') || normalizedText.includes('reset')) && (normalizedText.includes('studio') || normalizedText.includes('canvas'))) {
+          await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2', '@jarvis_default_agents_seeded']);
+          response = "✅ Code Studio a fost resetat complet. 🧼";
       }
 
       if (response) {

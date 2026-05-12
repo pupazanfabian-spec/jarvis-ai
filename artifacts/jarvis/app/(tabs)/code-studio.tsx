@@ -160,47 +160,60 @@ export default function CodeStudio() {
     AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: n, connections: c }));
   }, []);
 
-  const initWorkspace = useCallback(async () => {
-    try {
-      await keyManager.syncKeysFromContext(settings);
-      await seedDefaultAgents();
-      const [sa, sk, saved] = await Promise.all([getSubAgents(), getAllSkills(), AsyncStorage.getItem('@code_studio_workspace')]);
-      setSubAgents(sa || []); setAllSkills(sk || []);
-      
-      if (saved) { 
-          const p = JSON.parse(saved); 
-          const existingNodes = p.nodes || [];
-          if (existingNodes.length === 0 && sa && sa.length > 0) {
-              const autoNodes = sa.map((agent, i) => ({
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const reload = async () => {
+        try {
+          await seedDefaultAgents();
+          const [sa, sk, saved] = await Promise.all([
+            getSubAgents(),
+            getAllSkills(),
+            AsyncStorage.getItem('@code_studio_workspace')
+          ]);
+          if (!isActive) return;
+          
+          setSubAgents(sa || []);
+          setAllSkills(sk || []);
+          
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            const savedNodes = parsed.nodes || [];
+            const savedConns = parsed.connections || [];
+            
+            const existingNodeIds = new Set(savedNodes.map((n: Node) => n.id || (n.config?.agentId)));
+            const missingAgentNodes = (sa || [])
+              .filter(agent => !existingNodeIds.has(agent.id))
+              .map((agent, i) => ({
                 id: agent.id,
                 type: 'Agent' as NodeType,
                 title: agent.name,
-                x: 100 + (i % 3) * 220,
-                y: 100 + Math.floor(i / 3) * 180,
+                x: 100 + ((savedNodes.length + i) % 3) * 220,
+                y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
                 config: { agentId: agent.id }
               }));
-              setNodes(autoNodes);
-              saveWS(autoNodes, []);
-          } else {
-              setNodes(existingNodes); 
-              setConnections(p.connections || []); 
+            
+            const allNodes = [...savedNodes, ...missingAgentNodes];
+            setNodes(allNodes);
+            setConnections(savedConns);
+            
+            if (missingAgentNodes.length > 0) {
+              await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: allNodes, connections: savedConns }));
+            }
+          } else if (sa && sa.length > 0) {
+            const autoNodes = sa.map((agent, i) => ({
+              id: agent.id, type: 'Agent' as NodeType, title: agent.name,
+              x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
+            }));
+            setNodes(autoNodes);
+            await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: autoNodes, connections: [] }));
           }
-      } else if (sa && sa.length > 0) {
-          const autoNodes = sa.map((agent, i) => ({
-            id: agent.id,
-            type: 'Agent' as NodeType,
-            title: agent.name,
-            x: 100 + (i % 3) * 220,
-            y: 100 + Math.floor(i / 3) * 180,
-            config: { agentId: agent.id }
-          }));
-          setNodes(autoNodes);
-          saveWS(autoNodes, []);
-      }
-    } catch (e) { console.error('[Studio] Init error', e); }
-  }, [settings, saveWS]);
-
-  useFocusEffect(useCallback(() => { initWorkspace(); }, [initWorkspace]));
+        } catch(e) { console.error('[Studio] Reload error:', e); }
+      };
+      reload();
+      return () => { isActive = false; };
+    }, [settings])
+  );
 
   const canvasPanResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => !isDraggingRef.current,
@@ -232,7 +245,7 @@ export default function CodeStudio() {
       };
       const updatedNodes = [...nodes, newNode];
       setNodes(updatedNodes); saveWS(updatedNodes, connections);
-      await initWorkspace(); setIsWizardVisible(false); setWizardStep(1);
+      setIsWizardVisible(false); setWizardStep(1);
       setNewAgentConfig({ name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 });
       Alert.alert('Succes', `Agentul "${agent.name}" a fost creat!`);
     } catch(e: any) { Alert.alert('Eroare', e.message || 'Salvare eșuată.'); }
@@ -243,7 +256,7 @@ export default function CodeStudio() {
     try {
         const triggers = Array.isArray(editingSkill.triggers) ? editingSkill.triggers : (editingSkill.triggers as any || "").split(',').map((t: string)=>t.trim()).filter(Boolean);
         await saveSkill({ ...editingSkill as Skill, id: editingSkill.id || `sk-${Date.now()}`, triggers });
-        await initWorkspace(); setIsSkillEditorVisible(false);
+        setIsSkillEditorVisible(false);
     } catch (e) { Alert.alert('Eroare', 'Nu s-a putut salva skill-ul.'); }
   };
 
@@ -427,7 +440,7 @@ export default function CodeStudio() {
         <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
         <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
         <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează Skill</Text></TouchableOpacity>
-        {editingSkill.id && <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 8 }]} onPress={async () => { await deleteSkill(editingSkill.id!); await initWorkspace(); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>}
+        {editingSkill.id && <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 8 }]} onPress={async () => { await deleteSkill(editingSkill.id!); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>}
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
       </View></View></Modal>
 
