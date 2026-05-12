@@ -247,18 +247,88 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
       // 1. Studio Special Commands
+      const canvasKey = '@code_studio_workspace';
       if (normalizedText.includes('listeaza agent') || normalizedText.includes('ce agenti ai')) {
           const agents = await getSubAgents();
           response = agents.length === 0 ? "Nu ai sub-agenți activi." : "🤖 **Sub-Agenții tăi:**\n\n" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('\n');
+      } else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent')) {
+          const nameMatch = text.match(/(?:adauga|creeaza) agent (.+)/i);
+          const agentName = nameMatch?.[1]?.trim() || 'Agent Nou';
+          try {
+            const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
+            const { detectSkill, getAllSkills } = await import('@/engine/code-studio/skills');
+            const skills = await getAllSkills();
+            const detSkill = detectSkill(text, skills);
+            const agent = await createSubAgent({
+              name: agentName, skills: [detSkill.id], agentProvider: 'groq', isActive: true, priority: 5, systemPrompt: detSkill.systemPrompt,
+            });
+            const saved = await AsyncStorage.getItem(canvasKey);
+            const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+            workspace.nodes.push({
+              id: agent.id, type: 'Agent', title: agent.name, x: 100 + (workspace.nodes.length % 3) * 200, y: 150 + Math.floor(workspace.nodes.length / 3) * 150, config: { agentId: agent.id }
+            });
+            await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
+            response = `Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas. 🤖✅`;
+          } catch(e: any) { response = `Eroare la crearea agentului: ${e.message}`; }
+      } else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill')) {
+          const nameMatch = text.match(/(?:adauga|creeaza) skill (.+)/i);
+          const skillName = nameMatch?.[1]?.trim() || 'Skill Nou';
+          try {
+            const { getAllSkills } = await import('@/engine/code-studio/skills');
+            const skills = await getAllSkills();
+            const found = skills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
+            if (found) {
+                const saved = await AsyncStorage.getItem(canvasKey);
+                const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+                workspace.nodes.push({
+                  id: `node-${Date.now()}`, type: 'Skill', title: found.name, x: 150, y: 150, config: { skillId: found.id }
+                });
+                await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
+                response = `Am adăugat skill-ul **${found.name}** pe canvas. ⚙️✅`;
+            } else { response = `Nu am găsit skill-ul **${skillName}** în baza mea de date.`; }
+          } catch(e: any) { response = `Eroare: ${e.message}`; }
+      } else if (normalizedText.includes('conecteaza') && normalizedText.includes('cu')) {
+          const m = text.match(/conecteaza (.+) cu (.+)/i);
+          if (m) {
+              const fromName = m[1].trim().toLowerCase(), toName = m[2].trim().toLowerCase();
+              const saved = await AsyncStorage.getItem(canvasKey);
+              if (saved) {
+                  const ws = JSON.parse(saved);
+                  const fNode = ws.nodes.find((n: any) => n.title.toLowerCase().includes(fromName));
+                  const tNode = ws.nodes.find((n: any) => n.title.toLowerCase().includes(toName));
+                  if (fNode && tNode) {
+                      ws.connections.push({ fromId: fNode.id, toId: tNode.id });
+                      await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
+                      response = `Am conectat **${fNode.title}** ➡️ **${tNode.title}**. 🔗✅`;
+                  } else { response = "Nu am găsit nodurile pe canvas pentru a face conexiunea."; }
+              }
+          }
       } else if (normalizedText.startsWith('sterge agent')) {
           const name = text.replace(/sterge agent /i, '').trim().toLowerCase();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name);
-          if (agent) { await deleteSubAgent(agent.id); response = `Agentul **${agent.name}** a fost șters. 🗑️`; }
+          if (agent) { 
+              await deleteSubAgent(agent.id); 
+              const saved = await AsyncStorage.getItem(canvasKey);
+              if (saved) {
+                  const ws = JSON.parse(saved);
+                  ws.nodes = ws.nodes.filter((n: any) => n.id !== agent.id && n.config?.agentId !== agent.id);
+                  ws.connections = ws.connections.filter((c: any) => c.fromId !== agent.id && c.toId !== agent.id);
+                  await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
+              }
+              response = `Agentul **${agent.name}** a fost șters. 🗑️`; 
+          }
           else response = `Nu am găsit agentul **${name}**.`;
       } else if (normalizedText.includes('reseteaza studio') || normalizedText.includes('reset studio')) {
           await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2']);
           response = "✅ Code Studio a fost resetat complet. 🧼";
+      } else if (normalizedText.includes('afiseaza canvas') || normalizedText.includes('ce e pe canvas')) {
+          const saved = await AsyncStorage.getItem(canvasKey);
+          if (saved) {
+              const ws = JSON.parse(saved);
+              const names = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('\n• ');
+              response = names ? `📊 **Elemente pe canvas:**\n• ${names}` : "Canvas-ul este gol.";
+          } else { response = "Canvas-ul este gol."; }
       }
 
       if (response) {

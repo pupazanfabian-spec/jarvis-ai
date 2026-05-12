@@ -58,6 +58,21 @@ export async function hasValidKey(provider: 'groq' | 'openrouter'): Promise<bool
     return !!(key && key.length > 10);
 }
 
+export async function validateKey(provider: string, key: string): Promise<boolean> {
+    try {
+        const { testGroqKeyDetailed, testOpenRouterKeyDetailed } = await import('@/engine/aiProviders');
+        let result: { ok: boolean };
+        if (provider.toLowerCase() === 'groq') {
+            result = await testGroqKeyDetailed(key);
+        } else {
+            result = await testOpenRouterKeyDetailed(key);
+        }
+        return result.ok;
+    } catch {
+        return false;
+    }
+}
+
 export async function syncKeysFromContext(settings: any) {
   try {
     const currentKeys = await getKeys();

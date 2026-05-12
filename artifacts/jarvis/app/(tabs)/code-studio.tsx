@@ -52,6 +52,8 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const SKILL_CATEGORIES = ['conversatie', 'scriptare', 'codare', 'cercetare', 'verificare', 'rulare', 'memorie', 'orchestrare', 'custom'];
+const TOOL_TYPES = ['webSearch', 'memory', 'codeRunner', 'apiCall', 'fileSystem'];
+const OUTPUT_FORMATS = ['text', 'json', 'markdown', 'code'];
 
 // ─── MEMOIZED COMPONENTS ─────────────────────────────────────────────────────
 
@@ -135,10 +137,15 @@ export default function CodeStudio() {
   const [newAgentConfig, setNewAgentConfig] = useState<Partial<SubAgent>>({
     name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5,
   });
+  const [showApiKey, setShowApiKey] = useState(false);
 
   // Editor States
   const [isSkillEditorVisible, setIsSkillEditorVisible] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Partial<Skill>>({ name: '', category: 'custom', systemPrompt: '', triggers: [] });
+  const [isToolEditorVisible, setIsToolEditorVisible] = useState(false);
+  const [isOutputEditorVisible, setIsOutputEditorVisible] = useState(false);
+  const [editingNode, setEditingNode] = useState<Node | null>(null);
+
   const [isLogsVisible, setIsLogsVisible] = useState(false);
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([]);
   const [logFilter, setLogFilter] = useState<'all' | 'success' | 'failed'>('all');
@@ -152,10 +159,6 @@ export default function CodeStudio() {
   const saveWS = useCallback((n: Node[], c: Connection[]) => {
     AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: n, connections: c }));
   }, []);
-
-  const debouncedSave = useCallback((n: Node[], c: Connection[]) => {
-      saveWS(n, c);
-  }, [saveWS]);
 
   const initWorkspace = useCallback(async () => {
     try {
@@ -213,31 +216,23 @@ export default function CodeStudio() {
     return dots;
   }, []);
 
+  const updateNode = (id: string, updates: Partial<Node>) => {
+    const updated = nodes.map(n => n.id === id ? {...n, ...updates} : n);
+    setNodes(updated);
+    saveWS(updated, connections);
+  };
+
   const handleCreateAgent = async () => {
     try {
-      if (!newAgentConfig.name?.trim()) {
-        Alert.alert('Eroare', 'Numele agentului este obligatoriu!');
-        return;
-      }
-      const agent = await createSubAgent({
-        ...newAgentConfig,
-        isActive: true,
-      });
+      if (!newAgentConfig.name?.trim()) return Alert.alert('Eroare', 'Numele agentului este obligatoriu!');
+      const agent = await createSubAgent({ ...newAgentConfig, isActive: true });
       const newNode: Node = { 
-          id: agent.id, 
-          type: 'Agent', 
-          title: agent.name, 
-          x: 200 + Math.random() * 100, 
-          y: 200 + Math.random() * 100, 
+          id: agent.id, type: 'Agent', title: agent.name, x: 200 + Math.random() * 100, y: 200 + Math.random() * 100, 
           config: { agentId: agent.id, provider: agent.agentProvider } 
       };
       const updatedNodes = [...nodes, newNode];
-      setNodes(updatedNodes); 
-      saveWS(updatedNodes, connections);
-      const refreshed = await getSubAgents();
-      setSubAgents(refreshed);
-      setIsWizardVisible(false);
-      setWizardStep(1);
+      setNodes(updatedNodes); saveWS(updatedNodes, connections);
+      await initWorkspace(); setIsWizardVisible(false); setWizardStep(1);
       setNewAgentConfig({ name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 });
       Alert.alert('Succes', `Agentul "${agent.name}" a fost creat!`);
     } catch(e: any) { Alert.alert('Eroare', e.message || 'Salvare eșuată.'); }
@@ -246,13 +241,9 @@ export default function CodeStudio() {
   const handleSaveSkill = async () => {
     if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Completează câmpurile obligatorii.');
     try {
-        await saveSkill({ 
-            ...editingSkill as Skill, 
-            id: editingSkill.id || `sk-${Date.now()}`,
-            triggers: Array.isArray(editingSkill.triggers) ? editingSkill.triggers : (editingSkill.triggers as any || "").split(',').map((t: string)=>t.trim()).filter(Boolean)
-        });
-        await initWorkspace(); 
-        setIsSkillEditorVisible(false);
+        const triggers = Array.isArray(editingSkill.triggers) ? editingSkill.triggers : (editingSkill.triggers as any || "").split(',').map((t: string)=>t.trim()).filter(Boolean);
+        await saveSkill({ ...editingSkill as Skill, id: editingSkill.id || `sk-${Date.now()}`, triggers });
+        await initWorkspace(); setIsSkillEditorVisible(false);
     } catch (e) { Alert.alert('Eroare', 'Nu s-a putut salva skill-ul.'); }
   };
 
@@ -293,11 +284,26 @@ export default function CodeStudio() {
         {nodes.map(n => (
           <DraggableNode key={n.id} node={n} onFinalizePosition={(id: string, x: number, y: number) => { const u = nodes.map(nx => nx.id === id ? { ...nx, x, y } : nx); setNodes(u); saveWS(u, connections); }}
             onPress={() => { setConnectingFromId(n.id); setIsConnectionModalVisible(true); }}
-            onRun={() => { const a = subAgents.find(s => s.id === n.id || s.id === n.config?.agentId); if (a) { setSandboxAgent(a); setIsSandboxVisible(true); } }}
+            onRun={() => {
+                if (n.type === 'Agent') {
+                   const a = subAgents.find(s => s.id === n.id || s.id === n.config?.agentId);
+                   if (a) { setSandboxAgent(a); setIsSandboxVisible(true); }
+                }
+            }}
             onConfig={() => { 
-                const a = subAgents.find(s => s.id === n.id || s.id === n.config?.agentId); 
-                if (a) { setNewAgentConfig(a); setIsWizardVisible(true); setWizardStep(1); }
-                else if (n.type === 'Skill') { const s = allSkills.find(sk => sk.id === n.id); if (s) { setEditingSkill(s); setIsSkillEditorVisible(true); } }
+                if (n.type === 'Agent') {
+                    const a = subAgents.find(s => s.id === n.id || s.id === n.config?.agentId); 
+                    if (a) { setNewAgentConfig({...a}); setIsWizardVisible(true); setWizardStep(1); }
+                    else { setNewAgentConfig({ name: n.title, description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 }); setIsWizardVisible(true); setWizardStep(1); }
+                } else if (n.type === 'Skill') {
+                    const s = allSkills.find(sk => sk.id === n.id || sk.id === n.config?.skillId); 
+                    setEditingSkill(s || { id: n.id, name: n.title, category: 'custom', systemPrompt: '', triggers: [] }); 
+                    setIsSkillEditorVisible(true); 
+                } else if (n.type === 'Tool') {
+                    setEditingNode(n); setIsToolEditorVisible(true);
+                } else if (n.type === 'Output') {
+                    setEditingNode(n); setIsOutputEditorVisible(true);
+                }
             }}
             onDelete={() => { const un = nodes.filter(x => x.id !== n.id), uc = connections.filter(x => x.fromId !== n.id && x.toId !== n.id); setNodes(un); setConnections(uc); saveWS(un, uc); }}
             onDragStart={() => isDraggingRef.current = true} onDragEnd={() => isDraggingRef.current = false}
@@ -380,7 +386,21 @@ export default function CodeStudio() {
           <View style={styles.wizardContent}>
             <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>{newAgentConfig.id ? 'Editare Agent' : 'Agent Wizard'}</Text><Text style={styles.wizardStep}>Pas {wizardStep}/5</Text></View>
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume Agent</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={t => setNewAgentConfig({...newAgentConfig, name: t})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={t => setNewAgentConfig({...newAgentConfig, description: t})} multiline /></View>}
-            {wizardStep === 2 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>AI Provider</Text><View style={styles.row}>{['groq', 'openrouter'].map(p => (<TouchableOpacity key={p} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View></View>}
+            {wizardStep === 2 && <View style={styles.wizardBody}>
+                <Text style={styles.inputLabel}>AI Provider</Text>
+                <View style={styles.row}>{['groq', 'openrouter'].map(p => (<TouchableOpacity key={p} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View>
+                <Text style={styles.inputLabel}>API Key (optional - lasă gol pentru cheia globală)</Text>
+                <View style={styles.row}>
+                    <TextInput style={[styles.input, { flex: 1, marginRight: 8 }]} value={newAgentConfig.apiKey || ''} onChangeText={t => setNewAgentConfig({...newAgentConfig, apiKey: t})} placeholder="sk-... (optional)" placeholderTextColor="#475569" secureTextEntry={!showApiKey} />
+                    <TouchableOpacity onPress={() => setShowApiKey(!showApiKey)} style={styles.eyeBtn}><Ionicons name={showApiKey ? 'eye-off' : 'eye'} size={20} color="#fff" /></TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.validateKeyBtn} onPress={async () => {
+                    if (!newAgentConfig.apiKey) return Alert.alert('Info', 'Nicio cheie introdusă.');
+                    const { validateKey } = await import('@/engine/code-studio/keyManager');
+                    const ok = await validateKey(newAgentConfig.agentProvider || 'groq', newAgentConfig.apiKey);
+                    Alert.alert(ok ? '✅ Cheie validă!' : '❌ Cheie invalidă');
+                }}><Text style={styles.validateKeyBtnText}>Validează Cheia</Text></TouchableOpacity>
+            </View>}
             {wizardStep === 3 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Selectează Skills</Text><ScrollView style={{ height: 400 }}>{allSkills.map(s => {
                 const isSel = newAgentConfig.skills?.includes(s.id);
                 return <TouchableOpacity key={s.id} style={[styles.selectableItem, isSel && styles.selectedItem]} onPress={() => { const sk = newAgentConfig.skills || []; setNewAgentConfig({...newAgentConfig, skills: isSel ? sk.filter(x=>x!==s.id) : [...sk, s.id]}); }}>
@@ -405,10 +425,32 @@ export default function CodeStudio() {
             <TouchableOpacity key={c} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
         ))}</ScrollView>
         <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
-        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (triggers, separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
+        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
         <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează Skill</Text></TouchableOpacity>
         {editingSkill.id && <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 8 }]} onPress={async () => { await deleteSkill(editingSkill.id!); await initWorkspace(); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>}
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
+      </View></View></Modal>
+
+      <Modal visible={isToolEditorVisible} transparent animationType="fade"><View style={styles.modalOverlay}><View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Configurare Tool</Text>
+        <TextInput style={styles.input} placeholder="Titlu Tool" value={editingNode?.title} onChangeText={t => updateNode(editingNode!.id, { title: t })} />
+        <Text style={styles.inputLabel}>Tip Tool</Text>
+        <View style={styles.nodeTypeGrid}>{TOOL_TYPES.map(t => (
+            <TouchableOpacity key={t} style={[styles.catChip, editingNode?.config?.toolType === t && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, toolType: t } })}><Text style={styles.catChipText}>{t}</Text></TouchableOpacity>
+        ))}</View>
+        <TouchableOpacity style={styles.finalizeBtn} onPress={() => setIsToolEditorVisible(false)}><Text style={styles.finalizeBtnText}>Gata</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsToolEditorVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
+      </View></View></Modal>
+
+      <Modal visible={isOutputEditorVisible} transparent animationType="fade"><View style={styles.modalOverlay}><View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Configurare Output</Text>
+        <TextInput style={styles.input} placeholder="Titlu Output" value={editingNode?.title} onChangeText={t => updateNode(editingNode!.id, { title: t })} />
+        <Text style={styles.inputLabel}>Format</Text>
+        <View style={styles.nodeTypeGrid}>{OUTPUT_FORMATS.map(f => (
+            <TouchableOpacity key={f} style={[styles.catChip, editingNode?.config?.format === f && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, format: f } })}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
+        ))}</View>
+        <TouchableOpacity style={styles.finalizeBtn} onPress={() => setIsOutputEditorVisible(false)}><Text style={styles.finalizeBtnText}>Gata</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsOutputEditorVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
       </View></View></Modal>
 
       <Modal visible={isSandboxVisible} transparent={false} animationType="fade"><SafeAreaView style={styles.fullscreenModal}><View style={styles.sandboxContent}>
@@ -473,7 +515,7 @@ const styles = StyleSheet.create({
   modalTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
   typeBtn: { width: '100%', backgroundColor: '#0f172a', padding: 16, borderRadius: 12, borderLeftWidth: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
   typeBtnText: { color: '#fff', marginLeft: 12, fontWeight: 'bold', fontSize: 15 },
-  nodeTypeGrid: { width: '100%' },
+  nodeTypeGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   connectionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 16, borderRadius: 12, marginBottom: 12 },
   connectionItemText: { color: '#fff', marginLeft: 14, fontWeight: 'bold', fontSize: 15 },
   closeBtn: { marginTop: 18, alignItems: 'center' },
@@ -520,4 +562,7 @@ const styles = StyleSheet.create({
   logStatus: { fontSize: 11, fontWeight: 'black' },
   clearLogs: { color: '#ef4444', fontSize: 13, fontWeight: 'bold' },
   emptyText: { color: '#475569', textAlign: 'center', marginTop: 60, fontSize: 15 },
+  eyeBtn: { padding: 12, backgroundColor: '#334155', borderRadius: 12 },
+  validateKeyBtn: { marginTop: 12, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#6366f1', padding: 14, borderRadius: 12, alignItems: 'center' },
+  validateKeyBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 14 },
 });

@@ -165,6 +165,8 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
   const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
   if (!apiKey) throw new Error(`Missing API Key for ${agent.agentProvider}`);
   
+  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${agent.apiKey ? 'custom key' : 'global key'})`);
+
   let url = '';
   let model = '';
   const headers: any = { 'Content-Type': 'application/json' };
@@ -180,8 +182,6 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     headers['X-Title'] = 'Jarvis AI';
     model = 'mistralai/mistral-7b-instruct:free';
   }
-
-  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${model})`);
 
   try {
     const response = await fetch(url, {
