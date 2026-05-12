@@ -1,6 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Easing } from 'react-native';
+import { View, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// Safe linear easing function
+const linear = (t: number) => t;
 
 export default function JarvisIcon({ focused, color, size }: {
   focused: boolean; color: string; size: number;
@@ -14,17 +17,17 @@ export default function JarvisIcon({ focused, color, size }: {
       Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1, duration: 3000,
-          easing: Easing.linear, useNativeDriver: true
+          easing: linear, useNativeDriver: true
         })
       ).start();
       // Pulse
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.2, duration: 800, useNativeDriver: true
+            toValue: 1.2, duration: 800, easing: linear, useNativeDriver: true
           }),
           Animated.timing(pulseAnim, {
-            toValue: 0.9, duration: 800, useNativeDriver: true
+            toValue: 0.9, duration: 800, easing: linear, useNativeDriver: true
           }),
         ])
       ).start();

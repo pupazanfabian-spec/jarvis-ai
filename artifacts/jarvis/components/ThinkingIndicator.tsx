@@ -1,7 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Easing, Dimensions } from 'react-native';
+import { View, Animated, StyleSheet, Dimensions } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
+
+// Safe linear easing function
+const linear = (t: number) => t;
 
 export default function ThinkingIndicator({ visible }: { visible: boolean }) {
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -27,7 +30,7 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
       Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1, duration: 2000,
-          easing: Easing.linear, useNativeDriver: true
+          easing: linear, useNativeDriver: true
         })
       ).start();
 
@@ -35,15 +38,15 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
       Animated.loop(
         Animated.timing(rotateAnim2, {
           toValue: 1, duration: 1500,
-          easing: Easing.linear, useNativeDriver: true
+          easing: linear, useNativeDriver: true
         })
       ).start();
 
-      // Color cycle - NU useNativeDriver pentru culori
+      // Color cycle
       Animated.loop(
         Animated.timing(colorCycle, {
           toValue: 4, duration: 4000,
-          easing: Easing.linear, useNativeDriver: false
+          easing: linear, useNativeDriver: false
         })
       ).start();
 
@@ -51,10 +54,10 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.15, duration: 600, useNativeDriver: true
+            toValue: 1.15, duration: 600, easing: linear, useNativeDriver: true
           }),
           Animated.timing(pulseAnim, {
-            toValue: 0.85, duration: 600, useNativeDriver: true
+            toValue: 0.85, duration: 600, easing: linear, useNativeDriver: true
           }),
         ])
       ).start();
@@ -69,7 +72,7 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
         pulseAnim.setValue(0.8);
       });
     }
-  }, [visible]);
+  }, [visible, rotateAnim, rotateAnim2, colorCycle, pulseAnim, fadeAnim, scaleAnim]);
 
   const spin1 = rotateAnim.interpolate({
     inputRange: [0, 1], outputRange: ['0deg', '360deg']

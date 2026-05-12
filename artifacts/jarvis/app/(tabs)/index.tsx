@@ -135,10 +135,10 @@ export default function ChatScreen() {
     Animated.loop(
       Animated.timing(headerColorCycle, {
         toValue: 4, duration: 12000,
-        easing: Easing.linear, useNativeDriver: false
+        easing: (t) => t, useNativeDriver: false
       })
     ).start();
-  }, []);
+  }, [headerColorCycle]);
 
   const headerColor = headerColorCycle.interpolate({
     inputRange: [0, 1, 2, 3, 4],

@@ -1,7 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, Dimensions, StyleSheet, Easing } from 'react-native';
+import { View, Text, Animated, Dimensions, StyleSheet } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
+
+// Safe linear easing function
+const linear = (t: number) => t;
 
 export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -17,7 +20,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
     Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1, duration: 3000,
-        easing: Easing.linear, useNativeDriver: true
+        easing: linear, useNativeDriver: true
       })
     ).start();
 
@@ -25,7 +28,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
     Animated.loop(
       Animated.timing(rotateAnim2, {
         toValue: -1, duration: 2000,
-        easing: Easing.linear, useNativeDriver: true
+        easing: linear, useNativeDriver: true
       })
     ).start();
 
@@ -38,31 +41,31 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
     // Pulse
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.95, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, easing: linear, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.95, duration: 800, easing: linear, useNativeDriver: true }),
       ])
     ).start();
 
     // Text fade in
     setTimeout(() => {
       Animated.timing(fadeText, {
-        toValue: 1, duration: 600, useNativeDriver: true
+        toValue: 1, duration: 600, easing: linear, useNativeDriver: true
       }).start();
     }, 800);
 
     setTimeout(() => {
       Animated.timing(fadeSubText, {
-        toValue: 1, duration: 600, useNativeDriver: true
+        toValue: 1, duration: 600, easing: linear, useNativeDriver: true
       }).start();
     }, 1400);
 
     // Fade out si finish
     setTimeout(() => {
       Animated.timing(fadeOut, {
-        toValue: 0, duration: 600, useNativeDriver: true
+        toValue: 0, duration: 600, easing: linear, useNativeDriver: true
       }).start(() => onFinish());
     }, 3200);
-  }, []);
+  }, [onFinish, rotateAnim, rotateAnim2, scaleAnim, pulseAnim, fadeText, fadeSubText, fadeOut]);
 
   const spin1 = rotateAnim.interpolate({
     inputRange: [0, 1],
