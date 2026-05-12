@@ -490,14 +490,18 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const lowerText = text.toLowerCase();
 
       // ─── Chat Commands for Studio (Real Execution) ──────────────────────────
-      if (lowerText.includes('reseteaza studio') || lowerText.includes('reset studio') || lowerText.includes('sterge studio')) {
+      const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const isResetStudio = (normalizedText.includes('reseteaza') || normalizedText.includes('reset') || normalizedText.includes('sterge')) && 
+                            (normalizedText.includes('studio') || normalizedText.includes('canvas') || normalizedText.includes('workspace'));
+
+      if (isResetStudio) {
         try {
           await AsyncStorage.removeItem('@code_studio_workspace');
           await AsyncStorage.removeItem('@jarvis_sub_agents');
           await AsyncStorage.removeItem('@jarvis_agent_logs');
           const resetMsg: Message = {
             id: Date.now().toString(),
-            content: '✅ Code Studio a fost resetat complet. Deschide tab-ul Studio pentru a vedea. 🧼',
+            content: '✅ Code Studio și Canvas au fost resetate complet. 🧼',
             role: 'assistant',
             timestamp: new Date(),
           };
@@ -508,7 +512,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.log('[Studio] Reset error:', e);
         }
-      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii' || lowerText === 'listeaza agenti') {
+      } else if (normalizedText.includes('listeaza agent') || normalizedText.includes('ce agenti am') || normalizedText.includes('vezi agentii')) {
         const agentsRaw = await AsyncStorage.getItem('@jarvis_sub_agents');
         const agents: SubAgent[] = agentsRaw ? JSON.parse(agentsRaw) : [];
         if (agents.length === 0) {
