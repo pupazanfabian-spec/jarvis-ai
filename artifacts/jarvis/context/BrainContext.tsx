@@ -490,23 +490,29 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const lowerText = text.toLowerCase();
 
       // ─── Chat Commands for Studio ──────────────────────────────────────────
-      if (lowerText.startsWith('creeaza agent')) {
-        const m = text.match(/creeaza agent (.+) cu skill (.+)/i);
+      if (lowerText === 'reseteaza studio' || lowerText === 'reset studio') {
+        await AsyncStorage.removeItem('@code_studio_workspace');
+        await AsyncStorage.removeItem('@jarvis_sub_agents');
+        response = "Am resetat Code Studio. Deschide Studio pentru a vedea. 🧼";
+      } else if (lowerText.startsWith('creeaza agent')) {
+        const m = text.match(/creeaza agent (.+) cu skill (.+)/i) || text.match(/creeaza agent (.+)/i);
         if (m) {
           const name = m[1].trim();
-          const skillName = m[2].trim();
+          const skillName = m[2]?.trim();
           const { getAllSkills } = await import('@/engine/code-studio/skills');
           const allSkills = await getAllSkills();
-          const skill = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
-          if (skill) {
-            const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
-            const sa = await createSubAgent({ name, skills: [skill.id] });
-            response = `Am creat agentul **${sa.name}** cu skill-ul **${skill.name}**. 🤖`;
-          } else {
-            response = `Nu am găsit skill-ul **${skillName}**. Folosește unul din skill-urile standard (ex: Python Master).`;
+          let skillIds: string[] = [];
+          
+          if (skillName) {
+            const skill = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
+            if (skill) skillIds.push(skill.id);
           }
+
+          const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
+          const sa = await createSubAgent({ name, skills: skillIds });
+          response = `Am creat agentul **${sa.name}**${skillIds.length > 0 ? ` cu skill-ul **${skillName}**` : ''}. 🤖`;
         }
-      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii') {
+      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii' || lowerText === 'listeaza agenti') {
         const agents = await getSubAgents();
         if (agents.length === 0) {
           response = 'Nu ai creat niciun sub-agent încă. Mergi în Code Studio sau spune "creează agent...".';

@@ -16,7 +16,7 @@ import {
   Switch,
   ActivityIndicator,
 } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Polygon, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as keyManager from '@/engine/code-studio/keyManager';
@@ -85,7 +85,8 @@ export default function CodeStudio() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<NodeType | null>(null);
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
+  const [isConnectionModalVisible, setIsConnectionModalVisible] = useState(false);
   const [subAgents, setSubAgents] = useState<SubAgent[]>([]);
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const { settings } = useAIProvider();
@@ -129,6 +130,9 @@ export default function CodeStudio() {
 
   // Dragging State
   const [isDragging, setIsDragging] = useState(false);
+
+  // Flash Animation State
+  const flashAnim = useRef(new Animated.Value(0)).current;
 
   const initWorkspace = useCallback(async () => {
     try {
@@ -253,33 +257,78 @@ export default function CodeStudio() {
     });
   };
 
-  const handleConnect = (nodeId: string) => {
-    if (connectingFrom === null) {
-      setConnectingFrom(nodeId);
-    } else if (connectingFrom === nodeId) {
-      setConnectingFrom(null);
-    } else {
-      const newConnection: Connection = { fromId: connectingFrom, toId: nodeId };
-      if (!connections.some(c => c.fromId === newConnection.fromId && c.toId === newConnection.toId)) {
-        const updatedConnections = [...connections, newConnection];
-        setConnections(updatedConnections);
-        saveWorkspace(nodes, updatedConnections);
-      }
-      setConnectingFrom(null);
+  const startConnection = (nodeId: string) => {
+    setConnectingFromId(nodeId);
+    setIsConnectionModalVisible(true);
+  };
+
+  const completeConnection = (toId: string) => {
+    if (!connectingFromId) return;
+    
+    if (connectingFromId === toId) {
+      Alert.alert('Eroare', 'Nu te poți conecta la același nod.');
+      return;
     }
+
+    const exists = connections.some(c => c.fromId === connectingFromId && c.toId === toId);
+    if (exists) {
+      Alert.alert('Eroare', 'Această conexiune există deja.');
+      return;
+    }
+
+    const newConnection: Connection = { fromId: connectingFromId, toId };
+    const updatedConnections = [...connections, newConnection];
+    setConnections(updatedConnections);
+    saveWorkspace(nodes, updatedConnections);
+    
+    setConnectingFromId(null);
+    setIsConnectionModalVisible(false);
+
+    // Flash animation
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, { toValue: 0, duration: 1000, useNativeDriver: false }).start();
+    
+    const fromNode = nodes.find(n => n.id === connectingFromId);
+    const toNode = nodes.find(n => n.id === toId);
+    if (fromNode && toNode) {
+       // Mock toast using Brain Context if possible or just log
+       console.log(`Conectat: ${fromNode.title} -> ${toNode.title}`);
+    }
+  };
+
+  const deleteConnection = (conn: Connection) => {
+    const updated = connections.filter(c => !(c.fromId === conn.fromId && c.toId === conn.toId));
+    setConnections(updated);
+    saveWorkspace(nodes, updated);
   };
 
   const renderCanvas = () => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={!isDragging} contentContainerStyle={{ height: CANVAS_SIZE }}>
       <ScrollView showsVerticalScrollIndicator={false} scrollEnabled={!isDragging} contentContainerStyle={{ width: CANVAS_SIZE }}>
-        <View style={styles.canvas}>
-          <Svg style={StyleSheet.absoluteFill}>{renderGrid()}{renderConnections()}</Svg>
+        <View style={[styles.canvas, { marginBottom: 120 }]}>
+          <Svg style={StyleSheet.absoluteFill}>
+            <Defs>
+              {connections.map((conn, i) => {
+                const fromNode = nodes.find(n => n.id === conn.fromId);
+                const toNode = nodes.find(n => n.id === conn.toId);
+                if (!fromNode || !toNode) return null;
+                return (
+                  <LinearGradient key={`grad-${i}`} id={`grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type]} />
+                    <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type]} />
+                  </LinearGradient>
+                );
+              })}
+            </Defs>
+            {renderGrid()}
+            {renderConnections()}
+          </Svg>
           {nodes.map((node) => (
             <NodeCard 
               key={node.id} 
               node={node} 
               onFinalizePosition={finalizeNodePosition}
-              onPress={() => handleConnect(node.id)}
+              onPress={() => startConnection(node.id)}
               onConfig={() => {
                 const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
                 if (agent) {
@@ -317,7 +366,7 @@ export default function CodeStudio() {
                   }}
                 ]);
               }}
-              isSelected={connectingFrom === node.id}
+              isSelected={connectingFromId === node.id}
               onDragStart={() => setIsDragging(true)}
               onDragEnd={() => setIsDragging(false)}
               isActive={subAgents.some(sa => sa.isActive && (sa.id === node.id || sa.id === node.config?.agentId))}
@@ -330,63 +379,70 @@ export default function CodeStudio() {
   );
 
   const renderDashboard = () => (
-    <View style={styles.dashboard}>
-      <View style={styles.dashboardHeader}>
-        <Text style={styles.dashboardTitle}>Sub-Agenți</Text>
-        <TouchableOpacity style={styles.addSkillBtn} onPress={() => { setEditingSkill({id:'', name:'', category:'custom', systemPrompt:'', triggers:[]}); setIsSkillEditorVisible(true); }}>
-          <Text style={styles.addSkillBtnText}>+ Skill Nou</Text>
-        </TouchableOpacity>
-      </View>
-      <FlatList
-        data={subAgents}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.agentCard}>
-            <View style={styles.agentCardHeader}>
-              <View>
-                <Text style={styles.agentCardName}>{item.name}</Text>
-                <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority}</Text>
-              </View>
-              <Switch 
-                value={item.isActive} 
-                onValueChange={async (val) => { await toggleSubAgent(item.id, val); refreshSubAgents(); }} 
-                trackColor={{ false: '#334155', true: '#10b981' }}
-              />
-            </View>
-            <View style={styles.skillChips}>
-              {item.skills.map(s => (
-                <View key={s} style={styles.skillChipSmall}><Text style={styles.skillChipTextSmall}>{s.replace('skill_', '')}</Text></View>
-              ))}
-            </View>
-            <View style={styles.agentCardActions}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => { setSandboxAgent(item); setIsSandboxVisible(true); }}>
-                <Ionicons name="play" size={16} color="#fff" /><Text style={styles.actionBtnText}>Test</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => { setNewAgentConfig(item); setIsWizardVisible(true); setWizardStep(1); }}>
-                <Ionicons name="create-outline" size={16} color="#fff" /><Text style={styles.actionBtnText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={async () => {
-                const logs = await getAgentLogs(item.id);
-                setCurrentLogs(logs);
-                setIsLogsVisible(true);
-              }}>
-                <Ionicons name="list" size={16} color="#fff" /><Text style={styles.actionBtnText}>Logs</Text>
-              </TouchableOpacity>
-              <View style={styles.priorityControls}>
-                 <TouchableOpacity onPress={() => { updateAgentPriority(item.id, (item.priority || 5) + 1); refreshSubAgents(); }}><Ionicons name="chevron-up" size={18} color="#6366f1" /></TouchableOpacity>
-                 <TouchableOpacity onPress={() => { updateAgentPriority(item.id, (item.priority || 5) - 1); refreshSubAgents(); }}><Ionicons name="chevron-down" size={18} color="#6366f1" /></TouchableOpacity>
-              </View>
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444', marginLeft: 'auto' }]} onPress={() => {
-                 Alert.alert('Sterge', 'Stergi agentul definitiv?', [{ text: 'Nu' }, { text: 'Da', onPress: async () => { await deleteSA(item.id); refreshSubAgents(); } }]);
-              }}>
-                <Ionicons name="trash" size={16} color="#fff" />
-              </TouchableOpacity>
+    <Modal visible={viewMode === 'dashboard'} animationType="slide" transparent={false}>
+      <SafeAreaView style={styles.fullscreenModal}>
+        <View style={styles.dashboard}>
+          <View style={styles.dashboardHeader}>
+            <Text style={styles.dashboardTitle}>Sub-Agenți</Text>
+            <View style={styles.row}>
+               <TouchableOpacity style={[styles.addSkillBtn, { marginRight: 8 }]} onPress={() => { setEditingSkill({id:'', name:'', category:'custom', systemPrompt:'', triggers:[]}); setIsSkillEditorVisible(true); }}>
+                 <Text style={styles.addSkillBtnText}>+ Skill Nou</Text>
+               </TouchableOpacity>
+               <TouchableOpacity onPress={() => setViewMode('canvas')}><Ionicons name="close" size={28} color="#fff" /></TouchableOpacity>
             </View>
           </View>
-        )}
-        ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>Nu ai niciun agent creat.</Text></View>}
-      />
-    </View>
+          <FlatList
+            data={subAgents}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.agentCard}>
+                <View style={styles.agentCardHeader}>
+                  <View>
+                    <Text style={styles.agentCardName}>{item.name}</Text>
+                    <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority}</Text>
+                  </View>
+                  <Switch 
+                    value={item.isActive} 
+                    onValueChange={async (val) => { await toggleSubAgent(item.id, val); refreshSubAgents(); }} 
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                  />
+                </View>
+                <View style={styles.skillChips}>
+                  {item.skills.map(s => (
+                    <View key={s} style={styles.skillChipSmall}><Text style={styles.skillChipTextSmall}>{s.replace('skill_', '')}</Text></View>
+                  ))}
+                </View>
+                <View style={styles.agentCardActions}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => { setSandboxAgent(item); setIsSandboxVisible(true); }}>
+                    <Ionicons name="play" size={16} color="#fff" /><Text style={styles.actionBtnText}>Test</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => { setNewAgentConfig(item); setIsWizardVisible(true); setWizardStep(1); }}>
+                    <Ionicons name="create-outline" size={16} color="#fff" /><Text style={styles.actionBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={async () => {
+                    const logs = await getAgentLogs(item.id);
+                    setCurrentLogs(logs);
+                    setIsLogsVisible(true);
+                  }}>
+                    <Ionicons name="list" size={16} color="#fff" /><Text style={styles.actionBtnText}>Logs</Text>
+                  </TouchableOpacity>
+                  <View style={styles.priorityControls}>
+                     <TouchableOpacity onPress={() => { updateAgentPriority(item.id, (item.priority || 5) + 1); refreshSubAgents(); }}><Ionicons name="chevron-up" size={18} color="#6366f1" /></TouchableOpacity>
+                     <TouchableOpacity onPress={() => { updateAgentPriority(item.id, (item.priority || 5) - 1); refreshSubAgents(); }}><Ionicons name="chevron-down" size={18} color="#6366f1" /></TouchableOpacity>
+                  </View>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444', marginLeft: 'auto' }]} onPress={() => {
+                     Alert.alert('Sterge', 'Stergi agentul definitiv?', [{ text: 'Nu' }, { text: 'Da', onPress: async () => { await deleteSA(item.id); refreshSubAgents(); } }]);
+                  }}>
+                    <Ionicons name="trash" size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>Nu ai niciun agent creat.</Text></View>}
+          />
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 
   const renderGrid = () => {
@@ -394,7 +450,7 @@ export default function CodeStudio() {
     const step = 50;
     for (let x = 0; x < CANVAS_SIZE; x += step) {
       for (let y = 0; y < CANVAS_SIZE; y += step) {
-        dots.push(<Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.05)" />);
+        dots.push(<Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
       }
     }
     return dots;
@@ -405,12 +461,69 @@ export default function CodeStudio() {
       const fromNode = nodes.find((n) => n.id === conn.fromId);
       const toNode = nodes.find((n) => n.id === conn.toId);
       if (!fromNode || !toNode) return null;
+      
       const x1 = fromNode.x + NODE_WIDTH;
       const y1 = fromNode.y + NODE_HEIGHT / 2;
       const x2 = toNode.x;
       const y2 = toNode.y + NODE_HEIGHT / 2;
+      
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+
       const path = `M ${x1} ${y1} C ${x1 + (x2 - x1) / 2} ${y1}, ${x1 + (x2 - x1) / 2} ${y2}, ${x2} ${y2}`;
-      return <Path key={`conn-${index}`} d={path} stroke={CATEGORY_COLORS[fromNode.type]} strokeWidth="2" fill="none" opacity={0.6} />;
+      
+      // Arrow head calculation
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const arrowSize = 10;
+      const ax1 = x2 - arrowSize * Math.cos(angle - Math.PI / 6);
+      const ay1 = y2 - arrowSize * Math.sin(angle - Math.PI / 6);
+      const ax2 = x2 - arrowSize * Math.cos(angle + Math.PI / 6);
+      const ay2 = y2 - arrowSize * Math.sin(angle + Math.PI / 6);
+
+      return (
+        <React.Fragment key={`conn-${index}`}>
+          <Path 
+            d={path} 
+            stroke={`url(#grad-${index})`} 
+            strokeWidth="3" 
+            fill="none" 
+            opacity={0.8} 
+          />
+          <Polygon 
+            points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} 
+            fill={CATEGORY_COLORS[fromNode.type]} 
+            opacity={1} 
+          />
+          <Circle 
+            cx={midX} 
+            cy={midY} 
+            r="12" 
+            fill="#1e293b" 
+            stroke="#ef4444" 
+            strokeWidth="1" 
+          />
+          <SvgText 
+            x={midX} 
+            y={midY + 4} 
+            fontSize="12" 
+            fill="#ef4444" 
+            textAnchor="middle" 
+            fontWeight="bold"
+            onPress={() => deleteConnection(conn)}
+          >
+            ×
+          </SvgText>
+          <SvgText 
+            x={midX} 
+            y={midY - 15} 
+            fontSize="10" 
+            fill="#94a3b8" 
+            textAnchor="middle"
+          >
+            →
+          </SvgText>
+        </React.Fragment>
+      );
     });
   };
 
@@ -427,6 +540,8 @@ export default function CodeStudio() {
       {viewMode === 'canvas' ? renderCanvas() : renderDashboard()}
 
       <TouchableOpacity style={styles.fab} onPress={() => { setIsWizardVisible(true); setWizardStep(1); }}><Ionicons name="add" size={32} color="#fff" /></TouchableOpacity>
+
+      <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
 
       {/* Node Add Modal */}
       <Modal visible={isAddModalVisible} transparent animationType="fade">
@@ -457,9 +572,30 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
-      {/* Agent Wizard */}
-      <Modal visible={isWizardVisible} transparent animationType="slide">
+      {/* Connection Modal */}
+      <Modal visible={isConnectionModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Conectează la...</Text>
+            <FlatList
+              data={nodes.filter(n => n.id !== connectingFromId && !connections.some(c => c.fromId === connectingFromId && c.toId === n.id))}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.connectionItem} onPress={() => completeConnection(item.id)}>
+                   <Ionicons name={CATEGORY_ICONS[item.type] as any} size={20} color={CATEGORY_COLORS[item.type]} />
+                   <Text style={styles.connectionItemText}>{item.title}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>Niciun nod disponibil pentru conectare.</Text>}
+            />
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsConnectionModalVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Agent Wizard */}
+      <Modal visible={isWizardVisible} transparent={false} animationType="slide">
+        <SafeAreaView style={styles.fullscreenModal}>
           <View style={styles.wizardContent}>
             <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>{newAgentConfig.id ? 'Editare Agent' : 'Agent Wizard'}</Text><Text style={styles.wizardStep}>Pas {wizardStep}/5</Text></View>
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={text => setNewAgentConfig({...newAgentConfig, name: text})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={text => setNewAgentConfig({...newAgentConfig, description: text})} multiline /></View>}
@@ -469,43 +605,19 @@ export default function CodeStudio() {
             {wizardStep === 5 && <View style={styles.wizardBody}><Text style={styles.reviewTitle}>Finalizare</Text><Text style={styles.reviewText}>Nume: {newAgentConfig.name}</Text><Text style={styles.reviewText}>Skills: {newAgentConfig.skills?.length}</Text><Text style={styles.reviewText}>Prioritate: {newAgentConfig.priority}</Text><View style={styles.spacer} /><TouchableOpacity style={styles.finalizeBtn} onPress={handleCreateAgent}><Text style={styles.finalizeBtnText}>Salvează Agent</Text></TouchableOpacity></View>}
             <View style={styles.wizardFooter}><TouchableOpacity onPress={() => wizardStep > 1 && setWizardStep(wizardStep - 1)} disabled={wizardStep === 1}><Text style={styles.wizardBtnText}>Inapoi</Text></TouchableOpacity><TouchableOpacity onPress={() => setIsWizardVisible(false)}><Text style={styles.closeWizardText}>Anulează</Text></TouchableOpacity>{wizardStep < 5 && <TouchableOpacity onPress={() => setWizardStep(wizardStep + 1)}><Text style={styles.wizardBtnText}>Inainte</Text></TouchableOpacity>}</View>
           </View>
-        </View>
-      </Modal>
-
-      {/* Skill Editor */}
-      <Modal visible={isSkillEditorVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.wizardContent}>
-            <Text style={styles.modalTitle}>{editingSkill.id ? 'Editare Skill' : 'Skill Nou'}</Text>
-            <ScrollView>
-              <Text style={styles.inputLabel}>Nume Skill</Text>
-              <TextInput style={styles.input} value={editingSkill.name} onChangeText={t => setEditingSkill({...editingSkill, name: t})} />
-              <Text style={styles.inputLabel}>System Prompt Expert</Text>
-              <TextInput style={[styles.input, { height: 150 }]} value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline />
-              <Text style={styles.inputLabel}>Cuvinte Cheie (trigger words)</Text>
-              <TextInput style={styles.input} value={editingSkill.triggers?.join(', ')} onChangeText={t => setEditingSkill({...editingSkill, triggers: t.split(',').map(x=>x.trim())})} placeholder="js, react, frontend..." placeholderTextColor="#475569" />
-              <Text style={styles.inputLabel}>Categorie</Text>
-              <View style={styles.row}>{['coding', 'research', 'writing', 'custom'].map(c => (<TouchableOpacity key={c} style={[styles.providerTab, editingSkill.category === c && styles.providerTabActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.providerTabText}>{c.toUpperCase()}</Text></TouchableOpacity>))}</View>
-              <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează Skill</Text></TouchableOpacity>
-              {editingSkill.id && editingSkill.id.startsWith('skill_custom_') && (
-                <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 10 }]} onPress={async () => { await deleteSkill(editingSkill.id!); await refreshSkills(); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Sandbox */}
-      <Modal visible={isSandboxVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={isSandboxVisible} transparent={false} animationType="fade">
+        <SafeAreaView style={styles.fullscreenModal}>
           <View style={styles.sandboxContent}>
             <View style={styles.sandboxHeader}><Ionicons name="flask" size={24} color="#6366f1" /><Text style={styles.sandboxTitle}>{sandboxAgent?.name}</Text><TouchableOpacity onPress={() => setIsSandboxVisible(false)}><Ionicons name="close" size={28} color="#94a3b8" /></TouchableOpacity></View>
             <ScrollView style={styles.sandboxOutput}>{sandboxResponse ? <Text style={styles.responseText}>{sandboxResponse}</Text> : <Text style={styles.placeholderText}>Test Sandbox</Text>}{isSandboxThinking && <ActivityIndicator color="#6366f1" />}</ScrollView>
             <View style={styles.sandboxInputRow}><TextInput style={styles.sandboxInput} value={sandboxMessage} onChangeText={setSandboxMessage} placeholder="Test message..." placeholderTextColor="#475569" /><TouchableOpacity style={styles.sendBtn} onPress={handleTestAgent}><Ionicons name="send" size={20} color="#fff" /></TouchableOpacity></View>
             {sandboxResponse && <TouchableOpacity style={styles.pushToChatBtn} onPress={() => { sendMessage(`[Sandbox]: ${sandboxResponse}`); setIsSandboxVisible(false); }}><Text style={styles.pushToChatText}>Trimite la Chat</Text></TouchableOpacity>}
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Logs */}
@@ -518,6 +630,26 @@ export default function CodeStudio() {
           </View>
         </View>
       </Modal>
+
+      {/* Toolbar */}
+      <View style={styles.toolbar}>
+         <TouchableOpacity style={styles.toolbarBtn} onPress={() => setViewMode('canvas')}>
+            <Ionicons name="apps-outline" size={24} color={viewMode === 'canvas' ? '#6366f1' : '#94a3b8'} />
+            <Text style={[styles.toolbarText, viewMode === 'canvas' && { color: '#6366f1' }]}>Canvas</Text>
+         </TouchableOpacity>
+         <TouchableOpacity style={styles.toolbarBtn} onPress={() => setViewMode('dashboard')}>
+            <Ionicons name="list-outline" size={24} color={viewMode === 'dashboard' ? '#6366f1' : '#94a3b8'} />
+            <Text style={[styles.toolbarText, viewMode === 'dashboard' && { color: '#6366f1' }]}>Dashboard</Text>
+         </TouchableOpacity>
+         <TouchableOpacity style={styles.toolbarBtn} onPress={() => { setIsWizardVisible(true); setWizardStep(1); }}>
+            <Ionicons name="color-wand-outline" size={24} color="#94a3b8" />
+            <Text style={styles.toolbarText}>Wizard</Text>
+         </TouchableOpacity>
+         <TouchableOpacity style={styles.toolbarBtn} onPress={() => setIsAddModalVisible(true)}>
+            <Ionicons name="add-circle-outline" size={24} color="#10b981" />
+            <Text style={[styles.toolbarText, { color: '#10b981' }]}>Add</Text>
+         </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -537,9 +669,27 @@ function NodeCard({ node, onFinalizePosition, onPress, onConfig, onRun, onDelete
   const borderColor = glowAnim.interpolate({ inputRange: [0, 1], outputRange: ['#334155', isActive ? '#10b981' : CATEGORY_COLORS[node.type]] });
   return (
     <Animated.View style={[styles.node, { position: 'absolute', left: pan.x, top: pan.y, borderLeftColor: CATEGORY_COLORS[node.type], borderColor: (isSelected || isActive) ? borderColor : '#334155', borderWidth: (isSelected || isActive) ? 2 : 1 }]} {...panResponder.panHandlers}>
-      <View style={styles.nodeHeader}><Ionicons name={CATEGORY_ICONS[node.type] as any} size={20} color={CATEGORY_COLORS[node.type]} /><View style={styles.nodeActions}><TouchableOpacity onPress={onRun} style={styles.nodeMiniBtn}><Ionicons name="play" size={12} color="#fff" /></TouchableOpacity><TouchableOpacity onPress={onConfig} style={styles.nodeMiniBtn}><Ionicons name="settings" size={12} color="#fff" /></TouchableOpacity><TouchableOpacity onPress={onDelete} style={styles.nodeMiniBtn}><Ionicons name="close" size={12} color="#ef4444" /></TouchableOpacity></View></View>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}><Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text><Text style={styles.nodeType}>{node.type}</Text></TouchableOpacity>
+      <View style={styles.nodeHeader}>
+        <Ionicons name={CATEGORY_ICONS[node.type] as any} size={20} color={CATEGORY_COLORS[node.type]} />
+        <View style={styles.nodeActions}>
+          <TouchableOpacity onPress={onRun} style={styles.nodeMiniBtn}><Ionicons name="play" size={12} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={onConfig} style={styles.nodeMiniBtn}><Ionicons name="settings" size={12} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={onDelete} style={styles.nodeMiniBtn}><Ionicons name="close" size={12} color="#ef4444" /></TouchableOpacity>
+        </View>
+      </View>
+      <View>
+        <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
+        <Text style={styles.nodeType}>{node.type}</Text>
+      </View>
       {priority && <View style={styles.priorityBadge}><Text style={styles.priorityText}>P{priority}</Text></View>}
+      
+      {/* Plus Button for Connection */}
+      <TouchableOpacity 
+        style={styles.connectPlusBtn} 
+        onPress={onPress}
+      >
+        <Ionicons name="add" size={14} color="#fff" />
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -555,15 +705,16 @@ const styles = StyleSheet.create({
   templatesBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6366f1', padding: 8, borderRadius: 8 },
   templatesBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
   canvas: { width: CANVAS_SIZE, height: CANVAS_SIZE, backgroundColor: '#0f172a' },
-  node: { width: NODE_WIDTH, padding: 10, backgroundColor: '#1e293b', borderRadius: 10, borderLeftWidth: 4, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 },
+  node: { width: NODE_WIDTH, padding: 10, backgroundColor: '#1e293b', borderRadius: 10, borderLeftWidth: 4, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 8, elevation: 10 },
   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   nodeActions: { flexDirection: 'row' },
   nodeMiniBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
   nodeTitle: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   nodeType: { color: '#94a3b8', fontSize: 9, textTransform: 'uppercase' },
-  priorityBadge: { position: 'absolute', bottom: -6, right: -6, backgroundColor: '#f59e0b', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 },
+  priorityBadge: { position: 'absolute', bottom: -6, left: -6, backgroundColor: '#f59e0b', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 },
   priorityText: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
-  dashboard: { flex: 1, padding: 16 },
+  connectPlusBtn: { position: 'absolute', right: -12, top: NODE_HEIGHT / 2 - 12, width: 24, height: 24, borderRadius: 12, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#1e293b', zIndex: 10 },
+  dashboard: { flex: 1, padding: 16, backgroundColor: '#0f172a' },
   dashboardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   dashboardTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   addSkillBtn: { backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
@@ -579,10 +730,15 @@ const styles = StyleSheet.create({
   actionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#334155', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, marginRight: 6 },
   actionBtnText: { color: '#fff', fontSize: 10, fontWeight: 'bold', marginLeft: 3 },
   priorityControls: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 6, padding: 2 },
-  fab: { position: 'absolute', bottom: 30, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 8 },
+  fab: { position: 'absolute', bottom: 80, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 8, zIndex: 1000 },
+  toolbar: { position: 'absolute', bottom: 0, width: '100%', height: 70, backgroundColor: '#1e293b', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155', zIndex: 999, paddingBottom: 10 },
+  toolbarBtn: { alignItems: 'center' },
+  toolbarText: { color: '#94a3b8', fontSize: 10, marginTop: 4, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, maxHeight: '80%' },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  connectionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 14, borderRadius: 10, marginBottom: 10 },
+  connectionItemText: { color: '#fff', marginLeft: 12, fontWeight: 'bold' },
   nodeTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   typeBtn: { width: '48%', backgroundColor: '#0f172a', padding: 14, borderRadius: 10, borderLeftWidth: 4, marginBottom: 10, alignItems: 'center' },
   typeBtnText: { color: '#fff', marginTop: 6, fontWeight: 'bold', fontSize: 12 },
@@ -593,47 +749,49 @@ const styles = StyleSheet.create({
   templateDesc: { color: '#94a3b8', fontSize: 9, marginTop: 4 },
   closeBtn: { marginTop: 16, alignItems: 'center' },
   closeBtnText: { color: '#94a3b8', fontWeight: 'bold', fontSize: 13 },
-  wizardContent: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, maxHeight: '85%' },
-  wizardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  wizardTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  wizardStep: { color: '#6366f1', fontSize: 11, fontWeight: 'bold' },
-  wizardBody: { flex: 0, marginBottom: 10 },
-  inputLabel: { color: '#94a3b8', fontSize: 12, marginBottom: 6, marginTop: 10 },
-  input: { backgroundColor: '#0f172a', borderRadius: 10, padding: 10, color: '#fff', borderWidth: 1, borderColor: '#334155', fontSize: 13 },
+  fullscreenModal: { flex: 1, backgroundColor: '#0f172a' },
+  wizardContent: { flex: 1, padding: 20 },
+  wizardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  wizardTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  wizardStep: { color: '#6366f1', fontSize: 14, fontWeight: 'bold' },
+  wizardBody: { flex: 1 },
+  inputLabel: { color: '#94a3b8', fontSize: 14, marginBottom: 8, marginTop: 16 },
+  input: { backgroundColor: '#1e293b', borderRadius: 12, padding: 14, color: '#fff', borderWidth: 1, borderColor: '#334155', fontSize: 15 },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
-  providerTab: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#0f172a', marginRight: 6, marginBottom: 6 },
+  providerTab: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#1e293b', marginRight: 10, marginBottom: 10 },
   providerTabActive: { backgroundColor: '#6366f1' },
-  providerTabText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  selectableItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 10, borderRadius: 10, marginBottom: 6 },
-  selectedItem: { borderColor: '#6366f1', borderWidth: 1 },
-  selectableText: { color: '#fff', marginLeft: 8, fontSize: 13 },
-  priorityBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  providerTabText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  selectableItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', padding: 14, borderRadius: 12, marginBottom: 10 },
+  selectedItem: { borderColor: '#6366f1', borderWidth: 2 },
+  selectableText: { color: '#fff', marginLeft: 12, fontSize: 15 },
+  priorityBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   priorityBtnActive: { backgroundColor: '#f59e0b' },
-  priorityBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  reviewTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  reviewText: { color: '#94a3b8', fontSize: 13, marginBottom: 4 },
-  spacer: { height: 20 },
-  finalizeBtn: { backgroundColor: '#10b981', padding: 14, borderRadius: 10, alignItems: 'center' },
-  finalizeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  wizardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
-  wizardBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 13 },
-  closeWizardText: { color: '#ef4444', fontWeight: 'bold', fontSize: 13 },
-  sandboxContent: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, flex: 0.9 },
-  sandboxHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  sandboxTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', flex: 1, marginLeft: 10 },
-  sandboxOutput: { flex: 1, backgroundColor: '#0f172a', borderRadius: 12, padding: 12, marginBottom: 12 },
-  responseText: { color: '#fff', fontSize: 13, lineHeight: 18 },
-  placeholderText: { color: '#475569', textAlign: 'center', marginTop: 30, fontSize: 12 },
+  priorityBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  reviewTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+  reviewText: { color: '#94a3b8', fontSize: 16, marginBottom: 8 },
+  spacer: { height: 40 },
+  finalizeBtn: { backgroundColor: '#10b981', padding: 18, borderRadius: 14, alignItems: 'center' },
+  finalizeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  wizardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingBottom: 20 },
+  wizardBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 16 },
+  closeWizardText: { color: '#ef4444', fontWeight: 'bold', fontSize: 16 },
+  sandboxContent: { flex: 1, padding: 20 },
+  sandboxHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  sandboxTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', flex: 1, marginLeft: 12 },
+  sandboxOutput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 16 },
+  responseText: { color: '#fff', fontSize: 15, lineHeight: 22 },
+  placeholderText: { color: '#475569', textAlign: 'center', marginTop: 60, fontSize: 14 },
   sandboxInputRow: { flexDirection: 'row', alignItems: 'center' },
-  sandboxInput: { flex: 1, backgroundColor: '#0f172a', borderRadius: 10, padding: 10, color: '#fff', marginRight: 8, fontSize: 13 },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
-  pushToChatBtn: { marginTop: 12, backgroundColor: '#334155', padding: 10, borderRadius: 10, alignItems: 'center' },
-  pushToChatText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  sandboxInput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 14, color: '#fff', marginRight: 12, fontSize: 15 },
+  sendBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
+  pushToChatBtn: { marginTop: 16, backgroundColor: '#334155', padding: 16, borderRadius: 12, alignItems: 'center' },
+  pushToChatText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   logsContent: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, maxHeight: '80%' },
   logItem: { padding: 10, backgroundColor: '#0f172a', borderRadius: 10, marginBottom: 8 },
   logTime: { color: '#6366f1', fontSize: 9, marginBottom: 2 },
   logMsg: { color: '#94a3b8', fontSize: 11, fontStyle: 'italic' },
   logResp: { color: '#fff', fontSize: 12, marginTop: 2 },
-  emptyContainer: { alignItems: 'center', marginTop: 40 },
-  emptyText: { color: '#475569', fontSize: 12 },
+  emptyContainer: { alignItems: 'center', marginTop: 60 },
+  emptyText: { color: '#475569', fontSize: 14 },
+  flashOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#10b981', zIndex: 2000 },
 });
