@@ -316,13 +316,32 @@ export function extractTopSentences(rawText: string, query: string, maxSentences
   return topSentences.join('. ') + (topSentences.length > 0 ? '.' : '');
 }
 
-// ─── Căutare online cu sinteză semantică ─────────────────────────────────────
-// Versiune extinsă a searchOnline care extrage top fraze relevante
-export async function searchOnlineSynthesized(query: string): Promise<OnlineResult> {
-  const result = await searchOnline(query);
+// ─── Căutare online cu sinteză semantică și context ──────────────────────────
+
+export async function smartWebSearch(
+  query: string,
+  context: string = '',
+): Promise<OnlineResult> {
+  // 1. Rafinarea query-ului bazat pe context (păstrăm query original, dar adăugăm context dacă e prea scurt)
+  let refinedQuery = query;
+  if (context && context.length > 10 && query.split(' ').length < 3) {
+    // Extragem ultimele cuvinte cheie din context pentru a ajuta search-ul
+    const contextKeywords = context.slice(-100).split(/[ \n\t,.]+/)
+      .filter(w => w.length > 5).slice(-2);
+    if (contextKeywords.length > 0) {
+      refinedQuery = `${query} ${contextKeywords.join(' ')}`;
+    }
+  }
+
+  const result = await searchOnline(refinedQuery);
   if (!result.found || !result.text) return result;
 
-  // Aplică extragere semantică — returnează top 3 propoziții relevante
-  const synthesized = extractTopSentences(result.text, query, 3);
+  // 2. Aplică extragere semantică — returnează top 3 propoziții relevante
+  const synthesized = extractTopSentences(result.text, refinedQuery, 3);
   return { ...result, text: synthesized };
+}
+
+// Versiune extinsă a searchOnline care extrage top fraze relevante
+export async function searchOnlineSynthesized(query: string): Promise<OnlineResult> {
+  return smartWebSearch(query);
 }

@@ -138,7 +138,7 @@ async function callGeminiModel(
   history?: ConversationTurn[],
 ): Promise<GeminiResult> {
   const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
-  const turns = validHistory.slice(-20);
+  const turns = validHistory.slice(-25);
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
     ...turns.map(t => ({
       role: t.role === 'assistant' ? 'model' : 'user',
@@ -452,13 +452,16 @@ export async function testOpenRouterKeyDetailed(apiKey: string): Promise<{ ok: b
 // ─── Apel unificat ───────────────────────────────────────────────────────────
 
 export const JARVIS_SYSTEM_PROMPT =
-  `Ești Jarvis, asistent AI personal și expert în programare.\n` +
-  `REGULI: (1) Execuți comenzile direct, fără introducere. ` +
-  `(2) Fără "Bineînțeles!", "Cu plăcere!", "Desigur!". ` +
-  `(3) Răspunzi în română. ` +
-  `(4) Cod cerut = cod complet, funcțional, cu exemple. ` +
-  `(5) Rezultatul direct, nu procesul. ` +
-  `(6) Când ești întrebat despre ora sau data curentă, folosește timpul sistemului utilizatorului (new Date()).`;
+  `Ești Jarvis, asistent AI personal și expert suprem în programare.\n` +
+  `MANDAT DE RAȚIONAMENT PROFUND:\n` +
+  `1. ANALIZĂ: Analizează întrebarea în profunzime. Identifică contextul ascuns. Răspunde pas-cu-pas.\n` +
+  `2. CHAIN-OF-THOUGHT: Planifică răspunsul intern. Explică-ți raționamentul tău.\n` +
+  `3. GÂNDIRE STRUCTURATĂ: 1. Ce știu? 2. Ce lipsește? 3. Care este răspunsul?\n\n` +
+  `REGULI DE AUR:\n` +
+  `• Răspunde direct și execută imediat. Fără "Sigur!", "Vă pot ajuta", "Iată răspunsul".\n` +
+  `• Limba: Română (excepție: codul tehnic).\n` +
+  `• Cod: Complet, modern, cu comentarii și exemple de utilizare.\n` +
+  `• Stil: Concis, tehnic, precis, fără politețuri inutile.`;
 
 export interface JarvisContext {
   userName?: string;
@@ -475,6 +478,10 @@ export interface JarvisContext {
 export function buildRichSystemPrompt(ctx?: JarvisContext): string {
   const base =
     `Ești Jarvis, asistentul AI personal — expert absolut în programare și inteligență artificială.\n\n` +
+    `MANDAT DE RAȚIONAMENT:\n` +
+    `• Analizează cerințele în profunzime înainte de a genera răspunsul.\n` +
+    `• Folosește un proces de gândire structurat: 1. Date cunoscute, 2. Elemente lipsă/presupuneri, 3. Soluție pas-cu-pas.\n` +
+    `• Explică-ți logic deciziile atunci când ești întrebat despre procese complexe.\n\n` +
     `REGULI ABSOLUTE DE COMPORTAMENT:\n` +
     `• Execuți comenzile IMEDIAT, direct, fără introducere sau preamble.\n` +
     `• NICIODATĂ "Bineînțeles!", "Cu plăcere!", "Desigur!", "Sigur că!" sau variante de politeţe inutile.\n` +
@@ -711,7 +718,7 @@ async function streamGeminiModel(
 ): Promise<{ text: string; provider: AIProvider } | null> {
   const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
   const contents = [
-    ...validHistory.slice(-15).map(t => ({
+    ...validHistory.slice(-25).map(t => ({
       role: t.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: t.content }],
     })),
@@ -800,7 +807,7 @@ async function streamGroq(
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
   const validHistory = (history ?? []).filter(t => t.role === 'user' || t.role === 'assistant');
-  messages.push(...validHistory.slice(-15).map(t => ({ role: t.role, content: t.content })));
+  messages.push(...validHistory.slice(-25).map(t => ({ role: t.role, content: t.content })));
   messages.push({ role: 'user', content: prompt });
 
   try {

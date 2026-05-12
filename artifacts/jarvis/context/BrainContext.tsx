@@ -12,7 +12,7 @@ import { createInferenceEngine, extractRulesFromFact, addFact } from '@/engine/i
 import { createTemporalMemory } from '@/engine/temporal';
 import { createConstitutionState } from '@/engine/constitution';
 import { useLLM } from '@/context/LLMContext';
-import { searchOnline, isOnlineIntent, searchOnlineSynthesized, extractTopSentences } from '@/engine/webSearch';
+import { searchOnline, isOnlineIntent, searchOnlineSynthesized, extractTopSentences, smartWebSearch, extractSearchQuery } from '@/engine/webSearch';
 import { detectQuestionType, synthesizeWebResponse, detectTopicCategory } from '@/engine/responseGenerator';
 import { useAIProvider } from '@/context/AIProviderContext';
 import { buildRichSystemPrompt, type JarvisContext, type ConversationTurn } from '@/engine/aiProviders';

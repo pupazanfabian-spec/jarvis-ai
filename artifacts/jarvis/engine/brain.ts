@@ -59,6 +59,46 @@ export function isResponseVague(content: string, confidence: number): boolean {
   return false;
 }
 
+export function buildContextualPrompt(state: BrainState, history: Message[]): string {
+  // 1. Mărim contextul la 25 de schimburi
+  const recentHistory = history.slice(-25);
+  
+  // 2. Extragem entități cheie (persoane, date, concepte)
+  const entities = state.entityTracker.entities
+    .filter(e => e.occurrences > 1)
+    .sort((a, b) => b.occurrences - a.occurrences)
+    .slice(0, 12)
+    .map(e => `${e.value} (${e.type})`)
+    .join(', ');
+
+  // 3. Rezumat conversație (dacă e lungă)
+  let summary = '';
+  if (history.length > 20) {
+    const userMsgs = history.filter(m => m.role === 'user').slice(-15, -5);
+    if (userMsgs.length > 0) {
+      // Grupăm subiectele recente
+      const uniqueTopics = [...new Set(userMsgs.map(m => detectTopic(m.content)).filter(t => t !== 'general'))];
+      summary = uniqueTopics.length > 0 
+        ? `Subiecte discutate recent: ${uniqueTopics.join(', ')}.`
+        : `Discuție recentă despre: ${userMsgs.map(m => m.content.slice(0, 40)).join(' | ')}...`;
+    }
+  }
+
+  // 4. User Profile (Interese, Stil, Skill Level)
+  const profile = state.learnedPatterns ? 
+    `Utilizator: ${state.userName || 'necunoscut'}. Interese: ${state.learnedPatterns.userInterests.join(', ')}. Stil: ${state.learnedPatterns.preferredStyle}.` : 
+    `Utilizator: ${state.userName || 'necunoscut'}.`;
+
+  const contextParts = [
+    `[USER_PROFILE] ${profile}`,
+    entities ? `[ENTITIES] ${entities}` : '',
+    summary ? `[CONVERSATION_SUMMARY] ${summary}` : '',
+    recentHistory.length > 0 ? `[RECENT_CONTEXT] (Ultimile ${recentHistory.length} mesaje sunt incluse in istoric)` : '',
+  ].filter(Boolean);
+
+  return contextParts.join('\n');
+}
+
 export interface LearnedDocument {
   id: string;
   name: string;

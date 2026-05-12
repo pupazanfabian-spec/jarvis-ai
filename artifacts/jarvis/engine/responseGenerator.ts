@@ -219,9 +219,21 @@ export function synthesizeKnowledgeResponse(
   const intro = buildIntro(questionType, topic, ctx.userName);
   const body = reformatRaw(raw, topic);
   const illustration = (questionType === 'ce_este' || questionType === 'cum') ? buildIllustration(topicCategory) : '';
-  const followUp = buildFollowUp(topicCategory, questionType);
+  
+  // Verificăm calitatea răspunsului (confidence score)
+  const confidence = evaluateResponseQuality(body, topic);
+  
+  let followUp = buildFollowUp(topicCategory, questionType);
+  
+  // Dacă confidence < 0.7, forțăm un follow-up util sau o sugestie de căutare online
+  if (confidence < 0.7) {
+    followUp = `\n\n💡 **Notă:** Răspunsul meu este parțial. Vrei să aprofundez sau să **caut online** mai multe detalii despre "${topic}"?`;
+  }
 
-  return `${intro}${body}${illustration}${followUp}`;
+  // Structură: Intro + Detalii + Ilustrație (Exemple) + Resurse (dacă există) + Follow-up
+  const resources = topicCategory !== 'general' ? `\n\n📚 **Resurse corelate:** ${topic}, ${topicCategory}, [Baza de date Jarvis]` : '';
+
+  return `${intro}${body}${illustration}${resources}${followUp}`;
 }
 
 // ─── Sinteză răspuns de necunoaștere inteligent ────────────────────────────────
@@ -280,15 +292,30 @@ export function synthesizeWebResponse(
     body = trimmed.trim() + (trimmed.length < raw.length ? '...' : '');
   }
 
-  // Adaugă context de follow-up
+  // Structură: Intro + Detalii + Follow-up
   const suggestions = [
-    `\n\n💡 Vrei mai multe detalii? Spune "caută online ${originalQuestion.slice(0, 40)}" din nou sau pune o întrebare mai specifică.`,
-    '\n\n💡 Pot căuta mai multe dacă reformulezi întrebarea.',
-    '',
-    '\n\n💡 Dacă vrei să memorez această informație, spune "reține că [informație]".',
+    `\n\n💡 **Sugestie follow-up:** Vrei mai multe detalii? Spune "caută online ${originalQuestion.slice(0, 40)}" din nou sau pune o întrebare mai specifică.`,
+    '\n\n💡 **Sugestie follow-up:** Pot căuta mai multe dacă reformulezi întrebarea sau specifici contextul.',
+    '\n\n💡 **Sugestie follow-up:** Dacă vrei să memorez această informație, spune "reține că [informație]".',
   ];
 
   return `📡 **${intro}${source}:**\n\n${body}${pick(suggestions)}`;
+}
+
+/**
+ * Verifică dacă un răspuns răspunde la întrebare (scor de încredere simulat aici, 
+ * dar poate fi extins cu logică semantică).
+ */
+export function evaluateResponseQuality(response: string, query: string): number {
+  const r = response.toLowerCase();
+  const q = query.toLowerCase();
+  
+  // Logică simplă: dacă răspunsul conține cuvinte cheie din întrebare
+  const queryWords = q.split(/\s+/).filter(w => w.length > 3);
+  const matchCount = queryWords.filter(w => r.includes(w)).length;
+  
+  const score = matchCount / Math.max(queryWords.length, 1);
+  return Math.min(score + 0.3, 1.0); // Offset de bază
 }
 
 // ─── Detectare categorie subiect ───────────────────────────────────────────────

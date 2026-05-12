@@ -11,6 +11,75 @@ export interface MemoryEntry {
   category: MemoryCategory;
   addedAt: string;
   importance?: number;
+  strength?: number;
+  occurrences?: number;
+}
+
+export interface UserModel {
+  interests: string[];
+  knowledgeLevel: 'beginner' | 'intermediate' | 'expert';
+  preferredStyle: string;
+  frequentQuestions: string[];
+  lastUpdated: number;
+}
+
+const USER_MODEL_KEY = '@jarvis_user_model_v1';
+
+export async function saveUserModel(model: UserModel): Promise<void> {
+  try {
+    await AsyncStorage.setItem(USER_MODEL_KEY, JSON.stringify(model));
+  } catch {}
+}
+
+export async function loadUserModel(): Promise<UserModel> {
+  try {
+    const data = await AsyncStorage.getItem(USER_MODEL_KEY);
+    if (data) return JSON.parse(data);
+  } catch {}
+  return {
+    interests: [],
+    knowledgeLevel: 'intermediate',
+    preferredStyle: 'direct',
+    frequentQuestions: [],
+    lastUpdated: Date.now(),
+  };
+}
+
+export async function extractAndUpdateUserModel(history: string[]): Promise<void> {
+  const model = await loadUserModel();
+  const text = history.join(' ').toLowerCase();
+
+  // Detecție nivel cunoștințe
+  if (/(cum instalez|ce este|nu stiu|ajuta-ma cu|incepator|invata-ma|simplu|nu inteleg)/.test(text)) {
+    model.knowledgeLevel = 'beginner';
+  } else if (/(arhitectura|optimizare|performanta|avansat|complex|microservicii|scalabilitate|implementare|refactorizare)/.test(text)) {
+    model.knowledgeLevel = 'expert';
+  }
+
+  // Detecție interese și concepte recurente (> 3 ori)
+  const words = text.split(/[ \n\t,.]+/)
+    .filter(w => w.length > 5 && !['asistent', 'mesaj', 'utilizator', 'raspuns', 'pentru', 'despre'].includes(w));
+  
+  const counts: Record<string, number> = {};
+  words.forEach(w => counts[w] = (counts[w] || 0) + 1);
+  
+  // Identificăm concepte care au apărut de mai mult de 3 ori
+  const recurringConcepts = Object.entries(counts)
+    .filter(([_, count]) => count >= 3)
+    .map(([word]) => word);
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const newInterests = sorted.slice(0, 5).map(e => e[0]);
+  
+  // Combinăm interesele noi cu cele recurente
+  model.interests = [...new Set([...model.interests, ...newInterests, ...recurringConcepts])].slice(-20);
+  
+  // Păstrăm ultimele întrebări frecvente (primele 3 din istoric care au semnul ?)
+  const questions = history.filter(h => h.includes('?')).slice(-3);
+  model.frequentQuestions = [...new Set([...model.frequentQuestions, ...questions])].slice(-5);
+
+  model.lastUpdated = Date.now();
+  await saveUserModel(model);
 }
 
 export interface MemoryStore {
