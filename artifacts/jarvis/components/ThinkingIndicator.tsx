@@ -1,135 +1,171 @@
-
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
-import Colors from '@/constants/colors';
+import { View, Text, Animated, StyleSheet, Easing, Dimensions } from 'react-native';
 
-const { colors } = Colors;
+const { width, height } = Dimensions.get('window');
 
-interface ThinkingIndicatorProps {
-  webSearch?: boolean;
-}
-
-export default function ThinkingIndicator({ webSearch = false }: ThinkingIndicatorProps) {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+export default function ThinkingIndicator({ visible }: { visible: boolean }) {
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim2 = useRef(new Animated.Value(0)).current;
+  const colorCycle = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0.8)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    const animate = (dot: Animated.Value, delay: number) => {
-      return Animated.loop(
+    if (visible) {
+      // Fade in + scale in
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1, duration: 300, useNativeDriver: true
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1, tension: 60, friction: 8, useNativeDriver: true
+        })
+      ]).start();
+
+      // Rotatie continua
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1, duration: 2000,
+          easing: Easing.linear, useNativeDriver: true
+        })
+      ).start();
+
+      // Rotatie inversa
+      Animated.loop(
+        Animated.timing(rotateAnim2, {
+          toValue: 1, duration: 1500,
+          easing: Easing.linear, useNativeDriver: true
+        })
+      ).start();
+
+      // Color cycle - NU useNativeDriver pentru culori
+      Animated.loop(
+        Animated.timing(colorCycle, {
+          toValue: 4, duration: 4000,
+          easing: Easing.linear, useNativeDriver: false
+        })
+      ).start();
+
+      // Pulse
+      Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0.2, duration: 500, useNativeDriver: true }),
-          Animated.delay(400 - (delay % 400)),
+          Animated.timing(pulseAnim, {
+            toValue: 1.15, duration: 600, useNativeDriver: true
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.85, duration: 600, useNativeDriver: true
+          }),
         ])
-      );
-    };
+      ).start();
+    } else {
+      Animated.timing(fadeAnim, {
+        toValue: 0, duration: 200, useNativeDriver: true
+      }).start(() => {
+        rotateAnim.setValue(0);
+        rotateAnim2.setValue(0);
+        colorCycle.setValue(0);
+        scaleAnim.setValue(0.5);
+        pulseAnim.setValue(0.8);
+      });
+    }
+  }, [visible]);
 
-    const a1 = animate(dot1, 0);
-    const a2 = animate(dot2, 150);
-    const a3 = animate(dot3, 300);
+  const spin1 = rotateAnim.interpolate({
+    inputRange: [0, 1], outputRange: ['0deg', '360deg']
+  });
+  const spin2 = rotateAnim2.interpolate({
+    inputRange: [0, 1], outputRange: ['360deg', '0deg']
+  });
 
-    a1.start();
-    a2.start();
-    a3.start();
+  // Ciclu de culori: albastru -> mov -> rosu -> galben -> albastru
+  const ringColor = colorCycle.interpolate({
+    inputRange: [0, 1, 2, 3, 4],
+    outputRange: ['#00d4ff', '#6366f1', '#ff0066', '#fbbf24', '#00d4ff']
+  });
+  const innerColor = colorCycle.interpolate({
+    inputRange: [0, 1, 2, 3, 4],
+    outputRange: ['rgba(0,212,255,0.15)', 'rgba(99,102,241,0.15)',
+      'rgba(255,0,102,0.15)', 'rgba(251,191,36,0.15)', 'rgba(0,212,255,0.15)']
+  });
 
-    return () => {
-      a1.stop();
-      a2.stop();
-      a3.stop();
-    };
-  }, []);
-
-  const dots = [dot1, dot2, dot3];
-  const label = webSearch ? '🔍 Caută online...' : '✨ Jarvis scrie...';
+  if (!visible) return null;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{webSearch ? '🔍' : 'J'}</Text>
-      </View>
+    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}
+      pointerEvents="none">
+      <Animated.View style={[styles.container, {
+        transform: [{ scale: scaleAnim }]
+      }]}>
+        {/* Cerc exterior */}
+        <Animated.View style={[styles.outerRing, {
+          transform: [{ rotate: spin1 }],
+          borderColor: ringColor,
+        }]} />
 
-      <View style={styles.content}>
-        <Text style={styles.statusText}>{label}</Text>
-        <View style={[styles.bubble, webSearch && styles.bubbleWeb]}>
-          {dots.map((dot, i) => (
-            <Animated.View
-              key={`dot-${i}`}
-              style={[
-                styles.dot,
-                {
-                  opacity: dot,
-                  transform: [{
-                    scale: dot.interpolate({
-                      inputRange: [0.2, 1],
-                      outputRange: [0.7, 1.1],
-                    })
-                  }]
-                }
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-    </View>
+        {/* Cerc middle */}
+        <Animated.View style={[styles.middleRing, {
+          transform: [{ rotate: spin2 }],
+          borderColor: ringColor,
+        }]} />
+
+        {/* Cerc interior */}
+        <Animated.View style={[styles.innerCircle, {
+          backgroundColor: innerColor,
+          borderColor: ringColor,
+          transform: [{ scale: pulseAnim }]
+        }]}>
+          <Animated.View style={[styles.coreCircle, {
+            backgroundColor: ringColor
+          }]} />
+        </Animated.View>
+
+        {/* Text */}
+        <Animated.Text style={[styles.text, { color: ringColor }]}>
+          Procesez...
+        </Animated.Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    marginVertical: 10,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'center',
-    marginRight: 8,
-    marginBottom: 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  avatarText: {
-    color: colors.text,
-    fontSize: 14,
-    fontFamily: 'Inter_700Bold',
-  },
-  content: {
-    gap: 6,
-  },
-  statusText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontFamily: 'Inter_500Medium',
-    marginLeft: 4,
-  },
-  bubble: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 18,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
     alignItems: 'center',
-    gap: 6,
-    minWidth: 60,
+    zIndex: 5000,
+  },
+  container: { alignItems: 'center', justifyContent: 'center' },
+  outerRing: {
+    position: 'absolute',
+    width: 200, height: 200, borderRadius: 100,
+    borderWidth: 2,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  middleRing: {
+    position: 'absolute',
+    width: 150, height: 150, borderRadius: 75,
+    borderWidth: 1.5,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  innerCircle: {
+    width: 100, height: 100, borderRadius: 50,
+    borderWidth: 2,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  bubbleWeb: {
-    borderColor: colors.accent + '33',
+  coreCircle: {
+    width: 30, height: 30, borderRadius: 15,
+    opacity: 0.8,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primaryLight,
+  text: {
+    marginTop: 120,
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 3,
   },
 });

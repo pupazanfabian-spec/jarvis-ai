@@ -9,10 +9,11 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BrainProvider } from "@/context/BrainContext";
@@ -20,6 +21,7 @@ import { LLMProvider } from "@/context/LLMContext";
 import { PinProvider } from "@/context/PinContext";
 import { AIProviderProvider } from "@/context/AIProviderContext";
 import { DevModeProvider } from "@/context/DevModeContext";
+import JarvisSplash from "@/components/JarvisSplash";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +36,9 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashChecked, setSplashLoaded] = useState(false);
+
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -42,12 +47,30 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    async function checkSplash() {
+      try {
+        const today = new Date().toDateString();
+        const lastSplash = await AsyncStorage.getItem('@jarvis_last_splash');
+        if (lastSplash !== today) {
+          setShowSplash(true);
+          await AsyncStorage.setItem('@jarvis_last_splash', today);
+        }
+      } catch (e) {
+        // Fallback
+      } finally {
+        setSplashLoaded(true);
+      }
+    }
+    checkSplash();
+  }, []);
+
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && splashChecked) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, splashChecked]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if ((!fontsLoaded && !fontError) || !splashChecked) return null;
 
   return (
     <SafeAreaProvider>
@@ -61,6 +84,9 @@ export default function RootLayout() {
                     <PinProvider>
                       <BrainProvider>
                         <RootLayoutNav />
+                        {showSplash && (
+                          <JarvisSplash onFinish={() => setShowSplash(false)} />
+                        )}
                       </BrainProvider>
                     </PinProvider>
                   </DevModeProvider>

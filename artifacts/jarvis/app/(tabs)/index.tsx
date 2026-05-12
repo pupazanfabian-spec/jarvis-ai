@@ -128,6 +128,23 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
 
+  // ─── Header Color Cycle ────────────────────────────────────────────────────
+  const headerColorCycle = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(headerColorCycle, {
+        toValue: 4, duration: 12000,
+        easing: Easing.linear, useNativeDriver: false
+      })
+    ).start();
+  }, []);
+
+  const headerColor = headerColorCycle.interpolate({
+    inputRange: [0, 1, 2, 3, 4],
+    outputRange: ['#00d4ff', '#6366f1', '#ff0066', '#fbbf24', '#00d4ff']
+  });
+
   const scrollToBottom = useCallback((animated = true) => {
     if (messages.length > 0) {
       setTimeout(() => {
@@ -330,7 +347,7 @@ export default function ChatScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.statusDot} />
           <View>
-            <Text style={styles.headerTitle}>Jarvis</Text>
+            <Animated.Text style={[styles.headerTitle, { color: headerColor }]}>J.A.R.V.I.S</Animated.Text>
             <Text style={styles.headerSub}>
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'
@@ -540,13 +557,7 @@ export default function ChatScreen() {
             windowSize={10}
             removeClippedSubviews={Platform.OS === 'android'}
             updateCellsBatchingPeriod={50}
-            ListFooterComponent={
-              webSearching
-                ? <ThinkingIndicator webSearch={true} />
-                : isThinking
-                  ? <ThinkingIndicator />
-                  : <View style={{ height: 10 }} />
-            }
+            ListFooterComponent={<View style={{ height: 10 }} />}
           />
         )}
 
@@ -598,6 +609,8 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <ThinkingIndicator visible={isThinking || webSearching} />
 
       {!hasPin && (
         <TouchableOpacity style={styles.pinTip} onPress={() => setPinMode('set')}>

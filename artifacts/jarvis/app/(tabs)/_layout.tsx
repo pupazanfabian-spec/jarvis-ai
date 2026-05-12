@@ -2,6 +2,7 @@
 import { Tabs } from "expo-router";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
+import JarvisIcon from "@/components/JarvisIcon";
 
 export default function TabLayout() {
   return (
@@ -20,8 +21,8 @@ export default function TabLayout() {
         name="index" 
         options={{ 
           title: "Chat",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
+          tabBarIcon: ({ focused, color, size }) => (
+            <JarvisIcon focused={focused} color={color} size={size} />
           ),
         }} 
       />
