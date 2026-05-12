@@ -621,7 +621,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           // Nu intrerupem flow-ul, doar adaugam nodul in background/paralel
         }
 
-        // ── Execuție Acțiuni Speciale (Memorie & Foldere & Code Studio) ──────────        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:') || response.startsWith('JARVIS_STUDIO_ACTION:')) {
+        // ── Execuție Acțiuni Speciale (Memorie & Foldere & Code Studio) ──────────
+        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:') || response.startsWith('JARVIS_STUDIO_ACTION:')) {
           const isMem = response.startsWith('JARVIS_MEM_ACTION:');
           const isFolder = response.startsWith('JARVIS_FOLDER_ACTION:');
           const isStudio = response.startsWith('JARVIS_STUDIO_ACTION:');
@@ -810,8 +811,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         persist(next, brainRef.current).catch(() => {});
         return next;
       });
-    } catch (err) {
-      if (__DEV__) console.warn('[BrainContext] sendMessage failed:', err);
+    } catch (error) {
+      console.error('[Jarvis] Error:', error);
     } finally {
       setIsThinking(false);
       isProcessing.current = false;
