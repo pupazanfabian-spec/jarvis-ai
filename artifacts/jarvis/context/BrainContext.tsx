@@ -541,8 +541,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       // ─── Sub-Agent Auto-Delegation ──────────────────────────────
       if (!response) {
         try {
-          const subAgents = await getSubAgents();
-          const activeAgents = subAgents.filter(a => a.isActive);
+          const activeAgents = (await getSubAgents()).filter(a => a.isActive);
           
           if (activeAgents.length > 0) {
             const { matchSkillFromMessage } = await import('@/engine/code-studio/skills');
@@ -550,18 +549,17 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
             
             if (matchedSkill) {
               setLastProvider(`SubAgent: ${matchedSkill.agentName}`);
-              const subResponse = await callSubAgent(matchedSkill.agentId, text);
+              const agentResponse = await callSubAgent(matchedSkill.agentId, text);
               
-              if (subResponse) {
-                response = `🤖 [${matchedSkill.agentName}]: ${subResponse}`;
+              if (agentResponse) {
+                response = `🤖 [${matchedSkill.agentName}]: ${agentResponse}`;
                 // Salvează în memorie
-                writeMemoryEntry(`[SubAgent ${matchedSkill.agentName}] ${subResponse.slice(0, 200)}...`, 'brain', 'sub_agent_response' as any).catch(() => {});
+                writeMemoryEntry(`[SubAgent ${matchedSkill.agentName}] ${agentResponse.slice(0, 200)}...`, 'brain', 'sub_agent_response' as any).catch(() => {});
               }
             }
           }
         } catch (err) {
           if (__DEV__) console.warn('[BrainContext] Sub-agent delegation failed:', err);
-          // Fallback to normal Jarvis logic
         }
       }
 
