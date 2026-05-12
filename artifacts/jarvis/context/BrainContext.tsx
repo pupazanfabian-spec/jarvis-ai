@@ -603,8 +603,25 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         response = processMessage(text, brainRef.current, history);
         const intent = (brainRef.current as any).lastIntent || 'unknown';
 
-        // ── Execuție Acțiuni Speciale (Memorie & Foldere & Code Studio) ──────────
-        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:') || response.startsWith('JARVIS_STUDIO_ACTION:')) {
+        // --- Detectie automata pentru Code Studio (Skills/Agents) ---
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('adauga skill') || lowerText.includes('adauga agent') || lowerText.includes('code studio')) {
+          let type: studioManager.NodeType = 'Skill';
+          let title = 'New Node';
+
+          if (lowerText.includes('agent')) {
+            type = 'Agent';
+            title = 'New Agent';
+          } else if (lowerText.includes('tool')) {
+            type = 'Tool';
+            title = 'New Tool';
+          }
+
+          await studioManager.addNode(type, title);
+          // Nu intrerupem flow-ul, doar adaugam nodul in background/paralel
+        }
+
+        // ── Execuție Acțiuni Speciale (Memorie & Foldere & Code Studio) ──────────        if (response.startsWith('JARVIS_MEM_ACTION:') || response.startsWith('JARVIS_FOLDER_ACTION:') || response.startsWith('JARVIS_STUDIO_ACTION:')) {
           const isMem = response.startsWith('JARVIS_MEM_ACTION:');
           const isFolder = response.startsWith('JARVIS_FOLDER_ACTION:');
           const isStudio = response.startsWith('JARVIS_STUDIO_ACTION:');

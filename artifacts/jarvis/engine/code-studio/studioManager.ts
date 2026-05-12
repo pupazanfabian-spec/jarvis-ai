@@ -1,11 +1,14 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 
-const WORKSPACE_KEY = '@code_studio_workspace';
+const STORAGE_KEY = '@code_studio_workspace';
+
+export type NodeType = 'Agent' | 'Skill' | 'Tool' | 'Output';
 
 export interface Node {
   id: string;
-  type: 'Agent' | 'Skill' | 'Tool' | 'Output';
+  type: NodeType;
   title: string;
   x: number;
   y: number;
@@ -22,9 +25,9 @@ export interface Workspace {
   connections: Connection[];
 }
 
-export const getWorkspace = async (): Promise<Workspace> => {
+export async function getWorkspace(): Promise<Workspace> {
   try {
-    const saved = await AsyncStorage.getItem(WORKSPACE_KEY);
+    const saved = await AsyncStorage.getItem(STORAGE_KEY);
     if (saved) {
       return JSON.parse(saved);
     }
@@ -32,74 +35,55 @@ export const getWorkspace = async (): Promise<Workspace> => {
     console.error('Failed to get workspace', e);
   }
   return { nodes: [], connections: [] };
-};
+}
 
-export const saveWorkspace = async (workspace: Workspace) => {
+export async function saveWorkspace(workspace: Workspace) {
   try {
-    await AsyncStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspace));
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
   } catch (e) {
     console.error('Failed to save workspace', e);
   }
-};
+}
 
-export const addNode = async (type: Node['type'], title: string, config: any = {}) => {
+export async function addNode(type: NodeType, title: string, config: any = {}): Promise<Node> {
   const workspace = await getWorkspace();
   
-  // Auto-config logic
-  const finalConfig = { ...config };
-  let finalTitle = title;
-
-  if (type === 'Skill') {
-    if (title.toLowerCase().includes('python')) {
-      finalConfig.prompt = "Esti expert Python. Scrii cod curat, cu type hints, docstrings, respectand PEP 8. Te axezi pe eficienta si lizibilitate.";
-      finalTitle = "Python Coding";
-    } else if (title.toLowerCase().includes('javascript') || title.toLowerCase().includes('js') || title.toLowerCase().includes('ts')) {
-      finalConfig.prompt = "Esti expert JS/TS. Folosesti ES6+, async/await, si design patterns moderne. Scrii cod modular si testabil.";
-      finalTitle = "JS/TS Expert";
-    } else if (title.toLowerCase().includes('react native')) {
-      finalConfig.prompt = "Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.";
-      finalTitle = "React Native UI";
-    } else if (title.toLowerCase().includes('data analysis')) {
-      finalConfig.prompt = "Analizezi date complexe, creezi vizualizari relevante si extragi insights actionabile din seturile de date.";
-      finalTitle = "Data Analyst";
-    } else if (title.toLowerCase().includes('web research')) {
-      finalConfig.prompt = "Cauti informatii online folosind surse multiple, verifici veridicitatea datelor si sintetizezi un raport clar.";
-      finalTitle = "Researcher";
-    }
-  }
-
-  if (type === 'Tool' && title.toLowerCase().includes('web')) {
-    finalConfig.engine = 'DuckDuckGo';
-    finalConfig.maxResults = 5;
-  }
-
-  if (type === 'Output') {
-    finalConfig.destination = 'Chat Display';
-  }
-
   const newNode: Node = {
     id: Math.random().toString(36).substr(2, 9),
     type,
-    title: finalTitle,
-    x: 100 + workspace.nodes.length * 50,
-    y: 100 + (workspace.nodes.length % 5) * 60,
-    config: finalConfig,
+    title: title || `${type} Node`,
+    x: 100 + workspace.nodes.length * 30,
+    y: 100 + (workspace.nodes.length % 5) * 80,
+    config,
   };
 
   workspace.nodes.push(newNode);
   await saveWorkspace(workspace);
   return newNode;
-};
+}
 
-export const updateNode = async (id: string, updates: Partial<Node>) => {
+export async function updateNode(id: string, config: any): Promise<void> {
   const workspace = await getWorkspace();
-  workspace.nodes = workspace.nodes.map(n => n.id === id ? { ...n, ...updates } : n);
+  workspace.nodes = workspace.nodes.map(n => n.id === id ? { ...n, config: { ...n.config, ...config } } : n);
   await saveWorkspace(workspace);
-};
+}
 
-export const runWorkflow = async () => {
-  // Aceasta functie va fi apelata de Jarvis pentru a declansa executia
-  // In UI, aceasta va reincarca probabil starea sau va notifica BrainContext
-  console.log('Workflow execution triggered by Jarvis');
-  return { success: true, message: 'Workflow-ul a fost pornit.' };
-};
+export async function deleteNode(id: string): Promise<void> {
+  const workspace = await getWorkspace();
+  workspace.nodes = workspace.nodes.filter(n => n.id !== id);
+  workspace.connections = workspace.connections.filter(c => c.fromId !== id && c.toId !== id);
+  await saveWorkspace(workspace);
+}
+
+export async function runWorkflow(): Promise<void> {
+  const workspace = await getWorkspace();
+  if (workspace.connections.length === 0) {
+    console.log('No connections to run.');
+    return;
+  }
+  
+  // Simple topological sort / sequence runner simulation
+  console.log('Running workflow sequence...');
+  // In a real scenario, we would parse connections and execute node logic
+  Alert.alert('Studio Manager', 'Fluxul de lucru a fost procesat de Jarvis.');
+}

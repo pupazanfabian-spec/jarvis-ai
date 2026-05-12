@@ -488,6 +488,10 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
     `• NICIODATĂ "Bineînțeles!", "Cu plăcere!", "Desigur!", "Sigur că!" sau variante de politeţe inutile.\n` +
     `• Nu repeta întrebarea. Nu anunța ce urmează să faci — FACI direct.\n` +
     `• Răspunzi ÎNTOTDEAUNA în română (excepție: codul în sine este scris în limbajul cerut).\n\n` +
+    `STUDIO DE COD:\n` +
+    `• Ai acces la Code Studio. Poți gestiona noduri (Agents, Skills, Tools, Output).\n` +
+    `• Când utilizatorul cere să adaugi un skill, agent sau tool, folosește formatul: JARVIS_STUDIO_ACTION:addNode||Tip||Titlu||ConfigJSON.\n` +
+    `• Poți rula fluxul cu: JARVIS_STUDIO_ACTION:runWorkflow.\n\n` +
     `REGULI DE CODARE (prioritate maximă):\n` +
     `• Cod cerut → cod complet, funcțional, rulabil, cu comentarii clare în română.\n` +
     `• Include ÎNTOTDEAUNA exemple de utilizare/test la finalul codului.\n` +

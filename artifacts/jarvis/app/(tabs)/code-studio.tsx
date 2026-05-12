@@ -12,7 +12,6 @@ import {
   Dimensions,
   SafeAreaView,
   PanResponder,
-  Animated,
 } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -268,10 +267,10 @@ export default function CodeStudio() {
               {renderConnections()}
             </Svg>
             {nodes.map((node) => (
-              <DraggableNode 
+              <NodeCard 
                 key={node.id} 
                 node={node} 
-                onUpdatePosition={(x, y) => updateNodePosition(node.id, x, y)}
+                updateNodePosition={updateNodePosition}
                 onFinalizePosition={finalizeNodePosition}
                 onPress={() => handleConnect(node.id)}
                 onLongPress={() => setEditingNode(node)}
@@ -398,9 +397,9 @@ export default function CodeStudio() {
   );
 }
 
-interface DraggableNodeProps {
+interface NodeCardProps {
   node: Node;
-  onUpdatePosition: (x: number, y: number) => void;
+  updateNodePosition: (id: string, x: number, y: number) => void;
   onFinalizePosition: () => void;
   onPress: () => void;
   onLongPress: () => void;
@@ -409,54 +408,68 @@ interface DraggableNodeProps {
   onDragEnd: () => void;
 }
 
-function DraggableNode({ node, onUpdatePosition, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: DraggableNodeProps) {
-  const pan = useRef(new Animated.ValueXY({ x: node.x, y: node.y })).current;
-
-  // Sincronizare pozitie cand se incarca din extern
+function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: NodeCardProps) {
+  const nodeRef = useRef(node);
   useEffect(() => {
-    pan.setValue({ x: node.x, y: node.y });
-  }, [node.x, node.y]);
+    nodeRef.current = node;
+  }, [node]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+      },
       onPanResponderGrant: () => {
         onDragStart();
-        pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value
-        });
-        pan.setValue({ x: 0, y: 0 });
       },
-      onPanResponderMove: (evt, gestureState) => {
-        const newX = (pan.x as any)._offset + gestureState.dx;
-        const newY = (pan.y as any)._offset + gestureState.dy;
-        onUpdatePosition(newX, newY);
-        return Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false })(evt, gestureState);
+      onPanResponderMove: (_, gestureState) => {
+        const newX = nodeRef.current.x + gestureState.dx;
+        const newY = nodeRef.current.y + gestureState.dy;
+        updateNodePosition(nodeRef.current.id, newX, newY);
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: async (_, gestureState) => {
         onDragEnd();
-        pan.flattenOffset();
+        const finalX = nodeRef.current.x + gestureState.dx;
+        const finalY = nodeRef.current.y + gestureState.dy;
+        
+        // Sync final position to parent and then save
+        updateNodePosition(nodeRef.current.id, finalX, finalY);
+        
+        // Get current workspace and save
+        try {
+          const saved = await AsyncStorage.getItem('@code_studio_workspace');
+          if (saved) {
+            const workspace = JSON.parse(saved);
+            workspace.nodes = workspace.nodes.map((n: any) => 
+              n.id === nodeRef.current.id ? { ...n, x: finalX, y: finalY } : n
+            );
+            await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify(workspace));
+          }
+        } catch (e) {
+          console.error('Failed to save position on release', e);
+        }
+        
         onFinalizePosition();
+      },
+      onPanResponderTerminate: () => {
+        onDragEnd();
       },
     })
   ).current;
 
   return (
-    <Animated.View
+    <View
       style={[
         styles.node,
         {
-          transform: [
-            { translateX: pan.x },
-            { translateY: pan.y }
-          ],
+          position: 'absolute',
+          left: node.x,
+          top: node.y,
           borderLeftColor: CATEGORY_COLORS[node.type],
           borderColor: isSelected ? '#ffffff' : '#334155',
           borderWidth: isSelected ? 2 : 1,
-          position: 'absolute',
-          left: 0,
-          top: 0,
+          zIndex: isSelected ? 10 : 1,
         },
       ]}
       {...panResponder.panHandlers}
@@ -474,7 +487,7 @@ function DraggableNode({ node, onUpdatePosition, onFinalizePosition, onPress, on
         <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
         <Text style={styles.nodeSubtitle}>{node.type}</Text>
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }
 
