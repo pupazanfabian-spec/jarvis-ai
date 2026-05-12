@@ -145,14 +145,18 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
   const startTime = Date.now();
   const agents = await getSubAgents();
   const agent = agents.find(a => a.id === agentId);
-  if (!agent) throw new Error('Agent not found');
+  if (!agent) {
+      return {
+          agentId, agentName: 'Unknown', skill: '', response: 'Agent negăsit.',
+          durationMs: 0, success: false
+      };
+  }
 
   // Build specialized prompt
   let specializedPrompt = agent.systemPrompt;
   let usedSkill = 'General';
   
-  if (agent.skills.length > 0) {
-      // Concat all skills prompts if no specific detection logic here
+  if (agent.skills && agent.skills.length > 0) {
       const skills = await Promise.all(agent.skills.map(sid => getSkillById(sid)));
       const prompts = skills.filter(s => !!s).map(s => s!.systemPrompt);
       if (prompts.length > 0) {
@@ -162,10 +166,20 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
   }
 
   // Get API key
-  const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
-  if (!apiKey) throw new Error(`Missing API Key for ${agent.agentProvider}`);
+  const apiKey = (agent.apiKey && agent.apiKey.trim()) 
+    ? agent.apiKey.trim()
+    : await getKeyForProvider(agent.agentProvider);
+
+  if (!apiKey) {
+      console.error(`[Agent] No API key for ${agent.agentProvider}`);
+      return {
+          agentId: agent.id, agentName: agent.name, skill: usedSkill,
+          response: `Eroare: Cheia API lipsește pentru ${agent.agentProvider}.`,
+          durationMs: 0, success: false
+      };
+  }
   
-  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${agent.apiKey ? 'custom key' : 'global key'})`);
+  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${agent.apiKey ? 'custom' : 'global'} key)`);
 
   let url = '';
   let model = '';
@@ -205,10 +219,12 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
         throw new Error(errorMsg);
     }
 
-    const resultText = data.choices[0]?.message?.content || 'Fără răspuns.';
+    const resultText = data.choices?.[0]?.message?.content;
+    if (!resultText || resultText.trim().length === 0) {
+        throw new Error('Răspuns gol de la API.');
+    }
 
     // Update agent stats and last used
-    const success = true;
     const newStats = {
         totalCalls: (agent.stats.totalCalls || 0) + 1,
         successCalls: (agent.stats.successCalls || 0) + 1,
@@ -219,46 +235,29 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
 
     // Save log
     await saveAgentLog({
-      agentId: agent.id,
-      agentName: agent.name,
-      timestamp: Date.now(),
-      input: message,
-      output: resultText,
-      skill: usedSkill,
-      durationMs: duration,
-      success: true
+      agentId: agent.id, agentName: agent.name, timestamp: Date.now(),
+      input: message, output: resultText, skill: usedSkill,
+      durationMs: duration, success: true
     });
 
     return {
-      agentId: agent.id,
-      agentName: agent.name,
-      skill: usedSkill,
-      response: resultText,
-      durationMs: duration,
-      success: true
+      agentId: agent.id, agentName: agent.name, skill: usedSkill,
+      response: resultText, durationMs: duration, success: true
     };
 
   } catch (e: any) {
     const duration = Date.now() - startTime;
+    console.error(`[Agent] ${agent.name} failed:`, e.message);
     await saveAgentLog({
-        agentId: agent.id,
-        agentName: agent.name,
-        timestamp: Date.now(),
-        input: message,
-        output: '',
-        skill: usedSkill,
-        durationMs: duration,
-        success: false,
-        error: e.message
+        agentId: agent.id, agentName: agent.name, timestamp: Date.now(),
+        input: message, output: '', skill: usedSkill,
+        durationMs: duration, success: false, error: e.message
       });
       
       return {
-        agentId: agent.id,
-        agentName: agent.name,
-        skill: usedSkill,
-        response: `Eroare: ${e.message}`,
-        durationMs: duration,
-        success: false
+        agentId: agent.id, agentName: agent.name, skill: usedSkill,
+        response: `Eroare agent: ${e.message}`,
+        durationMs: duration, success: false
       };
   }
 }

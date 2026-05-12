@@ -21,20 +21,32 @@ export class JarvisOrchestrator {
   }> {
     const allSkills = await getAllSkills();
     const skill = detectSkill(message, allSkills);
+    const wordCount = message.trim().split(/\s+/).length;
     
-    const wordCount = message.split(/\s+/).length;
-    let complexity: 'simple' | 'medium' | 'complex' = 'simple';
+    // Simple ONLY if greeting/short question AND conversation skill
+    const isSimpleGreeting = wordCount <= 4 && skill.id === 'conversatie';
     
-    // logic refinement: more sensitive
-    if (wordCount > 5 || skill.category !== 'conversatie') {
-        complexity = 'medium';
+    // Complex if contains action words
+    const complexKeywords = [
+        'planifica', 'creeaza', 'creaza', 'scrie', 'cauta', 
+        'cerceteaza', 'verifica', 'debug', 'script', 'cod', 'program',
+        'research', 'analizeaza', 'explica in detaliu', 'implementeaza',
+        'workflow', 'organizeaza', 'arhitectura'
+    ];
+    const hasComplexKeyword = complexKeywords.some(kw => 
+      message.toLowerCase().includes(kw));
+    
+    let complexity: 'simple' | 'medium' | 'complex';
+    if (isSimpleGreeting) {
+      complexity = 'simple';
+    } else if (hasComplexKeyword || skill.id !== 'conversatie') {
+      complexity = hasComplexKeyword ? 'complex' : 'medium';
+    } else {
+      complexity = wordCount > 8 ? 'medium' : 'simple';
     }
     
-    const complexKeywords = ['planifica', 'creeaza', 'scrie cod', 'cauta', 'workflow', 'organizeaza', 'analiza'];
-    if (skill.tools.length > 0 || complexKeywords.some(k => message.toLowerCase().includes(k))) {
-        complexity = 'complex';
-    }
-
+    console.log(`[Orchestrator] Msg: "${message.substring(0,30)}..." Skill: ${skill.id} Complexity: ${complexity}`);
+    
     return {
       skill,
       needsAgent: complexity !== 'simple',
@@ -44,17 +56,25 @@ export class JarvisOrchestrator {
   }
 
   async findBestAgent(skillId: string): Promise<SubAgent | null> {
-    const agents = await getSubAgents();
-    const activeAgents = (agents || []).filter(a => a.isActive);
-    
-    if (activeAgents.length === 0) return null;
-
-    // 1. Try perfect skill match
-    const withSkill = activeAgents.filter(a => a.skills.includes(skillId));
-    if (withSkill.length > 0) return withSkill[0];
-
-    // 2. Fallback: Return highest priority active agent
-    return activeAgents[0]; 
+    try {
+      const agents = await getSubAgents();
+      const active = (agents || []).filter(a => a.isActive);
+      if (active.length === 0) return null;
+      
+      // 1. Perfect skill match
+      const withExactSkill = active.filter(a => 
+        (a.skills || []).includes(skillId));
+      if (withExactSkill.length > 0) {
+        return withExactSkill.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+      }
+      
+      // 2. Fallback: best available active agent
+      console.log(`[Orchestrator] No agent for skill ${skillId}, using best available`);
+      return active.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+    } catch(e) {
+      console.error('[Orchestrator] findBestAgent error:', e);
+      return null;
+    }
   }
 
   async autoCreateAgent(skill: Skill): Promise<SubAgent> {
@@ -73,44 +93,56 @@ export class JarvisOrchestrator {
   async route(message: string): Promise<RouteResult> {
     try {
       const intent = await this.analyzeIntent(message);
-      console.log(`[Orchestrator] Intent: ${intent.skill.name}, Complexity: ${intent.complexity}`);
-
-      if (intent.complexity === 'simple' && intent.skill.id === 'conversatie') {
-          return {
-              response: '', 
-              agentUsed: null,
-              skillUsed: 'conversatie',
-              wasAutoCreated: false,
-              success: true
-          };
+      
+      if (intent.complexity === 'simple') {
+        return {
+          response: '',
+          agentUsed: null,
+          skillUsed: intent.skill.id,
+          wasAutoCreated: false,
+          success: true
+        };
       }
-
+      
       let agent = await this.findBestAgent(intent.skill.id);
       let wasAutoCreated = false;
-
+      
       if (!agent) {
-          agent = await this.autoCreateAgent(intent.skill);
-          wasAutoCreated = true;
+        console.log('[Orchestrator] No agent found, auto-creating...');
+        agent = await this.autoCreateAgent(intent.skill);
+        wasAutoCreated = true;
       }
-
-      const result: AgentResult = await callSubAgent(agent.id, message);
-
+      
+      console.log(`[Orchestrator] Routing to agent: ${agent.name}`);
+      const result = await callSubAgent(agent.id, message);
+      
+      if (!result.success || !result.response || result.response.trim().length === 0) {
+        console.log('[Orchestrator] Agent failed or returned empty, fallback required');
+        return {
+          response: '',
+          agentUsed: null,
+          skillUsed: intent.skill.id,
+          wasAutoCreated: false,
+          success: false
+        };
+      }
+      
       return {
         response: result.response,
         agentUsed: agent.name,
         skillUsed: intent.skill.name,
         wasAutoCreated,
-        success: result.success
+        success: true
       };
-    } catch (e: any) {
-        console.error('[Orchestrator] Route error:', e);
-        return {
-            response: `Eroare orchestrator: ${e.message}`,
-            agentUsed: null,
-            skillUsed: 'error',
-            wasAutoCreated: false,
-            success: false
-        };
+    } catch(e: any) {
+      console.error('[Orchestrator] route error:', e);
+      return {
+        response: '',
+        agentUsed: null,
+        skillUsed: 'error',
+        wasAutoCreated: false,
+        success: false
+      };
     }
   }
 }

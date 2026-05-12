@@ -360,18 +360,37 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Orchestrator Routing
-      const intent = await orchestrator.analyzeIntent(text);
-      if (intent.complexity !== 'simple') {
+      try {
+        const intent = await orchestrator.analyzeIntent(text);
+        console.log(`[Brain] Intent complexity: ${intent.complexity}, skill: ${intent.skill.id}`);
+        
+        if (intent.complexity !== 'simple') {
           const result = await orchestrator.route(text);
-          if (result.success) {
-              const prefix = result.agentUsed ? `[Agent: ${result.agentUsed}] ` : '';
-              const content = (result.wasAutoCreated ? `💡 *Am creat automat agentul ${result.agentUsed} pentru această sarcină.*\n\n` : '') + result.response;
-              const m: Message = { id: Date.now().toString(), role: 'assistant', content: prefix + content, timestamp: new Date() };
-              const nextMsgs = [...messages, userMsg, m];
-              setMessages(nextMsgs); 
-              persist(nextMsgs, brainRef.current);
-              setIsThinking(false); isProcessing.current = false; return;
+          console.log(`[Brain] Orchestrator result success: ${result.success}, agent: ${result.agentUsed}, response length: ${result.response?.length}`);
+          
+          if (result.success && result.response && result.response.trim().length > 0) {
+            let content = result.response;
+            if (result.wasAutoCreated) {
+              content = `💡 *Am creat automat agentul **${result.agentUsed}** pentru această sarcină.*\n\n${content}`;
+            }
+            const agentBadge = result.agentUsed ? `🤖 **[${result.agentUsed}]**\n\n` : '';
+            const finalMsg: Message = {
+              id: Date.now().toString(),
+              role: 'assistant',
+              content: agentBadge + content,
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, finalMsg]);
+            persist([...messages, userMsg, finalMsg], brainRef.current);
+            setLastProvider(result.agentUsed || 'Agent');
+            setIsThinking(false);
+            isProcessing.current = false;
+            return;
           }
+          console.log('[Brain] Agent failed or empty, falling back to normal flow.');
+        }
+      } catch(orchErr) {
+        console.error('[Brain] Orchestrator exception:', orchErr);
       }
 
       // 3. Normal Flow

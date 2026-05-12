@@ -71,7 +71,7 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
     const ax1 = x2 - sz * Math.cos(angle - Math.PI / 6), ay1 = y2 - sz * Math.sin(angle - Math.PI / 6);
     const ax2 = x2 - sz * Math.cos(angle + Math.PI / 6), ay2 = y2 - sz * Math.sin(angle + Math.PI / 6);
     return (
-      <React.Fragment key={`c-${index}`}>
+      <React.Fragment key={`conn-${conn.fromId}-${conn.toId}-${index}`}>
         <Path d={path} stroke={`url(#g-${index})`} strokeWidth="3" fill="none" opacity={0.8} />
         <Polygon points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} fill={CATEGORY_COLORS[from.type] || '#6366f1'} />
         <Circle cx={midX} cy={midY} r="12" fill="#1e293b" stroke="#ef4444" strokeWidth="1" />
@@ -173,8 +173,19 @@ export default function CodeStudio() {
           ]);
           if (!isActive) return;
           
-          setSubAgents(sa || []);
-          setAllSkills(sk || []);
+          // Deduplicate subAgents
+          const uniqueSA = (() => {
+              const seen = new Set();
+              return (sa || []).filter(a => a && (seen.has(a.id) ? false : seen.add(a.id)));
+          })();
+          setSubAgents(uniqueSA);
+          
+          // Deduplicate skills
+          const uniqueSK = (() => {
+              const seen = new Set();
+              return (sk || []).filter(s => s && (seen.has(s.id) ? false : seen.add(s.id)));
+          })();
+          setAllSkills(uniqueSK);
           
           if (saved) {
             const parsed = JSON.parse(saved);
@@ -182,26 +193,30 @@ export default function CodeStudio() {
             const savedConns = parsed.connections || [];
             
             const existingNodeIds = new Set(savedNodes.map((n: Node) => n.id || (n.config?.agentId)));
-            const missingAgentNodes = (sa || [])
+            const missingAgentNodes = (uniqueSA || [])
               .filter(agent => !existingNodeIds.has(agent.id))
               .map((agent, i) => ({
                 id: agent.id,
                 type: 'Agent' as NodeType,
                 title: agent.name,
                 x: 100 + ((savedNodes.length + i) % 3) * 220,
-                y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
+                y: 150 + Math.floor((savedNodes.length + i) / 3) * 150,
                 config: { agentId: agent.id }
               }));
             
             const allNodes = [...savedNodes, ...missingAgentNodes];
-            setNodes(allNodes);
+            const finalNodes = (() => {
+                const seen = new Set();
+                return allNodes.filter(n => n && (seen.has(n.id) ? false : seen.add(n.id)));
+            })();
+            setNodes(finalNodes);
             setConnections(savedConns);
             
             if (missingAgentNodes.length > 0) {
-              await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: allNodes, connections: savedConns }));
+              await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: finalNodes, connections: savedConns }));
             }
-          } else if (sa && sa.length > 0) {
-            const autoNodes = sa.map((agent, i) => ({
+          } else if (uniqueSA && uniqueSA.length > 0) {
+            const autoNodes = uniqueSA.map((agent, i) => ({
               id: agent.id, type: 'Agent' as NodeType, title: agent.name,
               x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
             }));
@@ -225,7 +240,7 @@ export default function CodeStudio() {
 
   const memoizedGrid = useMemo(() => {
     const dots = []; const step = 100;
-    for (let x = 0; x < CANVAS_SIZE; x += step) for (let y = 0; y < CANVAS_SIZE; y += step) dots.push(<Circle key={`d-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
+    for (let x = 0; x < CANVAS_SIZE; x += step) for (let y = 0; y < CANVAS_SIZE; y += step) dots.push(<Circle key={`grid-dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
     return dots;
   }, []);
 
@@ -289,13 +304,13 @@ export default function CodeStudio() {
           <Defs>{connections.map((c, i) => {
             const f = nodes.find(n => n.id === c.fromId), t = nodes.find(n => n.id === c.toId);
             if (!f || !t) return null;
-            return <LinearGradient key={`g-${i}`} id={`g-${i}`} x1="0%" y1="0%" x2="100%" y2="0%"><Stop offset="0%" stopColor={CATEGORY_COLORS[f.type]} /><Stop offset="100%" stopColor={CATEGORY_COLORS[t.type]} /></LinearGradient>
+            return <LinearGradient key={`grad-def-${i}`} id={`g-${i}`} x1="0%" y1="0%" x2="100%" y2="0%"><Stop offset="0%" stopColor={CATEGORY_COLORS[f.type]} /><Stop offset="100%" stopColor={CATEGORY_COLORS[t.type]} /></LinearGradient>
           })}</Defs>
           {memoizedGrid}
           <ConnectionLines connections={connections} nodes={nodes} deleteConnection={(c: any) => { const u = connections.filter(x => x !== c); setConnections(u); saveWS(nodes, u); }} />
         </Svg>
-        {nodes.map(n => (
-          <DraggableNode key={n.id} node={n} onFinalizePosition={(id: string, x: number, y: number) => { const u = nodes.map(nx => nx.id === id ? { ...nx, x, y } : nx); setNodes(u); saveWS(u, connections); }}
+        {nodes.map((n, idx) => (
+          <DraggableNode key={`node-${n.id}-${idx}`} node={n} onFinalizePosition={(id: string, x: number, y: number) => { const u = nodes.map(nx => nx.id === id ? { ...nx, x, y } : nx); setNodes(u); saveWS(u, connections); }}
             onPress={() => { setConnectingFromId(n.id); setIsConnectionModalVisible(true); }}
             onRun={() => {
                 if (n.type === 'Agent') {
@@ -353,9 +368,11 @@ export default function CodeStudio() {
               <Text style={styles.dashboardTitle}>Agenți ({subAgents.length})</Text>
               <TouchableOpacity onPress={() => setIsAddModalVisible(true)}><Text style={styles.logsLink}>+ Adaugă Node</Text></TouchableOpacity>
           </View>
-          <FlatList data={subAgents} keyExtractor={item => item.id} renderItem={({ item }) => (
+          <FlatList data={subAgents} keyExtractor={(item, index) => `agent-${item.id}-${index}`} renderItem={({ item }) => (
             <View style={styles.agentCard}>
-              <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(initWorkspace)} /></View>
+              <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(reload => {
+                  getSubAgents().then(setSubAgents);
+              })} /></View>
               <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority} • {item.skills?.length || 0} skills</Text>
               <View style={styles.agentCardActions}>
                   <TouchableOpacity style={styles.actionBtn} onPress={() => { setSandboxAgent(item); setIsSandboxVisible(true); }}><Text style={styles.actionBtnText}>Test</Text></TouchableOpacity>
@@ -373,8 +390,8 @@ export default function CodeStudio() {
       <Modal visible={isAddModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Adaugă Node în Workspace</Text>
-            <View style={styles.nodeTypeGrid}>{['Agent', 'Skill', 'Tool', 'Output'].map(t => (
-              <TouchableOpacity key={t} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[t] }]} onPress={() => { const id = Math.random().toString(36).substr(2,9); const n = [...nodes, { id, type: t as any, title: `New ${t}`, x: 100, y: 100, config: {} }]; setNodes(n); saveWS(n, connections); setIsAddModalVisible(false); }}>
+            <View style={styles.nodeTypeGrid}>{['Agent', 'Skill', 'Tool', 'Output'].map((t, idx) => (
+              <TouchableOpacity key={`type-btn-${t}-${idx}`} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[t] }]} onPress={() => { const id = Math.random().toString(36).substr(2,9); const n = [...nodes, { id, type: t as any, title: `New ${t}`, x: 100, y: 100, config: {} }]; setNodes(n); saveWS(n, connections); setIsAddModalVisible(false); }}>
                 <Ionicons name={CATEGORY_ICONS[t] as any} size={24} color={CATEGORY_COLORS[t]} /><Text style={styles.typeBtnText}>{t}</Text>
               </TouchableOpacity>
             ))}</View>
@@ -385,7 +402,7 @@ export default function CodeStudio() {
       <Modal visible={isConnectionModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Conectează la...</Text>
-            <FlatList data={nodes.filter(n => n.id !== connectingFromId && !connections.some(c => c.fromId === connectingFromId && c.toId === n.id))} keyExtractor={item => item.id} renderItem={({ item }) => (
+            <FlatList data={nodes.filter(n => n.id !== connectingFromId && !connections.some(c => c.fromId === connectingFromId && c.toId === n.id))} keyExtractor={(item, index) => `conn-target-${item.id}-${index}`} renderItem={({ item }) => (
               <TouchableOpacity style={styles.connectionItem} onPress={() => { if (!connectingFromId) return; const c = [...connections, { fromId: connectingFromId, toId: item.id }]; setConnections(c); saveWS(nodes, c); setConnectingFromId(null); setIsConnectionModalVisible(false); }}>
                 <Ionicons name={CATEGORY_ICONS[item.type] as any} size={20} color={CATEGORY_COLORS[item.type]} /><Text style={styles.connectionItemText}>{item.title}</Text>
               </TouchableOpacity>
@@ -401,7 +418,7 @@ export default function CodeStudio() {
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume Agent</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={t => setNewAgentConfig({...newAgentConfig, name: t})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={t => setNewAgentConfig({...newAgentConfig, description: t})} multiline /></View>}
             {wizardStep === 2 && <View style={styles.wizardBody}>
                 <Text style={styles.inputLabel}>AI Provider</Text>
-                <View style={styles.row}>{['groq', 'openrouter'].map(p => (<TouchableOpacity key={p} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View>
+                <View style={styles.row}>{['groq', 'openrouter'].map((p, idx) => (<TouchableOpacity key={`prov-tab-${p}-${idx}`} style={[styles.providerTab, newAgentConfig.agentProvider === p && styles.providerTabActive]} onPress={() => setNewAgentConfig({...newAgentConfig, agentProvider: p as any})}><Text style={styles.providerTabText}>{p.toUpperCase()}</Text></TouchableOpacity>))}</View>
                 <Text style={styles.inputLabel}>API Key (optional - lasă gol pentru cheia globală)</Text>
                 <View style={styles.row}>
                     <TextInput style={[styles.input, { flex: 1, marginRight: 8 }]} value={newAgentConfig.apiKey || ''} onChangeText={t => setNewAgentConfig({...newAgentConfig, apiKey: t})} placeholder="sk-... (optional)" placeholderTextColor="#475569" secureTextEntry={!showApiKey} />
@@ -414,16 +431,16 @@ export default function CodeStudio() {
                     Alert.alert(ok ? '✅ Cheie validă!' : '❌ Cheie invalidă');
                 }}><Text style={styles.validateKeyBtnText}>Validează Cheia</Text></TouchableOpacity>
             </View>}
-            {wizardStep === 3 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Selectează Skills</Text><ScrollView style={{ height: 400 }}>{allSkills.map(s => {
+            {wizardStep === 3 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Selectează Skills</Text><ScrollView style={{ height: 400 }}>{allSkills.map((s, idx) => {
                 const isSel = newAgentConfig.skills?.includes(s.id);
-                return <TouchableOpacity key={s.id} style={[styles.selectableItem, isSel && styles.selectedItem]} onPress={() => { const sk = newAgentConfig.skills || []; setNewAgentConfig({...newAgentConfig, skills: isSel ? sk.filter(x=>x!==s.id) : [...sk, s.id]}); }}>
+                return <TouchableOpacity key={`wizard-skill-${s.id}-${idx}`} style={[styles.selectableItem, isSel && styles.selectedItem]} onPress={() => { const sk = newAgentConfig.skills || []; setNewAgentConfig({...newAgentConfig, skills: isSel ? sk.filter(x=>x!==s.id) : [...sk, s.id]}); }}>
                   <View style={styles.row}><Text style={styles.selectableText}>{s.name}</Text><Ionicons name={isSel ? "checkbox" : "square-outline"} size={20} color={isSel ? "#10b981" : "#475569"} /></View>
                   <Text style={styles.selectableSub}>{s.category}</Text>
                 </TouchableOpacity>
             })}</ScrollView></View>}
-            {wizardStep === 4 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Unelte active (Tools)</Text>{['webSearch', 'memory', 'codeRunner'].map(t => (
-                <View key={t} style={styles.toolRow}><Text style={styles.toolText}>{t}</Text><Switch value={newAgentConfig.tools?.includes(t)} onValueChange={v => { const ts = newAgentConfig.tools || []; setNewAgentConfig({...newAgentConfig, tools: v ? [...ts, t] : ts.filter(x=>x!==t)}); }} /></View>
-            ))}<Text style={styles.inputLabel}>Prioritate Execuție: {newAgentConfig.priority}</Text><View style={styles.row}>{[1,3,5,8,10].map(p => (<TouchableOpacity key={p} style={[styles.priorityBtn, newAgentConfig.priority === p && styles.priorityBtnActive]} onPress={() => setNewAgentConfig({...newAgentConfig, priority: p})}><Text style={styles.priorityBtnText}>{p}</Text></TouchableOpacity>))}</View></View>}
+            {wizardStep === 4 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Unelte active (Tools)</Text>{['webSearch', 'memory', 'codeRunner'].map((t, idx) => (
+                <View key={`tool-row-${t}-${idx}`} style={styles.toolRow}><Text style={styles.toolText}>{t}</Text><Switch value={newAgentConfig.tools?.includes(t)} onValueChange={v => { const ts = newAgentConfig.tools || []; setNewAgentConfig({...newAgentConfig, tools: v ? [...ts, t] : ts.filter(x=>x!==t)}); }} /></View>
+            ))}<Text style={styles.inputLabel}>Prioritate Execuție: {newAgentConfig.priority}</Text><View style={styles.row}>{[1,3,5,8,10].map((p, idx) => (<TouchableOpacity key={`prio-btn-${p}-${idx}`} style={[styles.priorityBtn, newAgentConfig.priority === p && styles.priorityBtnActive]} onPress={() => setNewAgentConfig({...newAgentConfig, priority: p})}><Text style={styles.priorityBtnText}>{p}</Text></TouchableOpacity>))}</View></View>}
             {wizardStep === 5 && <View style={styles.wizardBody}><View style={styles.row}><Text style={styles.inputLabel}>Personalitate (System Prompt)</Text><TouchableOpacity onPress={autoGeneratePrompt}><Text style={styles.autoGenLink}>Generate from Skills</Text></TouchableOpacity></View><TextInput style={[styles.input, { height: 250 }]} value={newAgentConfig.systemPrompt} onChangeText={t => setNewAgentConfig({...newAgentConfig, systemPrompt: t})} multiline placeholder="Instrucțiuni pentru acest agent..." placeholderTextColor="#475569" /><TouchableOpacity style={styles.finalizeBtn} onPress={handleCreateAgent}><Text style={styles.finalizeBtnText}>Finalizează & Salvează Agent</Text></TouchableOpacity></View>}
             <View style={styles.wizardFooter}><TouchableOpacity onPress={() => wizardStep > 1 && setWizardStep(wizardStep - 1)} disabled={wizardStep === 1}><Text style={styles.wizardBtnText}>Înapoi</Text></TouchableOpacity><TouchableOpacity onPress={() => setIsWizardVisible(false)}><Text style={styles.closeWizardText}>Anulează</Text></TouchableOpacity>{wizardStep < 5 && <TouchableOpacity onPress={() => setWizardStep(wizardStep + 1)}><Text style={styles.wizardBtnText}>Înainte</Text></TouchableOpacity>}</View>
           </View>
@@ -434,8 +451,8 @@ export default function CodeStudio() {
         <Text style={styles.modalTitle}>Configurare Skill</Text>
         <TextInput style={styles.input} placeholder="Nume Skill" value={editingSkill.name} onChangeText={t => setEditingSkill({...editingSkill, name: t})} placeholderTextColor="#475569" />
         <Text style={styles.inputLabel}>Categorie</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{SKILL_CATEGORIES.map(c => (
-            <TouchableOpacity key={c} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{SKILL_CATEGORIES.map((c, idx) => (
+            <TouchableOpacity key={`cat-chip-${c}-${idx}`} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
         ))}</ScrollView>
         <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
         <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
@@ -448,8 +465,8 @@ export default function CodeStudio() {
         <Text style={styles.modalTitle}>Configurare Tool</Text>
         <TextInput style={styles.input} placeholder="Titlu Tool" value={editingNode?.title} onChangeText={t => updateNode(editingNode!.id, { title: t })} />
         <Text style={styles.inputLabel}>Tip Tool</Text>
-        <View style={styles.nodeTypeGrid}>{TOOL_TYPES.map(t => (
-            <TouchableOpacity key={t} style={[styles.catChip, editingNode?.config?.toolType === t && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, toolType: t } })}><Text style={styles.catChipText}>{t}</Text></TouchableOpacity>
+        <View style={styles.nodeTypeGrid}>{TOOL_TYPES.map((t, idx) => (
+            <TouchableOpacity key={`tool-cat-${t}-${idx}`} style={[styles.catChip, editingNode?.config?.toolType === t && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, toolType: t } })}><Text style={styles.catChipText}>{t}</Text></TouchableOpacity>
         ))}</View>
         <TouchableOpacity style={styles.finalizeBtn} onPress={() => setIsToolEditorVisible(false)}><Text style={styles.finalizeBtnText}>Gata</Text></TouchableOpacity>
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsToolEditorVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
@@ -459,8 +476,8 @@ export default function CodeStudio() {
         <Text style={styles.modalTitle}>Configurare Output</Text>
         <TextInput style={styles.input} placeholder="Titlu Output" value={editingNode?.title} onChangeText={t => updateNode(editingNode!.id, { title: t })} />
         <Text style={styles.inputLabel}>Format</Text>
-        <View style={styles.nodeTypeGrid}>{OUTPUT_FORMATS.map(f => (
-            <TouchableOpacity key={f} style={[styles.catChip, editingNode?.config?.format === f && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, format: f } })}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
+        <View style={styles.nodeTypeGrid}>{OUTPUT_FORMATS.map((f, idx) => (
+            <TouchableOpacity key={`out-fmt-${f}-${idx}`} style={[styles.catChip, editingNode?.config?.format === f && styles.catChipActive, { marginBottom: 8 }]} onPress={() => updateNode(editingNode!.id, { config: { ...editingNode?.config, format: f } })}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
         ))}</View>
         <TouchableOpacity style={styles.finalizeBtn} onPress={() => setIsOutputEditorVisible(false)}><Text style={styles.finalizeBtnText}>Gata</Text></TouchableOpacity>
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsOutputEditorVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
@@ -474,10 +491,10 @@ export default function CodeStudio() {
 
       <Modal visible={isLogsVisible} transparent animationType="fade"><View style={styles.modalOverlay}><View style={styles.modalContent}>
         <View style={styles.row}><Text style={styles.modalTitle}>Activitate Agenți</Text><TouchableOpacity onPress={async () => { await clearAgentLogs(); setAgentLogs([]); }}><Text style={styles.clearLogs}>Golește</Text></TouchableOpacity></View>
-        <View style={[styles.row, { marginBottom: 10 }]}>{['all', 'success', 'failed'].map(f => (
-            <TouchableOpacity key={f} style={[styles.catChip, logFilter === f && styles.catChipActive]} onPress={() => setLogFilter(f as any)}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
+        <View style={[styles.row, { marginBottom: 10 }]}>{['all', 'success', 'failed'].map((f, idx) => (
+            <TouchableOpacity key={`log-filt-${f}-${idx}`} style={[styles.catChip, logFilter === f && styles.catChipActive]} onPress={() => setLogFilter(f as any)}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
         ))}</View>
-        <FlatList style={{ maxHeight: 500 }} data={filteredLogs} keyExtractor={(item, index) => index.toString()} renderItem={({ item }) => (
+        <FlatList style={{ maxHeight: 500 }} data={filteredLogs} keyExtractor={(item, index) => `log-${item.agentId}-${item.timestamp}-${index}`} renderItem={({ item }) => (
           <View style={styles.logItem}><View style={styles.row}><Text style={styles.logTime}>{new Date(item.timestamp).toLocaleTimeString()}</Text><Text style={[styles.logStatus, { color: item.success ? '#10b981' : '#ef4444' }]}>{item.success ? 'OK' : 'FAIL'}</Text></View><Text style={styles.agentCardName}>{item.agentName}</Text><Text style={styles.logText} numberOfLines={2}>MSG: {item.input}</Text><Text style={styles.logTime}>Durată: {item.durationMs}ms</Text></View>
         )} ListEmptyComponent={<Text style={styles.emptyText}>Niciun log disponibil.</Text>} />
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogsVisible(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
