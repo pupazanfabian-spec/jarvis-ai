@@ -202,6 +202,38 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     return response;
   }, [dbReady, llmGenerate, llmStatus]);
 
+  const clearConversation = useCallback(() => {
+    setMessages([WELCOME]);
+    isProcessing.current = false;
+    setIsThinking(false);
+    persist([WELCOME], brainRef.current);
+  }, [persist]);
+
+  const addDocument = useCallback(async (name: string, content: string) => {
+    setIsThinking(true);
+    await new Promise(r => setTimeout(r, 50));
+    const response = processDocument(name, content, brainRef.current);
+    setBrainState({ ...brainRef.current });
+    const aiMsg: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: response,
+      timestamp: new Date(),
+    };
+    setMessages(prev => {
+      const next = [...prev, aiMsg];
+      persist(next, brainRef.current);
+      return next;
+    });
+    setIsThinking(false);
+  }, [persist]);
+
+  const removeDocument = useCallback((id: string) => {
+    brainRef.current.learnedDocuments = (brainRef.current.learnedDocuments || []).filter(d => d.id !== id);
+    setBrainState({ ...brainRef.current });
+    persist(messages, brainRef.current);
+  }, [messages, persist]);
+
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
     isProcessing.current = true; setIsThinking(true);
