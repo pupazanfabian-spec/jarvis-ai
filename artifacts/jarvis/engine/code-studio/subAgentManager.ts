@@ -127,9 +127,11 @@ export async function callSubAgent(agentId: string, message: string): Promise<st
   const agent = await getSubAgentById(agentId);
   if (!agent) throw new Error('Agent not found');
 
-  // Build system prompt from skills
-  const skillPrompts = agent.skills.map(s => getSkillPrompt(s)).join('\n\n');
-  const fullSystemPrompt = (agent.systemPrompt || 'Esti un asistent AI specializat.') + '\n\n' + skillPrompts;
+  // Build system prompt from skills - FIX: getSkillPrompt is async
+  const skillPrompts = await Promise.all(agent.skills.map(s => getSkillPrompt(s)));
+  const joinedSkillPrompts = skillPrompts.filter(p => !!p).join('\n\n');
+  const basePrompt = agent.systemPrompt || 'Esti un asistent AI specializat.';
+  const fullSystemPrompt = `${basePrompt}\n\n### SKILLS & SPECIALIZARI:\n${joinedSkillPrompts}`;
 
   // Get API key
   const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);

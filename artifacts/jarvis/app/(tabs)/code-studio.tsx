@@ -44,7 +44,7 @@ import { useAIProvider } from '@/context/AIProviderContext';
 import { useBrain } from '@/context/BrainContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CANVAS_SIZE = 2000;
+const CANVAS_SIZE = 5000; // Increased for better exploration
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 120;
 
@@ -115,7 +115,7 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
         />
         <Polygon 
           points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} 
-          fill={CATEGORY_COLORS[fromNode.type]} 
+          fill={CATEGORY_COLORS[fromNode.type as NodeType]} 
           opacity={1} 
         />
         <Circle 
@@ -190,7 +190,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
 
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#334155', isActive ? '#10b981' : CATEGORY_COLORS[node.type]]
+    outputRange: ['#334155', isActive ? '#10b981' : CATEGORY_COLORS[node.type as NodeType]]
   });
 
   return (
@@ -201,7 +201,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
           position: 'absolute', 
           left: pan.x, 
           top: pan.y, 
-          borderLeftColor: CATEGORY_COLORS[node.type], 
+          borderLeftColor: CATEGORY_COLORS[node.type as NodeType], 
           borderColor: (isSelected || isActive) ? borderColor : '#334155', 
           borderWidth: (isSelected || isActive) ? 2 : 1 
         }
@@ -209,7 +209,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
       {...panResponder.panHandlers}
     >
       <View style={styles.nodeHeader}>
-        <Ionicons name={CATEGORY_ICONS[node.type] as any} size={20} color={CATEGORY_COLORS[node.type]} />
+        <Ionicons name={CATEGORY_ICONS[node.type as NodeType] as any} size={20} color={CATEGORY_COLORS[node.type as NodeType]} />
         <View style={styles.nodeActions}>
           <TouchableOpacity onPress={onRun} style={styles.nodeMiniBtn}><Ionicons name="play" size={12} color="#fff" /></TouchableOpacity>
           <TouchableOpacity onPress={onConfig} style={styles.nodeMiniBtn}><Ionicons name="settings" size={12} color="#fff" /></TouchableOpacity>
@@ -244,6 +244,27 @@ export default function CodeStudio() {
   const [isDragging, setIsDragging] = useState(false);
   const { settings } = useAIProvider();
   const { sendMessage } = useBrain();
+
+  // Canvas Panning State
+  const canvasPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+
+  const canvasPanResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: (evt) => {
+        // Only start panning if we are NOT touching a node
+        return !isDragging;
+    },
+    onMoveShouldSetPanResponder: (_, gs) => {
+        return !isDragging && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2);
+    },
+    onPanResponderGrant: () => {
+        canvasPan.setOffset({ x: (canvasPan.x as any)._value, y: (canvasPan.y as any)._value });
+        canvasPan.setValue({ x: 0, y: 0 });
+    },
+    onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: canvasPan.y }], { useNativeDriver: false }),
+    onPanResponderRelease: () => {
+        canvasPan.flattenOffset();
+    },
+  })).current;
 
   // Save Debounce
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -370,75 +391,77 @@ export default function CodeStudio() {
   }, [connections, nodes, debouncedSave]);
 
   const renderCanvas = () => (
-    <View style={styles.canvasContainer}>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        scrollEnabled={!isDragging} 
-        contentContainerStyle={{ height: CANVAS_SIZE * scale, width: CANVAS_SIZE * scale }}
+    <View style={styles.canvasContainer} {...canvasPanResponder.panHandlers}>
+      <Animated.View 
+        style={[
+            styles.canvas, 
+            { 
+                width: CANVAS_SIZE, 
+                height: CANVAS_SIZE,
+                transform: [
+                    { scale },
+                    { translateX: canvasPan.x },
+                    { translateY: canvasPan.y },
+                    { perspective: 1000 }
+                ],
+                transformOrigin: ['0%', '0%', 0]
+            }
+        ]}
       >
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
-          scrollEnabled={!isDragging} 
-          contentContainerStyle={{ width: CANVAS_SIZE * scale, height: CANVAS_SIZE * scale }}
-        >
-          <View style={[styles.canvas, { transform: [{ scale }], transformOrigin: ['0%', '0%', 0], width: CANVAS_SIZE, height: CANVAS_SIZE }]}>
-            <Svg style={StyleSheet.absoluteFill}>
-              <Defs>
-                {connections.map((conn, i) => {
-                  const fromNode = nodes.find(n => n.id === conn.fromId);
-                  const toNode = nodes.find(n => n.id === conn.toId);
-                  if (!fromNode || !toNode) return null;
-                  return (
-                    <LinearGradient key={`grad-${i}`} id={`grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                      <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type]} />
-                      <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type]} />
-                    </LinearGradient>
-                  );
-                })}
-              </Defs>
-              {renderGrid()}
-              <ConnectionLines connections={connections} nodes={nodes} deleteConnection={handleDeleteConnection} />
-            </Svg>
-            {nodes.map((node) => (
-              <DraggableNode 
-                key={node.id} node={node} onFinalizePosition={finalizeNodePosition}
-                onPress={() => { setConnectingFromId(node.id); setIsConnectionModalVisible(true); }}
-                onConfig={() => {
-                  const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
-                  if (agent) { setNewAgentConfig(agent); setIsWizardVisible(true); setWizardStep(1); }
-                  else if (node.type === 'Skill') {
-                    const skill = allSkills.find(s => s.id === node.id || s.id === node.config?.skillId);
-                    if (skill) { setEditingSkill(skill); setIsSkillEditorVisible(true); }
-                    else setEditingNode(node);
-                  } else setEditingNode(node);
+        <Svg style={StyleSheet.absoluteFill}>
+          <Defs>
+            {connections.map((conn, i) => {
+              const fromNode = nodes.find(n => n.id === conn.fromId);
+              const toNode = nodes.find(n => n.id === conn.toId);
+              if (!fromNode || !toNode) return null;
+              return (
+                <LinearGradient key={`grad-${i}`} id={`grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                  <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type as NodeType]} />
+                  <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type as NodeType]} />
+                </LinearGradient>
+              );
+            })}
+          </Defs>
+          {renderGrid()}
+          <ConnectionLines connections={connections} nodes={nodes} deleteConnection={handleDeleteConnection} />
+        </Svg>
+        {nodes.map((node) => (
+          <DraggableNode 
+            key={node.id} node={node} onFinalizePosition={finalizeNodePosition}
+            onPress={() => { setConnectingFromId(node.id); setIsConnectionModalVisible(true); }}
+            onConfig={() => {
+              const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
+              if (agent) { setNewAgentConfig(agent); setIsWizardVisible(true); setWizardStep(1); }
+              else if (node.type === 'Skill') {
+                const skill = allSkills.find(s => s.id === node.id || s.id === node.config?.skillId);
+                if (skill) { setEditingSkill(skill); setIsSkillEditorVisible(true); }
+                else setEditingNode(node);
+              } else setEditingNode(node);
+            }}
+            onRun={() => {
+              const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
+              if (agent) { setSandboxAgent(agent); setIsSandboxVisible(true); }
+            }}
+            onDelete={() => {
+              Alert.alert('Sterge', 'Sigur vrei sa stergi acest nod?', [
+                { text: 'Anuleaza' },
+                { text: 'Sterge', onPress: () => {
+                  const updatedNodes = nodes.filter(n => n.id !== node.id);
+                  const updatedConnections = connections.filter(c => c.fromId !== node.id && c.toId !== node.id);
+                  setNodes(updatedNodes);
+                  setConnections(updatedConnections);
+                  debouncedSave(updatedNodes, updatedConnections);
                 }}
-                onRun={() => {
-                  const agent = subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId);
-                  if (agent) { setSandboxAgent(agent); setIsSandboxVisible(true); }
-                }}
-                onDelete={() => {
-                  Alert.alert('Sterge', 'Sigur vrei sa stergi acest nod?', [
-                    { text: 'Anuleaza' },
-                    { text: 'Sterge', onPress: () => {
-                      const updatedNodes = nodes.filter(n => n.id !== node.id);
-                      const updatedConnections = connections.filter(c => c.fromId !== node.id && c.toId !== node.id);
-                      setNodes(updatedNodes);
-                      setConnections(updatedConnections);
-                      debouncedSave(updatedNodes, updatedConnections);
-                    }}
-                  ]);
-                }}
-                isSelected={connectingFromId === node.id}
-                onDragStart={() => setIsDragging(true)}
-                onDragEnd={() => setIsDragging(false)}
-                isActive={subAgents.some(sa => sa.isActive && (sa.id === node.id || sa.id === node.config?.agentId))}
-                priority={subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId)?.priority}
-              />
-            ))}
-          </View>
-        </ScrollView>
-      </ScrollView>
+              ]);
+            }}
+            isSelected={connectingFromId === node.id}
+            onDragStart={() => setIsDragging(true)}
+            onDragEnd={() => setIsDragging(false)}
+            isActive={subAgents.some(sa => sa.isActive && (sa.id === node.id || sa.id === node.config?.agentId))}
+            priority={subAgents.find(sa => sa.id === node.id || sa.id === node.config?.agentId)?.priority}
+          />
+        ))}
+      </Animated.View>
 
       {/* Zoom Controls */}
       <View style={styles.zoomControls}>
@@ -500,8 +523,21 @@ export default function CodeStudio() {
             <Text style={styles.modalTitle}>Adaugă în Workspace</Text>
             <View style={styles.nodeTypeGrid}>
               {(['Agent', 'Skill', 'Tool', 'Output'] as NodeType[]).map(type => (
-                <TouchableOpacity key={type} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[type] }]} onPress={() => addNode(type)}>
-                  <Ionicons name={CATEGORY_ICONS[type] as any} size={24} color={CATEGORY_COLORS[type]} /><Text style={styles.typeBtnText}>{type}</Text>
+                <TouchableOpacity key={type} style={[styles.typeBtn, { borderLeftColor: CATEGORY_COLORS[type as NodeType] }]} onPress={() => {
+                    const newNode: Node = {
+                        id: Math.random().toString(36).substr(2, 9),
+                        type,
+                        title: `New ${type}`,
+                        x: 100,
+                        y: 200,
+                        config: {},
+                    };
+                    const updatedNodes = [...nodes, newNode];
+                    setNodes(updatedNodes);
+                    debouncedSave(updatedNodes, connections);
+                    setIsAddModalVisible(false);
+                }}>
+                  <Ionicons name={CATEGORY_ICONS[type as NodeType] as any} size={24} color={CATEGORY_COLORS[type as NodeType]} /><Text style={styles.typeBtnText}>{type}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -519,7 +555,7 @@ export default function CodeStudio() {
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.connectionItem} onPress={() => completeConnection(item.id)}>
-                   <Ionicons name={CATEGORY_ICONS[item.type] as any} size={20} color={CATEGORY_COLORS[item.type]} />
+                   <Ionicons name={CATEGORY_ICONS[item.type as NodeType] as any} size={20} color={CATEGORY_COLORS[item.type as NodeType]} />
                    <Text style={styles.connectionItemText}>{item.title}</Text>
                 </TouchableOpacity>
               )}
@@ -572,7 +608,7 @@ const styles = StyleSheet.create({
   tabBtnTextActive: { color: '#fff' },
   templatesBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6366f1', padding: 8, borderRadius: 8 },
   templatesBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  canvasContainer: { flex: 1, position: 'relative' },
+  canvasContainer: { flex: 1, position: 'relative', overflow: 'hidden' },
   canvas: { backgroundColor: '#0f172a' },
   node: { width: NODE_WIDTH, padding: 10, backgroundColor: '#1e293b', borderRadius: 10, borderLeftWidth: 4, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 8, elevation: 10 },
   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -588,7 +624,7 @@ const styles = StyleSheet.create({
   agentCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   agentCardName: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   agentCardMeta: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
-  zoomControls: { position: 'absolute', bottom: 90, left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 5, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5 },
+  zoomControls: { position: 'absolute', bottom: 90, left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 5, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5, zIndex: 1001 },
   zoomBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
   zoomLevel: { paddingHorizontal: 10 },
   zoomLevelText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
