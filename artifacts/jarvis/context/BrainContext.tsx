@@ -120,6 +120,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [wantsOnline, setWantsOnline] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const [lastProvider, setLastProvider] = useState('Groq');
+  const [activeSubAgent, setActiveSubAgent] = useState<SubAgent | null>(null);
   const brainRef = useRef<BrainState>(createInitialBrainState());
   const isProcessing = useRef(false);
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
@@ -486,30 +487,85 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const history = currentMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
 
       let response = '';
-
-      // ─── Sub-Agent Delegation Logic ──────────────────────────────────────────
-      const activeSubAgents = (await getSubAgents()).filter(a => a.isActive);
       const lowerText = text.toLowerCase();
-      
-      // Manual delegation detection (e.g. "intreaba-l pe Python Expert...")
-      let targetAgent: SubAgent | undefined;
-      for (const agent of activeSubAgents) {
-        if (lowerText.includes(agent.name.toLowerCase()) || lowerText.includes(`agent ${agent.name.toLowerCase()}`)) {
-          targetAgent = agent;
-          break;
+
+      // ─── Chat Commands for Studio ──────────────────────────────────────────
+      if (lowerText.startsWith('creeaza agent')) {
+        const m = text.match(/creeaza agent (.+) cu skill (.+)/i);
+        if (m) {
+          const name = m[1].trim();
+          const skillName = m[2].trim();
+          const { SKILLS } = await import('@/engine/code-studio/skills');
+          const skill = SKILLS.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()));
+          if (skill) {
+            const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
+            const sa = await createSubAgent({ name, skills: [skill.id] });
+            response = `Am creat agentul **${sa.name}** cu skill-ul **${skill.name}**. 🤖`;
+          } else {
+            response = `Nu am găsit skill-ul **${skillName}**. Folosește unul din skill-urile standard (ex: Python Master).`;
+          }
+        }
+      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii') {
+        const agents = await getSubAgents();
+        if (agents.length === 0) {
+          response = 'Nu ai creat niciun sub-agent încă. Mergi în Code Studio sau spune "creează agent...".';
+        } else {
+          response = '🤖 **Sub-Agenții tăi:**\n\n' + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'}`).join('\n');
+        }
+      } else if (lowerText.startsWith('activeaza agent') || lowerText.startsWith('dezactiveaza agent')) {
+        const isToggleOn = lowerText.startsWith('activeaza');
+        const name = text.replace(/activeaza agent |dezactiveaza agent /i, '').trim();
+        const agents = await getSubAgents();
+        const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+        if (agent) {
+          const { toggleSubAgent } = await import('@/engine/code-studio/subAgentManager');
+          await toggleSubAgent(agent.id, isToggleOn);
+          response = `Agentul **${agent.name}** a fost ${isToggleOn ? 'activat' : 'dezactivat'}. ✅`;
+        } else {
+          response = `Nu am găsit agentul cu numele **${name}**.`;
+        }
+      } else if (lowerText.startsWith('sterge agent')) {
+        const name = text.replace(/sterge agent /i, '').trim();
+        const agents = await getSubAgents();
+        const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+        if (agent) {
+          const { deleteSubAgent } = await import('@/engine/code-studio/subAgentManager');
+          await deleteSubAgent(agent.id);
+          response = `Agentul **${agent.name}** a fost șters. 🗑️`;
+        } else {
+          response = `Nu am găsit agentul cu numele **${name}**.`;
         }
       }
 
-      if (targetAgent) {
-        try {
-          const agentId = targetAgent.id;
-          const agentName = targetAgent.name;
-          setLastProvider(`SubAgent: ${agentName}`);
+      // ─── Sub-Agent Auto-Delegation by Trigger ──────────────────────────────
+      if (!response) {
+        const activeSubAgents = (await getSubAgents()).filter(a => a.isActive);
+        const matchedSkill = (await import('@/engine/code-studio/skills')).matchSkill(text);
+
+        if (matchedSkill && activeSubAgents.length > 0) {
+          let bestAgent = activeSubAgents.find(a => a.skills.includes(matchedSkill.id));
           
-          const agentResponse = await callSubAgent(agentId, text);
-          response = `[SubAgent: ${agentName}]\n\n${agentResponse}`;
-        } catch (err) {
-          if (__DEV__) console.warn(`[BrainContext] Delegation to ${targetAgent.name} failed:`, err);
+          // Manual override if agent name is mentioned
+          for (const agent of activeSubAgents) {
+            if (lowerText.includes(agent.name.toLowerCase())) {
+              bestAgent = agent;
+              break;
+            }
+          }
+
+          if (bestAgent) {
+            try {
+              setLastProvider(`SubAgent: ${bestAgent.name}`);
+              const agentResponse = await callSubAgent(bestAgent.id, text);
+              response = `🤖 [${bestAgent.name}]: ${agentResponse}`;
+              
+              // Share response to main memory
+              writeMemoryEntry(`[SubAgent ${bestAgent.name}] ${agentResponse.slice(0, 200)}...`, 'brain', 'sub_agent_response' as any).catch(() => {});
+            } catch (err: any) {
+              console.log('[SubAgent] Error during delegation:', err);
+              // Fallback to normal Jarvis logic
+            }
+          }
         }
       }
 

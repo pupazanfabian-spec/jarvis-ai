@@ -1,6 +1,5 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { callActiveProvider } from '@/engine/aiProviders';
 import { getKeyForProvider } from './keyManager';
 import { getSkillById } from './skills';
 
@@ -18,10 +17,15 @@ export interface SubAgent {
   isActive: boolean;
 }
 
+// In-memory cache for performance
+let cachedAgents: SubAgent[] | null = null;
+
 export async function getSubAgents(): Promise<SubAgent[]> {
+  if (cachedAgents) return cachedAgents;
   try {
     const saved = await AsyncStorage.getItem(SUB_AGENTS_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    cachedAgents = saved ? JSON.parse(saved) : [];
+    return cachedAgents || [];
   } catch {
     return [];
   }
@@ -34,7 +38,7 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
     name: config.name || 'New Sub-Agent',
     agentProvider: config.agentProvider || 'groq',
     apiKey: config.apiKey,
-    model: config.model,
+    model: config.model || (config.agentProvider === 'groq' ? 'llama3-70b-8192' : 'openai/gpt-3.5-turbo'),
     skills: config.skills || [],
     tools: config.tools || [],
     systemPrompt: config.systemPrompt || '',
@@ -43,6 +47,7 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
   
   const updated = [...agents, newAgent];
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
+  cachedAgents = updated;
   return newAgent;
 }
 
@@ -50,43 +55,103 @@ export async function deleteSubAgent(id: string) {
   const agents = await getSubAgents();
   const updated = agents.filter(a => a.id !== id);
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
-}
-
-export async function callSubAgent(agentId: string, message: string): Promise<string> {
-  const agents = await getSubAgents();
-  const agent = agents.find(a => a.id === agentId);
-  if (!agent) throw new Error('Agent not found');
-
-  // Build system prompt from skills
-  let fullSystemPrompt = agent.systemPrompt;
-  agent.skills.forEach(skillId => {
-    const skill = getSkillById(skillId);
-    if (skill) {
-      fullSystemPrompt += `\n\nExpertise in ${skill.name}:\n${skill.systemPrompt}`;
-    }
-  });
-
-  // Get API key
-  const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
-  
-  // Prepare settings for callActiveProvider
-  // We need to simulate the AIProviderSettings interface
-  const mockSettings: any = {
-    activeProvider: agent.agentProvider,
-    [`${agent.agentProvider}Key`]: apiKey,
-  };
-
-  try {
-    const result = await callActiveProvider(message, mockSettings, fullSystemPrompt);
-    return result ? result.text : 'No response from sub-agent';
-  } catch (e) {
-    console.error(`Error calling sub-agent ${agent.name}:`, e);
-    throw e;
-  }
+  cachedAgents = updated;
 }
 
 export async function toggleSubAgent(id: string, isActive: boolean) {
   const agents = await getSubAgents();
   const updated = agents.map(a => a.id === id ? { ...a, isActive } : a);
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
+  cachedAgents = updated;
+}
+
+/**
+ * Calls a sub-agent with real API fetch.
+ * Implements retries and timeout.
+ */
+export async function callSubAgent(agentId: string, message: string): Promise<string> {
+  const agents = await getSubAgents();
+  const agent = agents.find(a => a.id === agentId);
+  if (!agent) throw new Error('Agent not found');
+
+  // Build system prompt from skills
+  let fullSystemPrompt = agent.systemPrompt || 'Esti un asistent AI specializat.';
+  agent.skills.forEach(skillId => {
+    const skill = getSkillById(skillId);
+    if (skill) {
+      fullSystemPrompt += `\n\n[Expertise: ${skill.name}]\n${skill.systemPrompt}`;
+    }
+  });
+
+  // Get API key
+  const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
+  if (!apiKey) throw new Error(`API key missing for ${agent.agentProvider}`);
+  
+  const provider = agent.agentProvider;
+  let url = '';
+  let headers: any = { 'Content-Type': 'application/json' };
+
+  if (provider === 'groq') {
+    url = 'https://api.groq.com/openai/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  } else if (provider === 'openrouter') {
+    url = 'https://openrouter.ai/api/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['HTTP-Referer'] = 'https://jarvis-ai.app';
+    headers['X-Title'] = 'Jarvis AI';
+  } else {
+    throw new Error(`Provider ${provider} not yet fully implemented for direct sub-agent calls.`);
+  }
+
+  const body = {
+    model: agent.model,
+    messages: [
+      { role: 'system', content: fullSystemPrompt },
+      { role: 'user', content: message }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000,
+  };
+
+  const fetchWithRetry = async (retries = 1): Promise<Response> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      if (!response.ok && retries > 0) {
+        console.log(`[SubAgent] ${provider} failed with ${response.status}. Retrying...`);
+        return fetchWithRetry(retries - 1);
+      }
+      return response;
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (retries > 0) {
+        console.log(`[SubAgent] ${provider} error: ${err.message}. Retrying...`);
+        return fetchWithRetry(retries - 1);
+      }
+      throw err;
+    }
+  };
+
+  try {
+    const response = await fetchWithRetry();
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error?.message || `API Error ${response.status}`);
+    }
+
+    return data.choices[0]?.message?.content || 'Nu am primit un răspuns valid de la sub-agent.';
+  } catch (e: any) {
+    console.error(`[SubAgent] Error calling ${agent.name}:`, e);
+    throw e;
+  }
 }

@@ -21,6 +21,9 @@ import { SKILLS, Skill } from '@/engine/code-studio/skills';
 import { createSubAgent } from '@/engine/code-studio/subAgentManager';
 import { useAIProvider } from '@/context/AIProviderContext';
 
+import { useAIProvider } from '@/context/AIProviderContext';
+import { useBrain } from '@/context/BrainContext';
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CANVAS_SIZE = 2000;
 const NODE_WIDTH = 180;
@@ -56,6 +59,8 @@ const CATEGORY_ICONS = {
   Output: 'paper-plane-outline',
 } as const;
 
+import { SubAgent, getSubAgents, deleteSubAgent as deleteSA, toggleSubAgent } from '@/engine/code-studio/subAgentManager';
+
 export default function CodeStudio() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -63,7 +68,9 @@ export default function CodeStudio() {
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<NodeType | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [subAgents, setSubAgents] = useState<SubAgent[]>([]);
   const { settings } = useAIProvider();
+  const { sendMessage } = useBrain();
   
   // For Dragging feedback
   const [isDragging, setIsDragging] = useState(false);
@@ -73,6 +80,10 @@ export default function CodeStudio() {
     try {
       // Sync keys from context on init
       await keyManager.syncKeysFromContext(settings);
+      
+      // Load sub agents
+      const sa = await getSubAgents();
+      setSubAgents(sa);
 
       const saved = await AsyncStorage.getItem('@code_studio_workspace');
       if (saved) {
@@ -110,6 +121,11 @@ export default function CodeStudio() {
     } catch (e) {
       console.error('Failed to save workspace', e);
     }
+  };
+
+  const refreshSubAgents = async () => {
+    const sa = await getSubAgents();
+    setSubAgents(sa);
   };
 
   const addNode = (type?: NodeType) => {
@@ -225,7 +241,7 @@ export default function CodeStudio() {
       return;
     }
 
-    // Identify the chain: Agent -> Skill -> Tool -> Output
+    // Identify the chain: Agent -> Skill
     const agentNode = nodes.find(n => n.type === 'Agent');
     if (!agentNode) {
       Alert.alert('Eroare', 'Lipsește un nod de tip Agent.');
@@ -248,6 +264,7 @@ export default function CodeStudio() {
         systemPrompt: connectedSkills.map(s => s?.config.prompt).join('\n\n'),
       });
 
+      await refreshSubAgents();
       Alert.alert('Succes', `Sub-Agentul "${subAgent.name}" a fost salvat și este gata de utilizare în chat.`);
     } catch (e) {
       Alert.alert('Eroare', 'Nu s-a putut crea Sub-Agentul.');
@@ -355,11 +372,42 @@ export default function CodeStudio() {
                 isSelected={connectingFrom === node.id}
                 onDragStart={() => setIsDragging(true)}
                 onDragEnd={() => setIsDragging(false)}
+                isActive={subAgents.some(sa => sa.isActive && (sa.name === node.title || sa.id === node.id))}
               />
             ))}
           </View>
         </ScrollView>
       </ScrollView>
+
+      {/* Sub-Agent List */}
+      <View style={styles.saSection}>
+        <Text style={styles.saTitle}>Sub-Agenți Activi ({subAgents.filter(s => s.isActive).length})</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.saScroll}>
+          {subAgents.map(sa => (
+            <View key={sa.id} style={styles.saCard}>
+              <View style={styles.saCardHeader}>
+                <Ionicons name="robot-outline" size={18} color="#6366f1" />
+                <Text style={styles.saCardName} numberOfLines={1}>{sa.name}</Text>
+                <TouchableOpacity onPress={async () => { await deleteSA(sa.id); refreshSubAgents(); }}>
+                   <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.saCardBody}>
+                <Text style={styles.saCardMeta}>{sa.agentProvider.toUpperCase()} • {sa.skills.length} skills</Text>
+                <TouchableOpacity 
+                  style={[styles.saToggle, sa.isActive && styles.saToggleActive]}
+                  onPress={async () => { await toggleSubAgent(sa.id, !sa.isActive); refreshSubAgents(); }}
+                >
+                  <Text style={styles.saToggleText}>{sa.isActive ? 'Activ' : 'Inactiv'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+          {subAgents.length === 0 && (
+            <Text style={styles.emptySAText}>Nu ai creat niciun sub-agent încă.</Text>
+          )}
+        </ScrollView>
+      </View>
 
       <TouchableOpacity 
         style={styles.floatingAddButton} 
@@ -447,12 +495,17 @@ export default function CodeStudio() {
                     style={styles.saveKeyButton}
                     onPress={async () => {
                       if (editingNode.config.apiKey) {
-                        await keyManager.addKey(editingNode.config.provider, editingNode.config.apiKey);
-                        Alert.alert('Succes', `Cheia pentru ${editingNode.config.provider} a fost salvată.`);
+                        const isValid = await keyManager.validateKey(editingNode.config.provider, editingNode.config.apiKey);
+                        if (isValid) {
+                          await keyManager.addKey(editingNode.config.provider, editingNode.config.apiKey);
+                          Alert.alert('Valid', `Cheia pentru ${editingNode.config.provider} este VALIDĂ și a fost salvată.`);
+                        } else {
+                          Alert.alert('Invalid', `Cheia pentru ${editingNode.config.provider} este INVALIDĂ sau rețeaua e indisponibilă.`);
+                        }
                       }
                     }}
                   >
-                    <Text style={styles.saveKeyButtonText}>Salvează Cheia în Manager</Text>
+                    <Text style={styles.saveKeyButtonText}>Testează & Salvează Cheia</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -528,14 +581,15 @@ interface NodeCardProps {
   isSelected: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
+  isActive?: boolean;
 }
 
-function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: NodeCardProps) {
+function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd, isActive }: NodeCardProps) {
   const pan = useRef(new Animated.ValueXY({ x: node.x, y: node.y })).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (isSelected) {
+    if (isSelected || isActive) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
@@ -545,7 +599,7 @@ function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, 
     } else {
       glowAnim.setValue(0);
     }
-  }, [isSelected]);
+  }, [isSelected, isActive]);
 
   // Sync pan value if node prop changes (e.g. from init)
   useEffect(() => {
@@ -586,7 +640,7 @@ function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, 
 
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#334155', CATEGORY_COLORS[node.type]],
+    outputRange: ['#334155', isActive ? '#10b981' : CATEGORY_COLORS[node.type]],
   });
 
   return (
@@ -598,10 +652,10 @@ function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, 
           left: pan.x,
           top: pan.y,
           borderLeftColor: CATEGORY_COLORS[node.type],
-          borderColor: isSelected ? borderColor : '#334155',
-          borderWidth: isSelected ? 2 : 1,
+          borderColor: (isSelected || isActive) ? borderColor : '#334155',
+          borderWidth: (isSelected || isActive) ? 2 : 1,
           zIndex: isSelected ? 10 : 1,
-          shadowOpacity: isSelected ? 0.6 : 0.3,
+          shadowOpacity: (isSelected || isActive) ? 0.6 : 0.3,
           transform: [{ scale: isSelected ? 1.05 : 1 }],
         },
       ]}
@@ -615,7 +669,7 @@ function NodeCard({ node, onFinalizePosition, onPress, onLongPress, isSelected, 
       >
         <View style={styles.nodeHeader}>
           <Ionicons name={CATEGORY_ICONS[node.type] as any} size={28} color={CATEGORY_COLORS[node.type]} />
-          <View style={[styles.statusDot, { backgroundColor: node.config ? '#10b981' : '#94a3b8' }]} />
+          <View style={[styles.statusDot, { backgroundColor: isActive ? '#10b981' : '#94a3b8' }]} />
         </View>
         <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
         <Text style={styles.nodeSubtitle}>{node.type}</Text>
@@ -670,7 +724,7 @@ const styles = StyleSheet.create({
   },
   floatingAddButton: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 220,
     right: 20,
     width: 56,
     height: 56,
@@ -910,5 +964,73 @@ const styles = StyleSheet.create({
   },
   skillChipTextActive: {
     color: '#fff',
+  },
+  saSection: {
+    backgroundColor: '#111827',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  saTitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  saScroll: {
+    paddingHorizontal: 12,
+  },
+  saCard: {
+    backgroundColor: '#1e293b',
+    width: 150,
+    padding: 12,
+    borderRadius: 12,
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  saCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  saCardName: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+    marginHorizontal: 6,
+  },
+  saCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  saCardMeta: {
+    color: '#64748b',
+    fontSize: 10,
+  },
+  saToggle: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: '#0f172a',
+  },
+  saToggleActive: {
+    backgroundColor: '#10b981',
+  },
+  saToggleText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  emptySAText: {
+    color: '#475569',
+    fontSize: 12,
+    fontStyle: 'italic',
+    paddingHorizontal: 16,
   },
 });

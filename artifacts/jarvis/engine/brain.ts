@@ -408,7 +408,7 @@ type Intent =
   | 'definitie' | 'opinie' | 'gandire_profunda'
   | 'conversatie_anterioara' | 'entitate' | 'inferenta' | 'temporala'
   | 'securitate' | 'constitutie' | 'follow_up' | 'cine_sunt_eu'
-  | 'studio_add_key'
+  | 'studio_add_key' | 'studio_agent_list' | 'studio_agent_create' | 'studio_agent_toggle' | 'studio_agent_delete'
   | 'cmd_scriere' | 'cmd_traducere' | 'cmd_rezumat' | 'cmd_lista'
   | 'cmd_comparare' | 'cmd_plan' | 'cmd_creatie' | 'cmd_cod'
   | 'cmd_groq_direct'
@@ -435,6 +435,14 @@ const INTENT_PATTERNS: IntentPattern[] = [
   { intent: 'securitate', patterns: [/(raport securitate|securitatea mea|ai fost atacat|tentative de hack|evenimente securitate|cine a incercat|integritate sistem)/], weight: 10 },
   { intent: 'constitutie', patterns: [/(constitutia ta|regulile tale|ce reguli ai|principiile tale|codul tau de legi|care sunt legile tale|arata-mi constitutia)/], weight: 10 },
   { intent: 'studio_add_key', patterns: [/(adauga api key|salveaza cheia|cheie api pentru|adauga cheie|configureaza api key)/i], weight: 12 },
+  { intent: 'studio_agent_list', patterns: [/(listeaza agentii|ce agenti am|afiseaza agentii|vezi agentii)/i], weight: 11 },
+  { intent: 'studio_agent_create', patterns: [/(creeaza agent|adauga agent|nou agent|agent nou)/i], weight: 11 },
+  { intent: 'studio_agent_toggle', patterns: [/(activeaza agent|dezactiveaza agent|porneste agent|opreste agent)/i], weight: 11 },
+  { intent: 'studio_agent_delete', patterns: [/(sterge agent|elimina agent|distruge agent)/i], weight: 11 },
+  { intent: 'studio_agent_list', patterns: [/(listeaza agentii|ce agenti am|afiseaza agentii|vezi agentii)/i], weight: 11 },
+  { intent: 'studio_agent_create', patterns: [/(creeaza agent|adauga agent|nou agent|agent nou)/i], weight: 11 },
+  { intent: 'studio_agent_toggle', patterns: [/(activeaza agent|dezactiveaza agent|porneste agent|opreste agent)/i], weight: 11 },
+  { intent: 'studio_agent_delete', patterns: [/(sterge agent|elimina agent|distruge agent)/i], weight: 11 },
   { intent: 'creator_declare', patterns: [/(eu sunt creatorul|eu te-am creat|eu sunt cel care te-a creat|eu sunt stapanul|sunt creatorul tau|sunt programatorul tau|sunt cel care te-a facut)/], weight: 10 },
   { intent: 'creator_verify', patterns: [/(cine te-a creat|cine e creatorul|cine te-a facut|cine esti proprietarul|cine te controleaza|de cine asculti|stapanul tau)/], weight: 10 },
   { intent: 'cmd_groq_direct', patterns: [/(cauta|cautare|gaseste|ce este|cine este|ce stii despre)/i], weight: 11 },
