@@ -489,11 +489,68 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       let response = '';
       const lowerText = text.toLowerCase();
 
-      // ─── Chat Commands for Studio ──────────────────────────────────────────
-      if (lowerText === 'reseteaza studio' || lowerText === 'reset studio') {
-        await AsyncStorage.removeItem('@code_studio_workspace');
-        await AsyncStorage.removeItem('@jarvis_sub_agents');
-        response = "Am resetat Code Studio. Deschide Studio pentru a vedea. 🧼";
+      // ─── Chat Commands for Studio (Real Execution) ──────────────────────────
+      if (lowerText.includes('reseteaza studio') || lowerText.includes('reset studio') || lowerText.includes('sterge studio')) {
+        try {
+          await AsyncStorage.removeItem('@code_studio_workspace');
+          await AsyncStorage.removeItem('@jarvis_sub_agents');
+          await AsyncStorage.removeItem('@jarvis_agent_logs');
+          const resetMsg: Message = {
+            id: Date.now().toString(),
+            content: '✅ Code Studio a fost resetat complet. Deschide tab-ul Studio pentru a vedea. 🧼',
+            role: 'assistant',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, resetMsg]);
+          isProcessing.current = false;
+          setIsThinking(false);
+          return;
+        } catch (e) {
+          console.log('[Studio] Reset error:', e);
+        }
+      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii' || lowerText === 'listeaza agenti') {
+        const agentsRaw = await AsyncStorage.getItem('@jarvis_sub_agents');
+        const agents: SubAgent[] = agentsRaw ? JSON.parse(agentsRaw) : [];
+        if (agents.length === 0) {
+          response = 'Nu ai niciun agent creat în Code Studio. 🤖';
+        } else {
+          response = '🤖 **Sub-Agenții tăi (Real):**\n\n' + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'}`).join('\n');
+        }
+      } else if (lowerText.startsWith('sterge agent')) {
+        const name = text.replace(/sterge agent /i, '').trim().toLowerCase();
+        const agentsRaw = await AsyncStorage.getItem('@jarvis_sub_agents');
+        if (agentsRaw) {
+          let agents: SubAgent[] = JSON.parse(agentsRaw);
+          const initialCount = agents.length;
+          agents = agents.filter(a => a.name.toLowerCase() !== name);
+          if (agents.length < initialCount) {
+            await AsyncStorage.setItem('@jarvis_sub_agents', JSON.stringify(agents));
+            response = `Am șters agentul **${name}** (Real). 🗑️`;
+          } else {
+            response = `Nu am găsit agentul **${name}**.`;
+          }
+        }
+      } else if (lowerText.startsWith('activeaza agent') || lowerText.startsWith('dezactiveaza agent')) {
+        const isToggleOn = lowerText.startsWith('activeaza');
+        const name = text.replace(/activeaza agent |dezactiveaza agent /i, '').trim().toLowerCase();
+        const agentsRaw = await AsyncStorage.getItem('@jarvis_sub_agents');
+        if (agentsRaw) {
+          let agents: SubAgent[] = JSON.parse(agentsRaw);
+          let found = false;
+          agents = agents.map(a => {
+            if (a.name.toLowerCase() === name) {
+              found = true;
+              return { ...a, isActive: isToggleOn };
+            }
+            return a;
+          });
+          if (found) {
+            await AsyncStorage.setItem('@jarvis_sub_agents', JSON.stringify(agents));
+            response = `Agentul **${name}** a fost ${isToggleOn ? 'activat' : 'dezactivat'} (Real). ✅`;
+          } else {
+            response = `Nu am găsit agentul **${name}**.`;
+          }
+        }
       } else if (lowerText.startsWith('creeaza agent')) {
         const m = text.match(/creeaza agent (.+) cu skill (.+)/i) || text.match(/creeaza agent (.+)/i);
         if (m) {
@@ -511,36 +568,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
           const sa = await createSubAgent({ name, skills: skillIds });
           response = `Am creat agentul **${sa.name}**${skillIds.length > 0 ? ` cu skill-ul **${skillName}**` : ''}. 🤖`;
-        }
-      } else if (lowerText === 'listeaza agentii' || lowerText === 'ce agenti am' || lowerText === 'vezi agentii' || lowerText === 'listeaza agenti') {
-        const agents = await getSubAgents();
-        if (agents.length === 0) {
-          response = 'Nu ai creat niciun sub-agent încă. Mergi în Code Studio sau spune "creează agent...".';
-        } else {
-          response = '🤖 **Sub-Agenții tăi:**\n\n' + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'}`).join('\n');
-        }
-      } else if (lowerText.startsWith('activeaza agent') || lowerText.startsWith('dezactiveaza agent')) {
-        const isToggleOn = lowerText.startsWith('activeaza');
-        const name = text.replace(/activeaza agent |dezactiveaza agent /i, '').trim();
-        const agents = await getSubAgents();
-        const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
-        if (agent) {
-          const { toggleSubAgent } = await import('@/engine/code-studio/subAgentManager');
-          await toggleSubAgent(agent.id, isToggleOn);
-          response = `Agentul **${agent.name}** a fost ${isToggleOn ? 'activat' : 'dezactivat'}. ✅`;
-        } else {
-          response = `Nu am găsit agentul cu numele **${name}**.`;
-        }
-      } else if (lowerText.startsWith('sterge agent')) {
-        const name = text.replace(/sterge agent /i, '').trim();
-        const agents = await getSubAgents();
-        const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
-        if (agent) {
-          const { deleteSubAgent } = await import('@/engine/code-studio/subAgentManager');
-          await deleteSubAgent(agent.id);
-          response = `Agentul **${agent.name}** a fost șters. 🗑️`;
-        } else {
-          response = `Nu am găsit agentul cu numele **${name}**.`;
         }
       }
 
