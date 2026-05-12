@@ -56,6 +56,14 @@ export default function CodeStudio() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<NodeType | null>(null);
+  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAddModalVisible && selectedCategory) {
+      addNode();
+    }
+  }, [isAddModalVisible, selectedCategory]);
 
   // Initial Presets
   const initWorkspace = async () => {
@@ -98,11 +106,16 @@ export default function CodeStudio() {
     }
   };
 
-  const addNode = (type: NodeType) => {
+  const addNode = (type?: NodeType) => {
+    const nodeTypeToCreate = type || selectedCategory;
+    if (!nodeTypeToCreate) {
+      Alert.alert('Eroare', 'Nu s-a putut determina tipul nodului.');
+      return;
+    }
     const newNode: Node = {
       id: Math.random().toString(36).substr(2, 9),
-      type,
-      title: `${type} Node`,
+      type: nodeTypeToCreate,
+      title: `${nodeTypeToCreate} Node`,
       x: 100 + nodes.length * 20,
       y: 200 + (nodes.length % 5) * 50,
       config: {},
@@ -111,6 +124,7 @@ export default function CodeStudio() {
     setNodes(updatedNodes);
     saveWorkspace(updatedNodes, connections);
     setIsAddModalVisible(false);
+    setSelectedCategory(null); // Reset after adding
   };
 
   const deleteNode = (id: string) => {
@@ -135,6 +149,62 @@ export default function CodeStudio() {
     setNodes(updatedNodes);
     saveWorkspace(updatedNodes, connections);
     setEditingNode(null);
+  };
+
+  const handleConnect = (nodeId: string) => {
+    if (connectingFrom === null) {
+      // Start a new connection
+      setConnectingFrom(nodeId);
+    } else if (connectingFrom === nodeId) {
+      // Cancel connection if tapping the same node again
+      setConnectingFrom(null);
+    } else {
+      // Complete a connection
+      const newConnection: Connection = { fromId: connectingFrom, toId: nodeId };
+      const connectionExists = connections.some(
+        (conn) => (conn.fromId === newConnection.fromId && conn.toId === newConnection.toId) ||
+                  (conn.fromId === newConnection.toId && conn.toId === newConnection.fromId)
+      );
+      if (!connectionExists) {
+        const updatedConnections = [...connections, newConnection];
+        setConnections(updatedConnections);
+        saveWorkspace(nodes, updatedConnections);
+      }
+      setConnectingFrom(null);
+    }
+  };
+
+  const runWorkflow = () => {
+    if (connections.length === 0) {
+      Alert.alert('Info', 'Nu există conexiuni pentru a rula fluxul.');
+      return;
+    }
+
+    // Simple sequential execution for demonstration
+    // In a real scenario, you might want a more sophisticated execution order
+    connections.forEach((connection) => {
+      const fromNode = nodes.find((n) => n.id === connection.fromId);
+      const toNode = nodes.find((n) => n.id === connection.toId);
+
+      if (fromNode && toNode) {
+        // Construct message based on fromNode config
+        // This is a placeholder; the actual message structure will depend on your BrainContext API
+        const message = {
+          sender: fromNode.title, // Or fromNode.type
+          type: fromNode.type, // e.g., 'Agent', 'Skill'
+          payload: fromNode.config, // The configuration data
+          // You might want to include the target node info as well
+          // target: toNode.title,
+        };
+
+        // Assuming BrainContext is available and has a sendMessage function
+        // For now, we'll just log it as BrainContext is not directly available here
+        console.log('Sending message to BrainContext:', message);
+        // Example of how it might be called if BrainContext was imported and available:
+        // BrainContext.sendMessage(message);
+      }
+    });
+    Alert.alert('Flux Rulat', 'Fluxul de lucru a fost procesat (logat în consolă).');
   };
 
   const renderConnections = () => {
@@ -178,7 +248,7 @@ export default function CodeStudio() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎯 Jarvis Code Studio</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIcon}>
+          <TouchableOpacity style={styles.headerIcon} onPress={runWorkflow}>
             <Ionicons name="play-outline" size={20} color="#10b981" />
           </TouchableOpacity>
         </View>
@@ -187,12 +257,12 @@ export default function CodeStudio() {
       {/* Canvas */}
       <ScrollView
         horizontal
-        style={styles.canvasScroll}
-        contentContainerStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ height: CANVAS_SIZE }}
       >
         <ScrollView
-          style={styles.canvasScroll}
-          contentContainerStyle={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ width: CANVAS_SIZE }}
         >
           <View style={styles.canvas}>
             <Svg style={StyleSheet.absoluteFill}>
@@ -207,9 +277,11 @@ export default function CodeStudio() {
                     left: node.x,
                     top: node.y,
                     borderLeftColor: CATEGORY_COLORS[node.type],
+                    borderColor: connectingFrom === node.id ? '#ffffff' : '#334155', // Highlight if selected for connection
+                    borderWidth: connectingFrom === node.id ? 2 : 1,
                   },
                 ]}
-                onPress={() => setEditingNode(node)}
+                onPress={() => handleConnect(node.id)}
                 onLongPress={() => deleteNode(node.id)}
                 activeOpacity={0.7}
               >
@@ -228,17 +300,17 @@ export default function CodeStudio() {
       {/* Floating Add Button */}
       <TouchableOpacity 
         style={styles.floatingAddButton} 
-        onPress={() => setIsAddModalVisible(true)}
+        onPress={() => { setSelectedCategory(null); setIsAddModalVisible(true); }}
       >
         <Ionicons name="add" size={32} color="#fff" />
       </TouchableOpacity>
 
       {/* Bottom Toolbar */}
       <View style={styles.toolbar}>
-        <ToolbarItem icon="hardware-chip" label="Agents" color={CATEGORY_COLORS.Agent} />
-        <ToolbarItem icon="book" label="Skills" color={CATEGORY_COLORS.Skill} />
-        <ToolbarItem icon="hammer" label="Tools" color={CATEGORY_COLORS.Tool} />
-        <ToolbarItem icon="paper-plane" label="Output" color={CATEGORY_COLORS.Output} />
+        <ToolbarItem icon="hardware-chip" label="Agents" color={CATEGORY_COLORS.Agent} onPress={() => { setSelectedCategory('Agent'); setIsAddModalVisible(true); }} />
+        <ToolbarItem icon="book" label="Skills" color={CATEGORY_COLORS.Skill} onPress={() => { setSelectedCategory('Skill'); setIsAddModalVisible(true); }} />
+        <ToolbarItem icon="hammer" label="Tools" color={CATEGORY_COLORS.Tool} onPress={() => { setSelectedCategory('Tool'); setIsAddModalVisible(true); }} />
+        <ToolbarItem icon="paper-plane" label="Output" color={CATEGORY_COLORS.Output} onPress={() => { setSelectedCategory('Output'); setIsAddModalVisible(true); }} />
       </View>
 
       {/* Add Node Modal */}
@@ -343,14 +415,14 @@ export default function CodeStudio() {
   );
 }
 
-function ToolbarItem({ icon, label, color }: { icon: string; label: string; color: string }) {
+function ToolbarItem({ icon, label, color, onPress }: { icon: string; label: string; color: string; onPress: () => void }) {
   return (
-    <View style={styles.toolbarItem}>
+    <TouchableOpacity style={styles.toolbarItem} onPress={onPress}>
       <View style={[styles.toolbarIcon, { backgroundColor: color + '15' }]}>
         <Ionicons name={`${icon}-outline` as any} size={22} color={color} />
       </View>
       <Text style={styles.toolbarLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
