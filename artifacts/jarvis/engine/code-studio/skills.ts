@@ -1,155 +1,166 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CUSTOM_SKILLS_STORAGE_KEY = '@jarvis_custom_skills';
+const SKILLS_STORAGE_KEY = '@jarvis_skills_v2';
 
 export interface Skill {
   id: string;
   name: string;
-  category: 'Conversatie' | 'Scriptare' | 'Codare' | 'Cercetare' | 'Verificare' | 'Rulare' | string;
-  systemPrompt: string;
+  category: 'conversatie' | 'scriptare' | 'codare' | 'cercetare' | 'verificare' | 'rulare' | 'memorie' | 'orchestrare' | 'custom';
+  description: string;
   triggers: string[];
-  examples: string[];
+  systemPrompt: string;
+  provider: 'groq' | 'openrouter' | 'auto';
+  tools: string[];
 }
 
-export const PREDEFINED_SKILLS: Skill[] = [
+export const DEFAULT_SKILLS: Skill[] = [
   {
-    id: 'skill_conversatie',
-    name: 'Dialog Empatic & Clarificare',
-    category: 'Conversatie',
-    systemPrompt: `Esti un expert in comunicare interpersonala si inteligenta emotionala. 
-    Misiunea ta este sa porti un dialog natural, empatic si sa clarifici nevoile utilizatorului.
-    Asculta cu atentie, ofera raspunsuri calde si profesionale, si pune intrebari de follow-up atunci cand informatiile sunt ambigue.
-    Obiectivul tau este sa faci utilizatorul sa se simta inteles si sa ghidezi conversatia spre o solutie utila.`,
-    triggers: ['buna', 'salut', 'ce faci', 'ajutor', 'cum sa', 'cine esti', 'vorbeste', 'discuta', 'lamureste', 'explicatie'],
-    examples: ['Cum ma poti ajuta?', 'Sunt putin confuz despre...', 'Buna Jarvis, ce planuri avem azi?']
+    id: 'conversatie',
+    name: 'Conversație',
+    category: 'conversatie',
+    description: 'Dialog natural, empatie, clarificări și răspunsuri în limba română.',
+    triggers: ['vorbeste', 'explica', 'ce este', 'cum', 'de ce', 'ajuta', 'spune', 'salut', 'buna'],
+    systemPrompt: 'Ești un expert în comunicare și asistență personală. Răspunde empatic, clarifică nevoile utilizatorului și oferă explicații detaliate în limba română. Obiectivul tău este să fii util și prietenos.',
+    provider: 'auto',
+    tools: []
   },
   {
-    id: 'skill_scriptare',
-    name: 'Automation & Shell Scripting',
-    category: 'Scriptare',
-    systemPrompt: `Esti un maestru al automatizarii si al scriptarii in medii diverse: Bash (Linux), PowerShell (Windows), si Zsh.
-    Scrii scripturi sigure, eficiente si bine comentate pentru: manipulare de fisiere, deployment, backup, procesare de log-uri si automatizari de sistem.
-    Respecti bunele practici de securitate (eviti injectiile de comenzi) si asiguri portabilitatea unde este posibil.
-    Stii sa folosesti instrumente precum sed, awk, grep, si curl in profunzime.`,
-    triggers: ['script', 'bash', 'powershell', 'shell', 'sh', 'zsh', 'automatizare', 'cron', 'ps1', 'terminal', 'comenzi'],
-    examples: ['Scrie un script de backup in Bash', 'Cum fac un loop in PowerShell?', 'Script pentru redenumirea tuturor fisierelor .txt']
+    id: 'scriptare',
+    name: 'Scriptare & Automatizare',
+    category: 'scriptare',
+    description: 'Scriere de scripturi Bash, Shell, PowerShell și automatizări de sistem.',
+    triggers: ['script', 'bash', 'shell', 'automatizeaza', 'powershell', 'terminal', 'comenzi'],
+    systemPrompt: 'Ești un expert în DevOps și SysAdmin. Scrii scripturi sigure și eficiente pentru Bash și PowerShell. Automatizezi sarcini repetitive și explici pașii de execuție.',
+    provider: 'auto',
+    tools: []
   },
   {
-    id: 'skill_codare',
-    name: 'Full-Stack Development',
-    category: 'Codare',
-    systemPrompt: `Esti un expert senior in dezvoltare software (JS/TS, Python, React Native, HTML/CSS, SQL).
-    Scrii cod curat, modular si performant. Esti la curent cu ultimele standarde si design patterns.
-    Oferi solutii complete, de la arhitectura bazei de date pana la interfata utilizator.
-    Codul tau este intotdeauna documentat si include tratarea erorilor.`,
-    triggers: ['cod', 'programare', 'react', 'python', 'javascript', 'typescript', 'html', 'css', 'sql', 'backend', 'frontend', 'funcție', 'bug', 'refactorizare'],
-    examples: ['Creeaza o componenta React', 'Scrie un query SQL complex', 'Fixeaza acest bug in Python']
+    id: 'codare_js',
+    name: 'Codare JavaScript/TS',
+    category: 'codare',
+    description: 'Expertiză în JS, TS, React, React Native, Node.js și Expo.',
+    triggers: ['javascript', 'typescript', 'react', 'js', 'ts', 'node', 'expo'],
+    systemPrompt: 'Ești un Lead Frontend Engineer. Scrii cod modern (ES6+), modular și performant folosind React și React Native. Respecti bunele practici de arhitectură.',
+    provider: 'auto',
+    tools: ['codeRunner']
   },
   {
-    id: 'skill_cercetare',
-    name: 'Research & Web Synthesis',
-    category: 'Cercetare',
-    systemPrompt: `Esti un cercetator meticulos capabil sa sintetizeze informatii din surse multiple (web search, documentatii, baze de date).
-    Analizezi informatia, verifici sursele si oferi rezumate clare, obiective si structurate.
-    Esti expert in fact-checking si sinteza de date complexe.
-    Atunci cand faci research, prezinti atat perspectiva de ansamblu, cat si detaliile tehnice relevante.`,
-    triggers: ['cauta', 'research', 'afla', 'investigheaza', 'rezumat', 'analiza', 'sinteza', 'veridicitate', 'stiri', 'documentatie'],
-    examples: ['Cauta ultimele noutati despre React Native', 'Analizeaza acest document lung', 'Sintetizeaza diferentele intre Groq si OpenAI']
+    id: 'codare_python',
+    name: 'Codare Python',
+    category: 'codare',
+    description: 'Expertiză în Python, Django, Pandas, Numpy și scripting py.',
+    triggers: ['python', 'pip', 'django', 'pandas', 'numpy', 'py'],
+    systemPrompt: 'Ești un Python Architect. Scrii cod curat, eficient și Pythonic. Ești expert în procesarea datelor și backend development folosind framework-uri moderne.',
+    provider: 'auto',
+    tools: ['codeRunner']
   },
   {
-    id: 'skill_verificare',
-    name: 'Code Review & QA',
-    category: 'Verificare',
-    systemPrompt: `Esti un inginer QA si Code Reviewer riguros. 
-    Analizezi codul pentru a gasi bug-uri, vulnerabilitati de securitate, probleme de performanta si abateri de la stil.
-    Ofera sugestii constructive de imbunatatire si scrie teste unitare/integrare.
-    Misiunea ta este sa asiguri cel mai inalt nivel de calitate si stabilitate pentru orice output.`,
-    triggers: ['review', 'verifica', 'test', 'debugging', 'qa', 'validare', 'securitate', 'performanta', 'audit', 'lint'],
-    examples: ['Fa un code review la acest PR', 'Scrie teste unitare pentru functia asta', 'Gaseste vulnerabilitati in acest script']
+    id: 'codare_web',
+    name: 'Dezvoltare Web',
+    category: 'codare',
+    description: 'Expertiză în HTML, CSS, Responsive Design și UI/UX.',
+    triggers: ['html', 'css', 'web', 'responsive', 'design', 'flexbox', 'grid'],
+    systemPrompt: 'Ești un Senior Web Designer. Creezi interfețe web moderne, accesibile și complet responsive. Te concentrezi pe experiența utilizatorului și design vizual impecabil.',
+    provider: 'auto',
+    tools: []
   },
   {
-    id: 'skill_rulare',
-    name: 'Orchestration & Workflow',
-    category: 'Rulare',
-    systemPrompt: `Esti un orchestrator de sisteme si manager de workflow-uri.
-    Misiunea ta este sa executi comenzi, sa pornesti si sa monitorizezi fluxuri de lucru si sa coordonezi alti agenti.
-    Intelegi dependentele intr-un workflow complex si asiguri ordinea corecta de executie.
-    Gestionezi resursele si oferi status update-uri precise despre stadiul rularii.`,
-    triggers: ['executa', 'run', 'workflow', 'porneste', 'coordoneaza', 'start', 'status', 'orchestrare', 'flux'],
-    examples: ['Ruleaza acest workflow de deployment', 'Porneste secventa de testare', 'Coordoneaza agentii pentru sarcina X']
+    id: 'cercetare',
+    name: 'Cercetare & Analiză',
+    category: 'cercetare',
+    description: 'Căutare web, analiza informațiilor și sumarizare.',
+    triggers: ['cauta', 'cerceteaza', 'gaseste', 'informatii', 'stiri', 'despre'],
+    systemPrompt: 'Ești un Research Analyst. Folosești căutarea web pentru a găsi cele mai noi și relevante informații. Sintetizezi date complexe în rapoarte clare și obiective.',
+    provider: 'auto',
+    tools: ['webSearch']
+  },
+  {
+    id: 'verificare',
+    name: 'Verificare & Debugging',
+    category: 'verificare',
+    description: 'Code review, depanare, testare și validare output.',
+    triggers: ['verifica', 'debug', 'eroare', 'problema', 'fix', 'testeaza', 'review'],
+    systemPrompt: 'Ești un Senior QA Engineer. Analizezi codul și logica pentru a identifica bug-uri și vulnerabilități. Oferi soluții de remediere și scrii teste unitare.',
+    provider: 'auto',
+    tools: []
+  },
+  {
+    id: 'memorie',
+    name: 'Gestionare Memorie',
+    category: 'memorie',
+    description: 'Gestionare taskuri, reminder-uri, note și context personal.',
+    triggers: ['retine', 'aminteste', 'task', 'todo', 'nota', 'salveaza'],
+    systemPrompt: 'Ești un Memory Manager. Organizezi informațiile personale ale utilizatorului, taskurile și notele. Te asiguri că contextul este păstrat și ușor de regăsit.',
+    provider: 'auto',
+    tools: ['memory']
+  },
+  {
+    id: 'orchestrare',
+    name: 'Orchestrare Jarvis',
+    category: 'rulare',
+    description: 'Coordonare multi-agent și planificare workflow-uri complexe.',
+    triggers: ['planifica', 'organizeaza', 'coordoneaza', 'workflow', 'agenti'],
+    systemPrompt: 'Ești creierul operațional al Jarvis. Coordonezi execuția între mai mulți sub-agenți specialiști. Planifici pașii necesari pentru a îndeplini sarcini complexe.',
+    provider: 'auto',
+    tools: []
   }
 ];
 
-export async function getCustomSkills(): Promise<Skill[]> {
+export async function getAllSkills(): Promise<Skill[]> {
   try {
-    const saved = await AsyncStorage.getItem(CUSTOM_SKILLS_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    const saved = await AsyncStorage.getItem(SKILLS_STORAGE_KEY);
+    const custom: Skill[] = saved ? JSON.parse(saved) : [];
+    return [...DEFAULT_SKILLS, ...custom];
   } catch {
-    return [];
+    return DEFAULT_SKILLS;
   }
 }
 
-export async function getAllSkills(): Promise<Skill[]> {
-  const custom = await getCustomSkills();
-  return [...PREDEFINED_SKILLS, ...custom];
-}
-
 export async function saveSkill(skill: Skill): Promise<void> {
-  const custom = await getCustomSkills();
-  const updated = [...custom.filter(s => s.id !== skill.id), skill];
-  await AsyncStorage.setItem(CUSTOM_SKILLS_STORAGE_KEY, JSON.stringify(updated));
+  try {
+    const saved = await AsyncStorage.getItem(SKILLS_STORAGE_KEY);
+    let custom: Skill[] = saved ? JSON.parse(saved) : [];
+    custom = [...custom.filter(s => s.id !== skill.id), skill];
+    await AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(custom));
+  } catch (e) {
+    console.error('Failed to save skill', e);
+  }
 }
 
 export async function deleteSkill(id: string): Promise<void> {
-  const custom = await getCustomSkills();
-  const updated = custom.filter(s => s.id !== id);
-  await AsyncStorage.setItem(CUSTOM_SKILLS_STORAGE_KEY, JSON.stringify(updated));
+  try {
+    const saved = await AsyncStorage.getItem(SKILLS_STORAGE_KEY);
+    let custom: Skill[] = saved ? JSON.parse(saved) : [];
+    custom = custom.filter(s => s.id !== id);
+    await AsyncStorage.setItem(SKILLS_STORAGE_KEY, JSON.stringify(custom));
+  } catch (e) {
+    console.error('Failed to delete skill', e);
+  }
 }
 
-export async function getSkillById(id: string): Promise<Skill | undefined> {
+export async function getSkillById(id: string): Promise<Skill | null> {
   const all = await getAllSkills();
-  return all.find(s => s.id === id);
+  return all.find(s => s.id === id) || null;
 }
 
-export async function getSkillPrompt(skillId: string): Promise<string> {
-  const skill = await getSkillById(skillId);
-  return skill ? skill.systemPrompt : '';
-}
-
-export async function matchSkillFromMessage(message: string, activeAgents: any[]): Promise<MatchedSkill | null> {
+export function detectSkill(message: string, allSkills: Skill[]): Skill {
   const lowerMsg = message.toLowerCase();
-  let bestMatch: MatchedSkill | null = null;
+  let bestMatch = allSkills[0]; // Default to Conversatie
   let maxMatches = 0;
 
-  for (const agent of activeAgents) {
-    for (const skillId of agent.skills) {
-      const skill = await getSkillById(skillId);
-      if (!skill) continue;
-
-      let matches = 0;
-      for (const trigger of skill.triggers) {
-        if (lowerMsg.includes(trigger.toLowerCase())) {
-          matches++;
-        }
+  for (const skill of allSkills) {
+    let matches = 0;
+    for (const trigger of skill.triggers) {
+      if (lowerMsg.includes(trigger.toLowerCase())) {
+        matches++;
       }
-
-      if (matches > maxMatches) {
-        maxMatches = matches;
-        bestMatch = {
-          agentId: agent.id,
-          agentName: agent.name,
-          skillId: skill.id
-        };
-      }
+    }
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      bestMatch = skill;
     }
   }
 
   return bestMatch;
-}
-
-export interface MatchedSkill {
-  agentId: string;
-  agentName: string;
-  skillId: string;
 }

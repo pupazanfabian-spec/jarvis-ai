@@ -1,53 +1,63 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getKeyForProvider } from './keyManager';
-import { getSkillById, getSkillPrompt } from './skills';
+import { getSkillById } from './skills';
 
-const SUB_AGENTS_STORAGE_KEY = '@jarvis_sub_agents';
-const AGENT_LOGS_STORAGE_KEY = '@jarvis_agent_logs';
+const SUB_AGENTS_STORAGE_KEY = '@jarvis_subagents_v2';
+const AGENT_LOGS_STORAGE_KEY = '@jarvis_agent_logs_v2';
 
 export interface SubAgent {
   id: string;
   name: string;
-  description?: string;
-  agentProvider: 'groq' | 'openrouter' | 'gemini' | 'openai';
-  apiKey?: string;
-  model?: string;
-  skills: string[]; // Skill IDs
-  tools: string[];
+  description: string;
+  agentProvider: 'groq' | 'openrouter';
+  apiKey: string;
+  skills: string[];        // array de skill id-uri
+  tools: string[];         // 'webSearch' | 'memory' | 'codeRunner'
   systemPrompt: string;
+  priority: number;        // 1-10
   isActive: boolean;
-  priority: number; // 1-10
+  createdAt: number;
+  lastUsed: number;
+  stats: {
+    totalCalls: number;
+    successCalls: number;
+    avgResponseTime: number;
+  };
 }
 
 export interface AgentLog {
-  timestamp: number;
   agentId: string;
   agentName: string;
-  message: string;
-  response: string;
-  responseTime: number;
-  skillUsed?: string;
+  timestamp: number;
+  input: string;
+  output: string;
+  skill: string;
+  durationMs: number;
+  success: boolean;
+  error?: string;
 }
 
-// In-memory cache for performance
-let cachedAgents: SubAgent[] | null = null;
+export interface AgentResult {
+  agentId: string;
+  agentName: string;
+  skill: string;
+  response: string;
+  durationMs: number;
+  success: boolean;
+}
+
+// ─── CRUD OPERATIONS ─────────────────────────────────────────────────────────
 
 export async function getSubAgents(): Promise<SubAgent[]> {
-  if (cachedAgents) return cachedAgents;
   try {
     const saved = await AsyncStorage.getItem(SUB_AGENTS_STORAGE_KEY);
-    cachedAgents = saved ? JSON.parse(saved) : [];
+    const agents: SubAgent[] = saved ? JSON.parse(saved) : [];
     // Sort by priority (descending)
-    return (cachedAgents || []).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    return (agents || []).sort((a, b) => (b.priority || 0) - (a.priority || 0));
   } catch {
     return [];
   }
-}
-
-export async function getSubAgentById(id: string): Promise<SubAgent | undefined> {
-  const agents = await getSubAgents();
-  return agents.find(a => a.id === id);
 }
 
 export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgent> {
@@ -57,51 +67,59 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
     name: config.name || 'New Sub-Agent',
     description: config.description || '',
     agentProvider: config.agentProvider || 'groq',
-    apiKey: config.apiKey,
-    model: config.model || (config.agentProvider === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-3.3-70b-instruct:free'),
+    apiKey: config.apiKey || '',
     skills: config.skills || [],
     tools: config.tools || [],
     systemPrompt: config.systemPrompt || '',
-    isActive: config.isActive !== undefined ? config.isActive : true,
     priority: config.priority || 5,
+    isActive: config.isActive !== undefined ? config.isActive : true,
+    createdAt: Date.now(),
+    lastUsed: 0,
+    stats: {
+      totalCalls: 0,
+      successCalls: 0,
+      avgResponseTime: 0
+    }
   };
   
   const updated = [...agents.filter(a => a.id !== newAgent.id), newAgent];
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
-  cachedAgents = updated;
   return newAgent;
 }
 
-export async function deleteSubAgent(id: string) {
+export async function updateSubAgent(id: string, updates: Partial<SubAgent>): Promise<SubAgent> {
+    const agents = await getSubAgents();
+    const agent = agents.find(a => a.id === id);
+    if (!agent) throw new Error('Agent not found');
+    
+    const updatedAgent = { ...agent, ...updates };
+    const updatedList = agents.map(a => a.id === id ? updatedAgent : a);
+    await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updatedList));
+    return updatedAgent;
+}
+
+export async function deleteSubAgent(id: string): Promise<void> {
   const agents = await getSubAgents();
   const updated = agents.filter(a => a.id !== id);
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
-  cachedAgents = updated;
 }
 
-export async function toggleSubAgent(id: string, isActive: boolean) {
-  const agents = await getSubAgents();
-  const updated = agents.map(a => a.id === id ? { ...a, isActive } : a);
-  await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
-  cachedAgents = updated;
+export async function toggleSubAgent(id: string, isActive: boolean): Promise<void> {
+  await updateSubAgent(id, { isActive });
 }
 
-export async function updateAgentPriority(id: string, priority: number) {
-  const agents = await getSubAgents();
-  const updated = agents.map(a => a.id === id ? { ...a, priority: Math.max(1, Math.min(10, priority)) } : a);
-  await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
-  cachedAgents = updated;
+export async function updateAgentPriority(id: string, priority: number): Promise<void> {
+  await updateSubAgent(id, { priority: Math.max(1, Math.min(10, priority)) });
 }
 
-/**
- * Logs an agent interaction (FIFO, max 100).
- */
+// ─── EXECUTION ENGINE ────────────────────────────────────────────────────────
+
 async function saveAgentLog(log: AgentLog) {
   try {
     const saved = await AsyncStorage.getItem(AGENT_LOGS_STORAGE_KEY);
     let logs: AgentLog[] = saved ? JSON.parse(saved) : [];
     logs.unshift(log);
-    if (logs.length > 100) logs = logs.slice(0, 100);
+    if (logs.length > 200) logs = logs.slice(0, 200);
     await AsyncStorage.setItem(AGENT_LOGS_STORAGE_KEY, JSON.stringify(logs));
   } catch (e) {
     console.error('Failed to save agent log', e);
@@ -119,94 +137,123 @@ export async function getAgentLogs(agentId?: string): Promise<AgentLog[]> {
   }
 }
 
-/**
- * Calls a sub-agent with real API fetch.
- */
-export async function callSubAgent(agentId: string, message: string): Promise<string> {
+export async function clearAgentLogs(): Promise<void> {
+    await AsyncStorage.removeItem(AGENT_LOGS_STORAGE_KEY);
+}
+
+export async function callSubAgent(agentId: string, message: string): Promise<AgentResult> {
   const startTime = Date.now();
-  const agent = await getSubAgentById(agentId);
+  const agents = await getSubAgents();
+  const agent = agents.find(a => a.id === agentId);
   if (!agent) throw new Error('Agent not found');
 
-  // Build system prompt from skills - FIX: getSkillPrompt is async
-  const skillPrompts = await Promise.all(agent.skills.map(s => getSkillPrompt(s)));
-  const joinedSkillPrompts = skillPrompts.filter(p => !!p).join('\n\n');
-  const basePrompt = agent.systemPrompt || 'Esti un asistent AI specializat.';
-  const fullSystemPrompt = `${basePrompt}\n\n### SKILLS & SPECIALIZARI:\n${joinedSkillPrompts}`;
+  // Build specialized prompt
+  let specializedPrompt = agent.systemPrompt;
+  let usedSkill = 'General';
+  
+  if (agent.skills.length > 0) {
+      // Concat all skills prompts if no specific detection logic here
+      const skills = await Promise.all(agent.skills.map(sid => getSkillById(sid)));
+      const prompts = skills.filter(s => !!s).map(s => s!.systemPrompt);
+      if (prompts.length > 0) {
+          specializedPrompt = `${agent.systemPrompt}\n\n### SKILLS ACTIVATE:\n${prompts.join('\n\n')}`;
+          usedSkill = skills.filter(s => !!s).map(s => s!.name).join(', ');
+      }
+  }
 
   // Get API key
   const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
-  if (!apiKey) throw new Error(`API key missing for ${agent.agentProvider}`);
+  if (!apiKey) throw new Error(`Missing API Key for ${agent.agentProvider}`);
   
-  const provider = agent.agentProvider;
   let url = '';
-  let headers: any = { 'Content-Type': 'application/json' };
+  let model = '';
+  const headers: any = { 'Content-Type': 'application/json' };
 
-  if (provider === 'groq') {
+  if (agent.agentProvider === 'groq') {
     url = 'https://api.groq.com/openai/v1/chat/completions';
     headers['Authorization'] = `Bearer ${apiKey}`;
+    model = 'llama-3.3-70b-versatile';
   } else {
     url = 'https://openrouter.ai/api/v1/chat/completions';
     headers['Authorization'] = `Bearer ${apiKey}`;
     headers['HTTP-Referer'] = 'https://jarvis-ai.app';
     headers['X-Title'] = 'Jarvis AI';
+    model = 'mistralai/mistral-7b-instruct:free';
   }
 
-  const model = agent.model || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-3.3-70b-instruct:free');
-
-  const body = {
-    model: model,
-    messages: [
-      { role: 'system', content: fullSystemPrompt },
-      { role: 'user', content: message }
-    ],
-    temperature: 0.7,
-    max_tokens: 2048,
-  };
-
-  const fetchWithRetry = async (retries = 1): Promise<Response> => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); 
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (!response.ok && retries > 0) return fetchWithRetry(retries - 1);
-      return response;
-    } catch (err: any) {
-      clearTimeout(timeout);
-      if (retries > 0) return fetchWithRetry(retries - 1);
-      throw err;
-    }
-  };
-
   try {
-    const response = await fetchWithRetry();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: specializedPrompt },
+          { role: 'user', content: message }
+        ],
+        temperature: 0.7,
+      }),
+    });
+
     const data = await response.json();
+    const duration = Date.now() - startTime;
     
     if (!response.ok) throw new Error(data.error?.message || `API Error ${response.status}`);
 
-    const result = data.choices[0]?.message?.content || 'Fara raspuns.';
+    const resultText = data.choices[0]?.message?.content || 'Fără răspuns.';
+
+    // Update agent stats and last used
+    const success = true;
+    const newStats = {
+        totalCalls: (agent.stats.totalCalls || 0) + 1,
+        successCalls: (agent.stats.successCalls || 0) + 1,
+        avgResponseTime: Math.round(((agent.stats.avgResponseTime || 0) * (agent.stats.totalCalls || 0) + duration) / ((agent.stats.totalCalls || 0) + 1))
+    };
     
+    await updateSubAgent(agent.id, { lastUsed: Date.now(), stats: newStats });
+
     // Save log
-    const endTime = Date.now();
-    saveAgentLog({
-      timestamp: Date.now(),
+    await saveAgentLog({
       agentId: agent.id,
       agentName: agent.name,
-      message,
-      response: result,
-      responseTime: endTime - startTime,
-      skillUsed: agent.skills[0] // Simplified for log
-    }).catch(() => {});
+      timestamp: Date.now(),
+      input: message,
+      output: resultText,
+      skill: usedSkill,
+      durationMs: duration,
+      success: true
+    });
 
-    return result;
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      skill: usedSkill,
+      response: resultText,
+      durationMs: duration,
+      success: true
+    };
+
   } catch (e: any) {
-    console.error(`[SubAgent] Error calling ${agent.name}:`, e);
-    throw e;
+    const duration = Date.now() - startTime;
+    await saveAgentLog({
+        agentId: agent.id,
+        agentName: agent.name,
+        timestamp: Date.now(),
+        input: message,
+        output: '',
+        skill: usedSkill,
+        durationMs: duration,
+        success: false,
+        error: e.message
+      });
+      
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        skill: usedSkill,
+        response: `Eroare: ${e.message}`,
+        durationMs: duration,
+        success: false
+      };
   }
 }

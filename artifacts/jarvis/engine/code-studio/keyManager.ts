@@ -38,59 +38,31 @@ export async function deleteKey(provider: string) {
   }
 }
 
-export async function getKeyForProvider(provider: string): Promise<string | null> {
-  const keys = await getKeys();
-  const found = keys.find(k => k.provider.toLowerCase() === provider.toLowerCase());
-  return found ? found.key : null;
-}
-
-/**
- * Validates an API key by making a minimal test call.
- */
-export async function validateKey(provider: string, key: string): Promise<boolean> {
-  const p = provider.toLowerCase();
+export async function getKeyForProvider(provider: 'groq' | 'openrouter'): Promise<string | null> {
   try {
-    if (p === 'groq') {
-      const resp = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: { 'Authorization': `Bearer ${key}` }
-      });
-      return resp.ok;
-    }
-    if (p === 'openrouter') {
-      const resp = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: { 'Authorization': `Bearer ${key}` }
-      });
-      return resp.ok;
-    }
-    // For Gemini/OpenAI, we can add similar checks if needed
-    return key.length > 10;
+    const keys = await getKeys();
+    const found = keys.find(k => k.provider.toLowerCase() === provider.toLowerCase());
+    if (found) return found.key;
+    
+    // Fallback to any available key if specific one missing
+    if (keys.length > 0) return keys[0].key;
+    
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/**
- * Syncs keys from legacy storage keys or context settings.
- */
+export async function hasValidKey(provider: 'groq' | 'openrouter'): Promise<boolean> {
+    const key = await getKeyForProvider(provider);
+    return !!(key && key.length > 10);
+}
+
 export async function syncKeysFromContext(settings: any) {
   try {
     const currentKeys = await getKeys();
     let changed = false;
 
-    // Check individual AsyncStorage keys first (legacy)
-    const groqLegacy = await AsyncStorage.getItem('@groq_api_key');
-    const orLegacy = await AsyncStorage.getItem('@openrouter_api_key');
-
-    if (groqLegacy && !currentKeys.find(k => k.provider.toLowerCase() === 'groq')) {
-      currentKeys.push({ provider: 'Groq', key: groqLegacy });
-      changed = true;
-    }
-    if (orLegacy && !currentKeys.find(k => k.provider.toLowerCase() === 'openrouter')) {
-      currentKeys.push({ provider: 'OpenRouter', key: orLegacy });
-      changed = true;
-    }
-
-    // Then check settings from AIProviderContext
     if (settings.groqKey && !currentKeys.find(k => k.provider.toLowerCase() === 'groq')) {
       currentKeys.push({ provider: 'Groq', key: settings.groqKey });
       changed = true;
