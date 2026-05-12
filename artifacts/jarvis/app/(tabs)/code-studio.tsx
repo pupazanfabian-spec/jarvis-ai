@@ -160,6 +160,70 @@ export default function CodeStudio() {
     AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: n, connections: c }));
   }, []);
 
+  const debouncedSave = useCallback((n: Node[], c: Connection[]) => {
+      saveWS(n, c);
+  }, [saveWS]);
+
+  const initWorkspace = useCallback(async () => {
+    try {
+      await keyManager.syncKeysFromContext(settings);
+      await seedDefaultAgents();
+      const [sa, sk, saved] = await Promise.all([getSubAgents(), getAllSkills(), AsyncStorage.getItem('@code_studio_workspace')]);
+      
+      // Deduplicate subAgents
+      const uniqueSA = (() => {
+          const seen = new Set();
+          return (sa || []).filter(a => a && (seen.has(a.id) ? false : seen.add(a.id)));
+      })();
+      setSubAgents(uniqueSA);
+      
+      // Deduplicate skills
+      const uniqueSK = (() => {
+          const seen = new Set();
+          return (sk || []).filter(s => s && (seen.has(s.id) ? false : seen.add(s.id)));
+      })();
+      setAllSkills(uniqueSK);
+      
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const savedNodes = parsed.nodes || [];
+        const savedConns = parsed.connections || [];
+        
+        const existingNodeIds = new Set(savedNodes.map((n: Node) => n.id || (n.config?.agentId)));
+        const missingAgentNodes = (uniqueSA || [])
+          .filter(agent => !existingNodeIds.has(agent.id))
+          .map((agent, i) => ({
+            id: agent.id,
+            type: 'Agent' as NodeType,
+            title: agent.name,
+            x: 100 + ((savedNodes.length + i) % 3) * 220,
+            y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
+            config: { agentId: agent.id }
+          }));
+        
+        const allNodes = [...savedNodes, ...missingAgentNodes];
+        // Final dedup on nodes
+        const finalNodes = (() => {
+            const seen = new Set();
+            return allNodes.filter(n => n && (seen.has(n.id) ? false : seen.add(n.id)));
+        })();
+        setNodes(finalNodes);
+        setConnections(savedConns);
+        
+        if (missingAgentNodes.length > 0) {
+          await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: finalNodes, connections: savedConns }));
+        }
+      } else if (uniqueSA && uniqueSA.length > 0) {
+        const autoNodes = uniqueSA.map((agent, i) => ({
+          id: agent.id, type: 'Agent' as NodeType, title: agent.name,
+          x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
+        }));
+        setNodes(autoNodes);
+        await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: autoNodes, connections: [] }));
+      }
+    } catch (e) { console.error('[Studio] Init error', e); }
+  }, [settings, saveWS]);
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -188,7 +252,7 @@ export default function CodeStudio() {
           setAllSkills(uniqueSK);
           
           if (saved) {
-            const parsed = JSON.parse(saved);
+            const parsed = JSON.JSON.parse(saved);
             const savedNodes = parsed.nodes || [];
             const savedConns = parsed.connections || [];
             
@@ -200,11 +264,12 @@ export default function CodeStudio() {
                 type: 'Agent' as NodeType,
                 title: agent.name,
                 x: 100 + ((savedNodes.length + i) % 3) * 220,
-                y: 150 + Math.floor((savedNodes.length + i) / 3) * 150,
+                y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
                 config: { agentId: agent.id }
               }));
             
             const allNodes = [...savedNodes, ...missingAgentNodes];
+            // Final dedup on nodes
             const finalNodes = (() => {
                 const seen = new Set();
                 return allNodes.filter(n => n && (seen.has(n.id) ? false : seen.add(n.id)));
@@ -234,8 +299,8 @@ export default function CodeStudio() {
     onStartShouldSetPanResponder: () => !isDraggingRef.current,
     onMoveShouldSetPanResponder: (_, gs) => !isDraggingRef.current && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2),
     onPanResponderGrant: () => canvasPan.extractOffset(),
-    onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: canvasPan.y }], { useNativeDriver: false }),
-    onPanResponderRelease: () => canvasPan.flattenOffset(),
+    onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: pan.y }], { useNativeDriver: false }),
+    onPanResponderRelease: () => { pan.flattenOffset(); onDragEnd(); },
   })).current;
 
   const memoizedGrid = useMemo(() => {
@@ -247,7 +312,7 @@ export default function CodeStudio() {
   const updateNode = (id: string, updates: Partial<Node>) => {
     const updated = nodes.map(n => n.id === id ? {...n, ...updates} : n);
     setNodes(updated);
-    saveWS(updated, connections);
+    debouncedSave(updated, connections);
   };
 
   const handleCreateAgent = async () => {
@@ -259,7 +324,8 @@ export default function CodeStudio() {
           config: { agentId: agent.id, provider: agent.agentProvider } 
       };
       const updatedNodes = [...nodes, newNode];
-      setNodes(updatedNodes); saveWS(updatedNodes, connections);
+      setNodes(updatedNodes); debouncedSave(updatedNodes, connections);
+      const refreshedAgents = await getSubAgents(); setSubAgents(refreshedAgents);
       setIsWizardVisible(false); setWizardStep(1);
       setNewAgentConfig({ name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 });
       Alert.alert('Succes', `Agentul "${agent.name}" a fost creat!`);
@@ -271,7 +337,7 @@ export default function CodeStudio() {
     try {
         const triggers = Array.isArray(editingSkill.triggers) ? editingSkill.triggers : (editingSkill.triggers as any || "").split(',').map((t: string)=>t.trim()).filter(Boolean);
         await saveSkill({ ...editingSkill as Skill, id: editingSkill.id || `sk-${Date.now()}`, triggers });
-        setIsSkillEditorVisible(false);
+        await initWorkspace(); setIsSkillEditorVisible(false);
     } catch (e) { Alert.alert('Eroare', 'Nu s-a putut salva skill-ul.'); }
   };
 
@@ -287,7 +353,10 @@ export default function CodeStudio() {
 
   const autoGeneratePrompt = () => {
       const selected = allSkills.filter(s => newAgentConfig.skills?.includes(s.id));
-      const prompt = selected.map(s => `### ${s.name}\n${s.systemPrompt}`).join('\n\n');
+      const prompt = selected.map(s => `### ${s.name}
+${s.systemPrompt}`).join('
+
+');
       setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });
   };
 
@@ -370,9 +439,7 @@ export default function CodeStudio() {
           </View>
           <FlatList data={subAgents} keyExtractor={(item, index) => `agent-${item.id}-${index}`} renderItem={({ item }) => (
             <View style={styles.agentCard}>
-              <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(reload => {
-                  getSubAgents().then(setSubAgents);
-              })} /></View>
+              <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(initWorkspace)} /></View>
               <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority} • {item.skills?.length || 0} skills</Text>
               <View style={styles.agentCardActions}>
                   <TouchableOpacity style={styles.actionBtn} onPress={() => { setSandboxAgent(item); setIsSandboxVisible(true); }}><Text style={styles.actionBtnText}>Test</Text></TouchableOpacity>
@@ -451,8 +518,8 @@ export default function CodeStudio() {
         <Text style={styles.modalTitle}>Configurare Skill</Text>
         <TextInput style={styles.input} placeholder="Nume Skill" value={editingSkill.name} onChangeText={t => setEditingSkill({...editingSkill, name: t})} placeholderTextColor="#475569" />
         <Text style={styles.inputLabel}>Categorie</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{SKILL_CATEGORIES.map((c, idx) => (
-            <TouchableOpacity key={`cat-chip-${c}-${idx}`} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{SKILL_CATEGORIES.map(c => (
+            <TouchableOpacity key={`cat-chip-${c}`} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
         ))}</ScrollView>
         <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
         <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
@@ -491,8 +558,8 @@ export default function CodeStudio() {
 
       <Modal visible={isLogsVisible} transparent animationType="fade"><View style={styles.modalOverlay}><View style={styles.modalContent}>
         <View style={styles.row}><Text style={styles.modalTitle}>Activitate Agenți</Text><TouchableOpacity onPress={async () => { await clearAgentLogs(); setAgentLogs([]); }}><Text style={styles.clearLogs}>Golește</Text></TouchableOpacity></View>
-        <View style={[styles.row, { marginBottom: 10 }]}>{['all', 'success', 'failed'].map((f, idx) => (
-            <TouchableOpacity key={`log-filt-${f}-${idx}`} style={[styles.catChip, logFilter === f && styles.catChipActive]} onPress={() => setLogFilter(f as any)}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
+        <View style={[styles.row, { marginBottom: 10 }]}>{['all', 'success', 'failed'].map(f => (
+            <TouchableOpacity key={`log-filt-${f}`} style={[styles.catChip, logFilter === f && styles.catChipActive]} onPress={() => setLogFilter(f as any)}><Text style={styles.catChipText}>{f}</Text></TouchableOpacity>
         ))}</View>
         <FlatList style={{ maxHeight: 500 }} data={filteredLogs} keyExtractor={(item, index) => `log-${item.agentId}-${item.timestamp}-${index}`} renderItem={({ item }) => (
           <View style={styles.logItem}><View style={styles.row}><Text style={styles.logTime}>{new Date(item.timestamp).toLocaleTimeString()}</Text><Text style={[styles.logStatus, { color: item.success ? '#10b981' : '#ef4444' }]}>{item.success ? 'OK' : 'FAIL'}</Text></View><Text style={styles.agentCardName}>{item.agentName}</Text><Text style={styles.logText} numberOfLines={2}>MSG: {item.input}</Text><Text style={styles.logTime}>Durată: {item.durationMs}ms</Text></View>
@@ -585,14 +652,11 @@ const styles = StyleSheet.create({
   responseText: { color: '#fff', fontSize: 16, lineHeight: 24 },
   sandboxInputRow: { flexDirection: 'row', alignItems: 'center' },
   sandboxInput: { flex: 1, backgroundColor: '#1e293b', borderRadius: 16, padding: 18, color: '#fff', marginRight: 12, fontSize: 16, borderWidth: 1, borderColor: '#334155' },
-  sendBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 5 },
   logItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#334155' },
   logTime: { color: '#6366f1', fontSize: 11, fontWeight: 'bold' },
   logText: { color: '#fff', fontSize: 13, marginTop: 4 },
   logStatus: { fontSize: 11, fontWeight: 'black' },
   clearLogs: { color: '#ef4444', fontSize: 13, fontWeight: 'bold' },
   emptyText: { color: '#475569', textAlign: 'center', marginTop: 60, fontSize: 15 },
-  eyeBtn: { padding: 12, backgroundColor: '#334155', borderRadius: 12 },
-  validateKeyBtn: { marginTop: 12, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#6366f1', padding: 14, borderRadius: 12, alignItems: 'center' },
-  validateKeyBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 14 },
 });

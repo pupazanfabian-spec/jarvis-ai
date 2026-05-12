@@ -291,6 +291,7 @@ async function callOpenAICompatible(
   if (!resp.ok) {
     const errData = await resp.json().catch(() => ({})) as { error?: { message?: string } };
     const errMsg = errData?.error?.message ?? `HTTP ${resp.status}`;
+    // Throw error with status code prefix for detection
     throw new Error(`${resp.status}::${errMsg}`);
   }
 
@@ -835,7 +836,7 @@ async function streamGroq(
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => 'Unknown error');
-      throw new Error(`Groq Stream Error: ${resp.status} - ${errText}`);
+      throw new Error(`${resp.status}::Groq Stream Error: ${errText}`);
     }
 
     const reader = (resp as any).body?.getReader();

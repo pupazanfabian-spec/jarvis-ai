@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -9,10 +10,10 @@ const linear = (t: number) => t;
 export default function ThinkingIndicator({ visible }: { visible: boolean }) {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const rotateAnim2 = useRef(new Animated.Value(0)).current;
-  const colorCycle = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0.8)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
     if (visible) {
@@ -42,22 +43,26 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
         })
       ).start();
 
-      // Color cycle
-      Animated.loop(
-        Animated.timing(colorCycle, {
-          toValue: 4, duration: 4000,
-          easing: linear, useNativeDriver: false
-        })
-      ).start();
-
-      // Pulse
+      // Pulse principal
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.15, duration: 600, easing: linear, useNativeDriver: true
+            toValue: 1.1, duration: 600, easing: linear, useNativeDriver: true
           }),
           Animated.timing(pulseAnim, {
-            toValue: 0.85, duration: 600, easing: linear, useNativeDriver: true
+            toValue: 0.9, duration: 600, easing: linear, useNativeDriver: true
+          }),
+        ])
+      ).start();
+
+      // Glow pulse (opacity based, safe for native driver)
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 0.8, duration: 1000, easing: linear, useNativeDriver: true
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.3, duration: 1000, easing: linear, useNativeDriver: true
           }),
         ])
       ).start();
@@ -67,12 +72,12 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
       }).start(() => {
         rotateAnim.setValue(0);
         rotateAnim2.setValue(0);
-        colorCycle.setValue(0);
         scaleAnim.setValue(0.5);
         pulseAnim.setValue(0.8);
+        glowAnim.setValue(0.3);
       });
     }
-  }, [visible, rotateAnim, rotateAnim2, colorCycle, pulseAnim, fadeAnim, scaleAnim]);
+  }, [visible, rotateAnim, rotateAnim2, pulseAnim, fadeAnim, scaleAnim, glowAnim]);
 
   const spin1 = rotateAnim.interpolate({
     inputRange: [0, 1], outputRange: ['0deg', '360deg']
@@ -81,52 +86,42 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
     inputRange: [0, 1], outputRange: ['360deg', '0deg']
   });
 
-  // Ciclu de culori: albastru -> mov -> rosu -> galben -> albastru
-  const ringColor = colorCycle.interpolate({
-    inputRange: [0, 1, 2, 3, 4],
-    outputRange: ['#00d4ff', '#6366f1', '#ff0066', '#fbbf24', '#00d4ff']
-  });
-  const innerColor = colorCycle.interpolate({
-    inputRange: [0, 1, 2, 3, 4],
-    outputRange: ['rgba(0,212,255,0.15)', 'rgba(99,102,241,0.15)',
-      'rgba(255,0,102,0.15)', 'rgba(251,191,36,0.15)', 'rgba(0,212,255,0.15)']
-  });
-
   if (!visible) return null;
 
+  const BLUE = '#00d4ff';
+
   return (
-    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}
-      pointerEvents="none">
+    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="none">
       <Animated.View style={[styles.container, {
         transform: [{ scale: scaleAnim }]
       }]}>
-        {/* Cerc exterior */}
+        {/* Cerc exterior - Culoare fixa, rotatie animata */}
         <Animated.View style={[styles.outerRing, {
           transform: [{ rotate: spin1 }],
-          borderColor: ringColor,
+          borderColor: BLUE,
         }]} />
 
-        {/* Cerc middle */}
+        {/* Cerc middle - Culoare fixa, rotatie inversa */}
         <Animated.View style={[styles.middleRing, {
           transform: [{ rotate: spin2 }],
-          borderColor: ringColor,
+          borderColor: BLUE,
         }]} />
 
-        {/* Cerc interior */}
+        {/* Cerc interior - Glow pulse prin opacity (safe pentru native driver) */}
         <Animated.View style={[styles.innerCircle, {
-          backgroundColor: innerColor,
-          borderColor: ringColor,
-          transform: [{ scale: pulseAnim }]
+          borderColor: BLUE,
+          transform: [{ scale: pulseAnim }],
+          opacity: glowAnim
         }]}>
-          <Animated.View style={[styles.coreCircle, {
-            backgroundColor: ringColor
+          <View style={[styles.coreCircle, {
+            backgroundColor: BLUE
           }]} />
         </Animated.View>
 
-        {/* Text */}
-        <Animated.Text style={[styles.text, { color: ringColor }]}>
+        {/* Text - Culoare fixa */}
+        <Text style={[styles.text, { color: BLUE }]}>
           Procesez...
-        </Animated.Text>
+        </Text>
       </Animated.View>
     </Animated.View>
   );

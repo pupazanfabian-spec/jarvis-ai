@@ -77,16 +77,16 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
   });
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeOut }]}>
+    <Animated.View style={[styles.container, { opacity: fadeOut }]} pointerEvents="none">
       <Animated.View style={[styles.center, {
         transform: [{ scale: scaleAnim }]
       }]}>
-        {/* Cerc exterior rotativ */}
+        {/* Cerc exterior rotativ - Culoare fixa */}
         <Animated.View style={[styles.outerRing, {
           transform: [{ rotate: spin1 }]
         }]} />
         
-        {/* Cerc middle rotativ invers */}
+        {/* Cerc middle rotativ invers - Culoare fixa */}
         <Animated.View style={[styles.middleRing, {
           transform: [{ rotate: spin2 }]
         }]} />
@@ -95,11 +95,10 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         <Animated.View style={[styles.innerCircle, {
           transform: [{ scale: pulseAnim }]
         }]}>
-          {/* Arc reactor dots */}
           <View style={styles.reactorCenter} />
         </Animated.View>
 
-        {/* Text JARVIS */}
+        {/* Text JARVIS - Culori fixe */}
         <Animated.Text style={[styles.titleText, { opacity: fadeText }]}>
           J.A.R.V.I.S
         </Animated.Text>
@@ -183,12 +182,8 @@ const styles = StyleSheet.create({
     width: 30, height: 30,
     borderColor: BLUE,
   },
-  topLeft: { top: 40, left: 20,
-    borderTopWidth: 2, borderLeftWidth: 2 },
-  topRight: { top: 40, right: 20,
-    borderTopWidth: 2, borderRightWidth: 2 },
-  bottomLeft: { bottom: 40, left: 20,
-    borderBottomWidth: 2, borderLeftWidth: 2 },
-  bottomRight: { bottom: 40, right: 20,
-    borderBottomWidth: 2, borderRightWidth: 2 },
+  topLeft: { top: 40, left: 20, borderTopWidth: 2, borderLeftWidth: 2 },
+  topRight: { top: 40, right: 20, borderTopWidth: 2, borderRightWidth: 2 },
+  bottomLeft: { bottom: 40, left: 20, borderBottomWidth: 2, borderLeftWidth: 2 },
+  bottomRight: { bottom: 40, right: 20, borderBottomWidth: 2, borderRightWidth: 2 },
 });

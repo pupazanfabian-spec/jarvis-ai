@@ -43,23 +43,26 @@ export default function JarvisIcon({ focused, color, size }: {
     inputRange: [0, 1], outputRange: ['0deg', '360deg']
   });
 
+  // Culori fixe pentru stabilitate pe Noua Arhitectura
+  const staticColor = focused ? '#6366f1' : '#94a3b8';
+
   return (
     <View style={styles.container}>
       {focused && (
         <Animated.View style={[styles.ring, {
           transform: [{ rotate: spin }],
-          borderColor: color,
+          borderColor: staticColor,
         }]} />
       )}
       <Animated.View style={{ transform: [{ scale: focused ? pulseAnim : 1 }] }}>
         <View style={[styles.innerCircle, {
-          borderColor: color,
-          backgroundColor: focused ? 'rgba(0,212,255,0.1)' : 'transparent'
+          borderColor: staticColor,
+          backgroundColor: focused ? 'rgba(99, 102, 241, 0.1)' : 'transparent'
         }]}>
           <Ionicons
             name="hardware-chip"
             size={size - 6}
-            color={color}
+            color={staticColor}
           />
         </View>
       </Animated.View>

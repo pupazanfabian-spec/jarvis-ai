@@ -35,6 +35,7 @@ interface AIProviderContextType {
   generate: (prompt: string, system?: string, history?: ConversationTurn[], intent?: string) => Promise<{ text: string; provider: AIProvider } | null>;
   generateStream: (prompt: string, onChunk: (chunk: string) => void, system?: string, history?: ConversationTurn[], intent?: string) => Promise<{ text: string; provider: AIProvider } | null>;
   clearError: () => void;
+  isGroqRateLimited: () => boolean;
 }
 
 const AIProviderContext = createContext<AIProviderContextType | null>(null);
@@ -51,6 +52,18 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState('');
   const initialized = useRef(false);
+
+  // Cooldown logic for Groq
+  const groqRateLimitedUntil = useRef<number>(0);
+
+  const isGroqRateLimited = useCallback(() => {
+    return Date.now() < groqRateLimitedUntil.current;
+  }, []);
+
+  const markGroqLimited = useCallback(() => {
+    console.log('[AIProvider] Groq rate limit detected. Cooling down for 20 minutes.');
+    groqRateLimitedUntil.current = Date.now() + 20 * 60 * 1000;
+  }, []);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -131,8 +144,27 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     intent?: string,
   ): Promise<{ text: string; provider: AIProvider } | null> => {
     if (settings.activeProvider === 'none') return null;
-    return callActiveProvider(prompt, settings, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
-  }, [settings]);
+    
+    // Check Groq cooldown
+    let effectiveSettings = { ...settings };
+    if (settings.activeProvider === 'groq' && isGroqRateLimited()) {
+        console.log('[AIProvider] Groq is cooling down, using OpenRouter fallback');
+        effectiveSettings.activeProvider = 'openrouter';
+    }
+
+    try {
+        const res = await callActiveProvider(prompt, effectiveSettings, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
+        return res;
+    } catch (err: any) {
+        if (err.message?.includes('429')) {
+            markGroqLimited();
+            // Immediate retry with OpenRouter
+            const fallbackSettings = { ...settings, activeProvider: 'openrouter' as AIProvider };
+            return callActiveProvider(prompt, fallbackSettings, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
+        }
+        throw err;
+    }
+  }, [settings, isGroqRateLimited, markGroqLimited]);
 
   const generateStream = useCallback(async (
     prompt: string,
@@ -142,9 +174,31 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     intent?: string,
   ): Promise<{ text: string; provider: AIProvider } | null> => {
     if (settings.activeProvider === 'none') return null;
+    
     const { callActiveProviderStream } = await import('@/engine/aiProviders');
-    return callActiveProviderStream(prompt, settings, onChunk, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
-  }, [settings]);
+
+    // Check Groq cooldown
+    let effectiveSettings = { ...settings };
+    if ((settings.activeProvider === 'groq' || settings.activeProvider === 'auto') && isGroqRateLimited()) {
+        console.log('[AIProvider] Groq is cooling down, adjusting auto-fallback sequence');
+        if (settings.activeProvider === 'groq') {
+            effectiveSettings.activeProvider = 'openrouter';
+        }
+    }
+
+    try {
+        const res = await callActiveProviderStream(prompt, effectiveSettings, onChunk, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
+        return res;
+    } catch (err: any) {
+        if (err.message?.includes('429')) {
+            markGroqLimited();
+            // Immediate retry with OpenRouter
+            const fallbackSettings = { ...settings, activeProvider: 'openrouter' as AIProvider };
+            return callActiveProviderStream(prompt, fallbackSettings, onChunk, system ?? JARVIS_SYSTEM_PROMPT, history, intent);
+        }
+        throw err;
+    }
+  }, [settings, isGroqRateLimited, markGroqLimited]);
 
   const clearError = useCallback(() => setTestError(''), []);
 
@@ -154,7 +208,7 @@ export function AIProviderProvider({ children }: { children: React.ReactNode }) 
     <AIProviderContext.Provider value={{
       settings, isReady, isTesting, testError, secureStoreFallback,
       setActiveProvider, saveGeminiKey, saveOpenAIKey, saveGroqKey, saveOpenRouterKey,
-      testKey, generate, generateStream, clearError,
+      testKey, generate, generateStream, clearError, isGroqRateLimited
     }}>
       {children}
     </AIProviderContext.Provider>

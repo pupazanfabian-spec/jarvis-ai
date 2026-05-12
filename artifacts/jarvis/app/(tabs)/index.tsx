@@ -128,23 +128,6 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
 
-  // ─── Header Color Cycle ────────────────────────────────────────────────────
-  const headerColorCycle = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(headerColorCycle, {
-        toValue: 4, duration: 12000,
-        easing: (t) => t, useNativeDriver: false
-      })
-    ).start();
-  }, [headerColorCycle]);
-
-  const headerColor = headerColorCycle.interpolate({
-    inputRange: [0, 1, 2, 3, 4],
-    outputRange: ['#00d4ff', '#6366f1', '#ff0066', '#fbbf24', '#00d4ff']
-  });
-
   const scrollToBottom = useCallback((animated = true) => {
     if (messages.length > 0) {
       setTimeout(() => {
