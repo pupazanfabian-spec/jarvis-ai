@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
   TextInput, Alert, Dimensions, PanResponder, Animated, FlatList,
-  Switch, ActivityIndicator,
+  Switch, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import Svg, { Path, Circle, Polygon, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -214,6 +214,7 @@ export default function CodeStudio() {
           await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: finalNodes, connections: savedConns }));
         }
       } else if (uniqueSA && uniqueSA.length > 0) {
+        // Prima deschidere - pune agentii pe canvas
         const autoNodes = uniqueSA.map((agent, i) => ({
           id: agent.id, type: 'Agent' as NodeType, title: agent.name,
           x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
@@ -229,7 +230,7 @@ export default function CodeStudio() {
       let isActive = true;
       const reload = async () => {
         try {
-          await seedDefaultAgents();
+          await seedDefaultAgents(); // Seed before loading data
           const [sa, sk, saved] = await Promise.all([
             getSubAgents(),
             getAllSkills(),
@@ -281,6 +282,7 @@ export default function CodeStudio() {
               await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: finalNodes, connections: savedConns }));
             }
           } else if (uniqueSA && uniqueSA.length > 0) {
+            // Prima deschidere - pune agentii pe canvas
             const autoNodes = uniqueSA.map((agent, i) => ({
               id: agent.id, type: 'Agent' as NodeType, title: agent.name,
               x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
@@ -353,7 +355,10 @@ export default function CodeStudio() {
 
   const autoGeneratePrompt = () => {
       const selected = allSkills.filter(s => newAgentConfig.skills?.includes(s.id));
-      const prompt = selected.map(s => '### ' + s.name + '\n' + (s.systemPrompt || '')).join('\n\n');
+      const prompt = selected.map(s => `### ${s.name}
+${s.systemPrompt}`).join('
+
+');
       setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });
   };
 
@@ -656,4 +661,7 @@ const styles = StyleSheet.create({
   logStatus: { fontSize: 11, fontWeight: 'black' },
   clearLogs: { color: '#ef4444', fontSize: 13, fontWeight: 'bold' },
   emptyText: { color: '#475569', textAlign: 'center', marginTop: 60, fontSize: 15 },
+  eyeBtn: { padding: 12, backgroundColor: '#334155', borderRadius: 12 },
+  validateKeyBtn: { marginTop: 12, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#6366f1', padding: 14, borderRadius: 12, alignItems: 'center' },
+  validateKeyBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 14 },
 });

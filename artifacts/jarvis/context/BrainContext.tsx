@@ -10,10 +10,8 @@ import { createEntityTracker } from '@/engine/entities';
 import { createInferenceEngine, extractRulesFromFact, addFact } from '@/engine/inference';
 import { createTemporalMemory } from '@/engine/temporal';
 import { createConstitutionState } from '@/engine/constitution';
-import { useLLM } from '@/context/LLMContext';
 import { searchOnline, isOnlineIntent, searchOnlineSynthesized, extractTopSentences, smartWebSearch, extractSearchQuery } from '@/engine/webSearch';
 import { detectQuestionType, synthesizeWebResponse, detectTopicCategory } from '@/engine/responseGenerator';
-import { useAIProvider } from '@/context/AIProviderContext';
 import { buildRichSystemPrompt, type JarvisContext, type ConversationTurn } from '@/engine/aiProviders';
 import { semanticSimilarity } from '@/engine/semantic';
 import { loadDynamicConceptsFromDB } from '@/engine/knowledge';
@@ -38,10 +36,8 @@ import {
   buildAICodePrompt, formatCodeResponse, extractCodeSnippet,
 } from '@/engine/codeGenerator';
 import {
-  getActiveProject, buildProjectContext, formatProjectSummary,
-  createProject, addProjectStep, saveProjectFile,
-} from '@/engine/projectMemory';
-import { loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, formatMemoriesForPrompt, type MemoryStore, type MemoryCategory } from '@/engine/memory';
+  loadMemory, saveMemory, addMemoryEntry, getRelevantMemories, formatMemoriesForPrompt, type MemoryStore, type MemoryCategory,
+} from '@/engine/memory';
 import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
@@ -50,6 +46,12 @@ import { useDevMode } from '@/context/DevModeContext';
 import * as studioManager from '@/engine/code-studio/studioManager';
 import { getSubAgents, callSubAgent, SubAgent } from '@/engine/code-studio/subAgentManager';
 import { orchestrator } from '@/engine/orchestrator';
+import { useAIProvider } from '@/context/AIProviderContext'; // Importul existent este corect
+
+// Re-export useAIProvider din AIProviderContext pentru a fi accesibil prin BrainContext, conform instrucțiunii
+export { useAIProvider }; 
+
+// ... (restul codului din BrainContext.tsx, inclusiv BrainContextType, BrainProvider, useBrain) ...
 
 interface BrainContextType {
   messages: Message[];
@@ -75,7 +77,16 @@ const STATE_KEY = '@jarvis_v3_state';
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠\n\n**Ce pot face:**\n🤔 Răspund din 270+ subiecte din memorie\n📡 Caut pe internet în timp real (DuckDuckGo, Wikipedia, News)\n🔗 Deduc logic din ce îmi spui\n👤 Rețin persoanele și entitățile menționate\n💾 Memorie persistentă: îmi amintesc cine ești și ce preferi între sesiuni\n\n**Cum te cheamă?** Sau întreabă-mă orice.',
+  content: 'Salut! Sunt **Jarvis** — AI cu minte proprie, offline și online. 🧠
+
+**Ce pot face:**
+🤔 Răspund din 270+ subiecte din memorie
+📡 Caut pe internet în timp real (DuckDuckGo, Wikipedia, News)
+🔗 Deduc logic din ce îmi spui
+👤 Rețin persoanele și entitățile menționate
+💾 Memorie persistentă: îmi amintesc cine ești și ce preferi între sesiuni
+
+**Cum te cheamă?** Sau întreab-mă orice.',
   timestamp: new Date(),
 };
 
@@ -106,9 +117,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [brainState, setBrainState] = useState<BrainState>(brainRef.current);
   const memoryRef = useRef<MemoryStore>({ entries: [] });
   const loaded = useRef(false);
-  const { generate: llmGenerate, status: llmStatus } = useLLM();
-  const aiProvider = useAIProvider();
-  const { isDevMode, refreshProject } = useDevMode();
+  const { generate: llmGenerate, status: llmStatus, skipped: llmSkipped } = useLLM();
+  const aiProvider = useAIProvider(); // This hook is used here
+  const { isDevMode, toggleDevMode, activeProject, refreshProject } = useDevMode();
 
   useEffect(() => {
     if (loaded.current) return;
@@ -178,7 +189,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
     const agents = await getSubAgents();
-    const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('\n') || 'Nu sunt sub-agenți activi.';
+    const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('
+') || 'Nu sunt sub-agenți activi.';
     return buildRichSystemPrompt({
       userName: state.userName || undefined,
       learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
@@ -202,51 +214,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     return response;
   }, [dbReady, llmGenerate, llmStatus]);
 
-  const clearConversation = useCallback(() => {
-    setMessages([WELCOME]);
-    isProcessing.current = false;
-    setIsThinking(false);
-    persist([WELCOME], brainRef.current);
-  }, [persist]);
-
-  const addDocument = useCallback(async (name: string, content: string) => {
-    setIsThinking(true);
-    await new Promise(r => setTimeout(r, 50));
-    const response = processDocument(name, content, brainRef.current);
-    setBrainState({ ...brainRef.current });
-    const aiMsg: Message = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: response,
-      timestamp: new Date(),
-    };
-    setMessages(prev => {
-      const next = [...prev, aiMsg];
-      persist(next, brainRef.current);
-      return next;
-    });
-    setIsThinking(false);
-  }, [persist]);
-
-  const removeDocument = useCallback((id: string) => {
-    brainRef.current.learnedDocuments = (brainRef.current.learnedDocuments || []).filter(d => d.id !== id);
-    setBrainState({ ...brainRef.current });
-    persist(messages, brainRef.current);
-  }, [messages, persist]);
-
-  const addNodeToCanvas = async (node: { id: string, type: string, title: string, config: any }) => {
-    try {
-      const canvasKey = '@code_studio_workspace';
-      const saved = await AsyncStorage.getItem(canvasKey);
-      const workspace = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
-      if (workspace.nodes.find((n: any) => n.id === node.id)) return;
-      const count = workspace.nodes.length;
-      const newNode = { ...node, x: 100 + (count % 3) * 220, y: 150 + Math.floor(count / 3) * 150 };
-      workspace.nodes.push(newNode);
-      await AsyncStorage.setItem(canvasKey, JSON.stringify(workspace));
-    } catch(e) { console.error('[Canvas] addNodeToCanvas error:', e); }
-  };
-
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
     isProcessing.current = true; setIsThinking(true);
@@ -259,14 +226,15 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const lowerText = text.toLowerCase();
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      // ─── Special Studio Commands (REAL EXECUTION) ──────────────────────────
+      // 1. Studio Special Commands
       const canvasKey = '@code_studio_workspace';
-
       if (normalizedText.includes('listeaza agent') || normalizedText.includes('ce agenti ai')) {
           const agents = await getSubAgents();
-          response = agents.length === 0 ? "Nu ai sub-agenți activi. 🤖" : "🤖 **Sub-Agenții tăi:**\n\n" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('\n');
-      } 
-      else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent') || normalizedText.includes('creaza agent')) {
+          response = agents.length === 0 ? "Nu ai sub-agenți activi. 🤖" : "🤖 **Sub-Agenții tăi:**
+
+" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('
+');
+      } else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent') || normalizedText.includes('creaza agent')) {
           const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+agent\s+(.+)/i);
           const agentName = nameMatch?.[1]?.trim() || 'Agent Nou';
           try {
@@ -278,51 +246,51 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               name: agentName, skills: [detSkill.id], agentProvider: 'groq', isActive: true, priority: 5, systemPrompt: detSkill.systemPrompt,
             });
             await addNodeToCanvas({ id: agent.id, type: 'Agent', title: agent.name, config: { agentId: agent.id, provider: agent.agentProvider } });
-            response = `✅ Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas.\n\nDeschide tab-ul **Studio** să îl vezi! 🤖`;
+            response = `✅ Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas.
+
+Deschide tab-ul **Studio** să îl vezi! 🤖`;
           } catch(e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
-      } 
-      else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill') || normalizedText.includes('creaza skill')) {
+      } else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill') || normalizedText.includes('creaza skill')) {
           const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+skill\s+(.+)/i);
           const skillName = nameMatch?.[1]?.trim() || 'Skill Nou';
           try {
             const { saveSkill, getAllSkills, detectSkill } = await import('@/engine/code-studio/skills');
             const allSkills = await getAllSkills();
-            const existing = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
-            if (existing) {
-              await addNodeToCanvas({ id: existing.id, type: 'Skill', title: existing.name, config: { skillId: existing.id, category: existing.category } });
-              response = `✅ Am adăugat skill-ul existent **${existing.name}** pe canvas! 🎯`;
-            } else {
+            const found = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
+            if (found) {
+              await addNodeToCanvas({ id: found.id, type: 'Skill', title: found.name, config: { skillId: found.id, category: found.category } });
+              response = `✅ Am adăugat skill-ul existent **${found.name}** pe canvas! 🎯`;
+            } else { 
               const detected = detectSkill(skillName, allSkills);
               const newSkill = {
                 id: 'skill_' + Date.now().toString(36), name: skillName, category: detected.category, description: `Skill creat de Jarvis: ${skillName}`,
-                triggers: skillName.toLowerCase().split(' '), systemPrompt: `Ești un expert în ${skillName}.`, provider: 'auto' as const, tools: []
+                triggers: skillName.toLowerCase().split(' '), systemPrompt: `Ești un expert în ${skillName}. Ajuți utilizatorul cu sarcini legate de ${skillName}.`,
+                provider: 'auto' as const, tools: []
               };
               await saveSkill(newSkill);
               await addNodeToCanvas({ id: newSkill.id, type: 'Skill', title: newSkill.name, config: { skillId: newSkill.id, category: newSkill.category } });
               response = `✅ Am creat skill-ul **${skillName}** și l-am adăugat pe canvas! 🎯`;
             }
-          } catch(e: any) { response = `❌ Eroare la crearea skill-ului: ${e.message}`; }
-      } 
-      else if (normalizedText.includes('conecteaza')) {
+          } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
+      } else if (normalizedText.includes('conecteaza') && normalizedText.includes('cu')) {
           const match = text.match(/conecteaza\s+(.+?)\s+cu\s+(.+)/i);
           if (match) {
-            const name1 = match[1].trim(), name2 = match[2].trim();
-            try {
-              const saved = await AsyncStorage.getItem(canvasKey);
-              const ws = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
-              const n1 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name1.toLowerCase()));
-              const n2 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name2.toLowerCase()));
-              if (n1 && n2) {
-                if (!ws.connections.find((c: any) => c.fromId === n1.id && c.toId === n2.id)) {
-                  ws.connections.push({ fromId: n1.id, toId: n2.id });
-                  await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
-                }
-                response = `✅ Am conectat **${n1.title}** → **${n2.title}** pe canvas! 🔗`;
-              } else { response = `❌ Nu am găsit nodurile. Pe canvas ai: ${ws.nodes.map((n: any) => n.title).join(', ') || 'nimic'}`; }
-            } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
+              const name1 = match[1].trim(), name2 = match[2].trim();
+              try {
+                  const saved = await AsyncStorage.getItem(canvasKey);
+                  const ws = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+                  const n1 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name1.toLowerCase()));
+                  const n2 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name2.toLowerCase()));
+                  if (n1 && n2) {
+                      if (!ws.connections.find((c: any) => c.fromId === n1.id && c.toId === n2.id)) {
+                          ws.connections.push({ fromId: n1.id, toId: n2.id });
+                          await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
+                      }
+                      response = `✅ Am conectat **${n1.title}** → **${n2.title}** pe canvas! 🔗`;
+                  } else { response = `❌ Nu am găsit nodurile. Pe canvas ai: ${ws.nodes.map((n: any) => n.title).join(', ') || 'nimic'}`; }
+              } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
           }
-      } 
-      else if (normalizedText.startsWith('sterge agent')) {
+      } else if (normalizedText.startsWith('sterge agent')) {
           const name = text.replace(/sterge agent /i, '').trim().toLowerCase();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name);
@@ -330,25 +298,25 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               await deleteSubAgent(agent.id); 
               const saved = await AsyncStorage.getItem(canvasKey);
               if (saved) {
-                  const ws = JSON.parse(saved);
+                  const ws = JSON.JSON.parse(saved);
                   ws.nodes = ws.nodes.filter((n: any) => n.id !== agent.id && n.config?.agentId !== agent.id);
                   ws.connections = ws.connections.filter((c: any) => c.fromId !== agent.id && c.toId !== agent.id);
                   await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
               }
               response = `Agentul **${agent.name}** a fost șters. 🗑️`; 
           } else response = `Nu am găsit agentul **${name}**.`;
-      } 
-      else if (normalizedText.includes('ce e pe canvas') || normalizedText.includes('afiseaza canvas')) {
+      } else if (normalizedText.includes('reseteaza studio') || normalizedText.includes('reset studio')) {
+          await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2', '@jarvis_default_agents_seeded']);
+          response = "✅ Code Studio a fost resetat complet. 🧼";
+      } else if (normalizedText.includes('afiseaza canvas') || normalizedText.includes('ce e pe canvas')) {
           const saved = await AsyncStorage.getItem(canvasKey);
           if (saved) {
               const ws = JSON.parse(saved);
-              const items = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('\n• ');
-              response = items ? `📊 **Pe canvas ai:**\n• ${items}` : "Canvas-ul este gol. 🎨";
-          } else response = "Canvas-ul este gol. 🎨";
-      }
-      else if ((normalizedText.includes('reseteaza') || normalizedText.includes('reset')) && (normalizedText.includes('studio') || normalizedText.includes('canvas'))) {
-          await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2', '@jarvis_default_agents_seeded']);
-          response = "✅ Code Studio a fost resetat complet. 🧼";
+              const items = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('
+• ');
+              response = items ? `📊 **Elemente pe canvas:**
+• ${items}` : "Canvas-ul este gol. 🎨";
+          } else { response = "Canvas-ul este gol. 🎨"; }
       }
 
       if (response) {
@@ -360,40 +328,42 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Orchestrator Routing
-      try {
-        const intent = await orchestrator.analyzeIntent(text);
-        console.log(`[Brain] Intent complexity: ${intent.complexity}, skill: ${intent.skill.id}`);
-        
-        if (intent.complexity !== 'simple') {
+      const intent = await orchestrator.analyzeIntent(text);
+      console.log('[Brain] Intent complexity:', intent.complexity, 'skill:', intent.skill.id);
+      
+      if (intent.complexity !== 'simple') {
           const result = await orchestrator.route(text);
-          console.log(`[Brain] Orchestrator result success: ${result.success}, agent: ${result.agentUsed}, response length: ${result.response?.length}`);
+          console.log('[Brain] Orchestrator result success:', result.success, 'agent:', result.agentUsed, 'response length:', result.response?.length);
           
           if (result.success && result.response && result.response.trim().length > 0) {
-            let content = result.response;
-            if (result.wasAutoCreated) {
-              content = `💡 *Am creat automat agentul **${result.agentUsed}** pentru această sarcină.*\n\n${content}`;
-            }
-            const agentBadge = result.agentUsed ? `🤖 **[${result.agentUsed}]**\n\n` : '';
-            const finalMsg: Message = {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: agentBadge + content,
-              timestamp: new Date()
-            };
-            setMessages(prev => [...prev, finalMsg]);
-            persist([...messages, userMsg, finalMsg], brainRef.current);
-            setLastProvider(result.agentUsed || 'Agent');
-            setIsThinking(false);
-            isProcessing.current = false;
-            return;
+              let content = result.response;
+              if (result.wasAutoCreated) {
+                  content = `💡 *Am creat automat agentul **${result.agentUsed}**.*
+
+${content}`;
+              }
+              const agentBadge = result.agentUsed ? `🤖 **[${result.agentUsed}]**
+
+` : '';
+              const finalMsg: Message = { 
+                  id: Date.now().toString(), 
+                  role: 'assistant', 
+                  content: agentBadge + content, 
+                  timestamp: new Date() 
+              };
+              const nextMsgs = [...messages, userMsg, finalMsg];
+              setMessages(nextMsgs); 
+              persist(nextMsgs, brainRef.current);
+              setLastProvider(result.agentUsed || 'Agent');
+              setIsThinking(false);
+              isProcessing.current = false; 
+              return;
           }
-          console.log('[Brain] Agent failed or empty, falling back to normal flow.');
-        }
-      } catch(orchErr) {
-        console.error('[Brain] Orchestrator exception:', orchErr);
+          // If agent failed or returned empty, fall back to normal flow
+          console.log('[Brain] Agent failed or empty, falling back to normal flow');
       }
 
-      // 3. Normal Flow
+      // 3. Normal Flow (Groq/OpenRouter fallback)
       const currentHistory = [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }));
       if (aiProvider.settings.activeProvider !== 'none') {
           const cloudCtx = await buildCloudCtx(text);
@@ -401,7 +371,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
           const aiResult = await aiProvider.generateStream(text, (chunk) => {
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
-          }, cloudCtx, currentHistory, 'general');
+          }, cloudCtx, currentHistory as any, 'general');
           if (aiResult) {
               autoLearnFromWeb(aiResult.text, aiResult.provider, text);
               setLastProvider(aiResult.provider.toUpperCase());
@@ -422,10 +392,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       persist(messages, brainRef.current);
     } catch (error) {
       console.error('[Jarvis] sendMessage error:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const fallbackMsg: Message = { id: Date.now().toString(), role: 'assistant', content: `A apărut o eroare neașteptată: ${errMsg}`, timestamp: new Date() };
+      setMessages(prev => [...prev, fallbackMsg]);
+      persist([...messages, userMsg, fallbackMsg], brainRef.current);
     } finally {
       setIsThinking(false); isProcessing.current = false;
     }
-  }, [messages, aiProvider, buildCloudCtx, autoLearnFromWeb, _handleOfflineFallback, persist, persistEntities]);
+  }, [messages, aiProvider, buildCloudCtx, autoLearnFromWeb, _handleOfflineFallback, persist, persistEntities, setMessages, setIsThinking, isProcessing, setLastProvider, setBrainState]);
 
   return (
     <BrainContext.Provider value={{
