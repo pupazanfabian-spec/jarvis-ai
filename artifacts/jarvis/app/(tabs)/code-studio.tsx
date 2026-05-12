@@ -20,6 +20,7 @@ import Svg, { Path, Circle, Polygon, Text as SvgText, Defs, LinearGradient, Stop
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as keyManager from '@/engine/code-studio/keyManager';
 import { 
   Skill, 
@@ -44,7 +45,7 @@ import { useAIProvider } from '@/context/AIProviderContext';
 import { useBrain } from '@/context/BrainContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CANVAS_SIZE = 5000; // Increased for better exploration
+const CANVAS_SIZE = 5000;
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 120;
 
@@ -82,77 +83,86 @@ const CATEGORY_ICONS = {
 // ─── Memoized Components ─────────────────────────────────────────────────────
 
 const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: any) => {
+  if (!connections || !nodes) return null;
+  
   return connections.map((conn: Connection, index: number) => {
-    const fromNode = nodes.find((n: Node) => n.id === conn.fromId);
-    const toNode = nodes.find((n: Node) => n.id === conn.toId);
-    if (!fromNode || !toNode) return null;
-    
-    const x1 = fromNode.x + NODE_WIDTH;
-    const y1 = fromNode.y + NODE_HEIGHT / 2;
-    const x2 = toNode.x;
-    const y2 = toNode.y + NODE_HEIGHT / 2;
-    
-    const midX = (x1 + x2) / 2;
-    const midY = (y1 + y2) / 2;
+    try {
+        const fromNode = nodes.find((n: Node) => n.id === conn.fromId);
+        const toNode = nodes.find((n: Node) => n.id === conn.toId);
+        if (!fromNode || !toNode) return null;
+        
+        const x1 = (fromNode.x || 0) + NODE_WIDTH;
+        const y1 = (fromNode.y || 0) + NODE_HEIGHT / 2;
+        const x2 = (toNode.x || 0);
+        const y2 = (toNode.y || 0) + NODE_HEIGHT / 2;
+        
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
 
-    const path = `M ${x1} ${y1} C ${x1 + (x2 - x1) / 2} ${y1}, ${x1 + (x2 - x1) / 2} ${y2}, ${x2} ${y2}`;
-    
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const arrowSize = 10;
-    const ax1 = x2 - arrowSize * Math.cos(angle - Math.PI / 6);
-    const ay1 = y2 - arrowSize * Math.sin(angle - Math.PI / 6);
-    const ax2 = x2 - arrowSize * Math.cos(angle + Math.PI / 6);
-    const ay2 = y2 - arrowSize * Math.sin(angle + Math.PI / 6);
+        const path = `M ${x1} ${y1} C ${x1 + (x2 - x1) / 2} ${y1}, ${x1 + (x2 - x1) / 2} ${y2}, ${x2} ${y2}`;
+        
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const arrowSize = 10;
+        const ax1 = x2 - arrowSize * Math.cos(angle - Math.PI / 6);
+        const ay1 = y2 - arrowSize * Math.sin(angle - Math.PI / 6);
+        const ax2 = x2 - arrowSize * Math.cos(angle + Math.PI / 6);
+        const ay2 = y2 - arrowSize * Math.sin(angle + Math.PI / 6);
 
-    return (
-      <React.Fragment key={`conn-${index}`}>
-        <Path 
-          d={path} 
-          stroke={`url(#grad-${index})`} 
-          strokeWidth="3" 
-          fill="none" 
-          opacity={0.8} 
-        />
-        <Polygon 
-          points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} 
-          fill={CATEGORY_COLORS[fromNode.type as NodeType]} 
-          opacity={1} 
-        />
-        <Circle 
-          cx={midX} 
-          cy={midY} 
-          r="12" 
-          fill="#1e293b" 
-          stroke="#ef4444" 
-          strokeWidth="1" 
-        />
-        <SvgText 
-          x={midX} 
-          y={midY + 4} 
-          fontSize="12" 
-          fill="#ef4444" 
-          textAnchor="middle" 
-          fontWeight="bold"
-          onPress={() => deleteConnection(conn)}
-        >
-          ×
-        </SvgText>
-        <SvgText 
-          x={midX} 
-          y={midY - 15} 
-          fontSize="10" 
-          fill="#94a3b8" 
-          textAnchor="middle"
-        >
-          →
-        </SvgText>
-      </React.Fragment>
-    );
+        const colorFrom = CATEGORY_COLORS[fromNode.type as NodeType] || '#ccc';
+
+        return (
+          <React.Fragment key={`conn-${index}`}>
+            <Path 
+              d={path} 
+              stroke={`url(#grad-${index})`} 
+              strokeWidth="3" 
+              fill="none" 
+              opacity={0.8} 
+            />
+            <Polygon 
+              points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} 
+              fill={colorFrom} 
+              opacity={1} 
+            />
+            <Circle 
+              cx={midX} 
+              cy={midY} 
+              r="12" 
+              fill="#1e293b" 
+              stroke="#ef4444" 
+              strokeWidth="1" 
+            />
+            <SvgText 
+              x={midX} 
+              y={midY + 4} 
+              fontSize="12" 
+              fill="#ef4444" 
+              textAnchor="middle" 
+              fontWeight="bold"
+              onPress={() => deleteConnection(conn)}
+            >
+              ×
+            </SvgText>
+            <SvgText 
+              x={midX} 
+              y={midY - 15} 
+              fontSize="10" 
+              fill="#94a3b8" 
+              textAnchor="middle"
+            >
+              →
+            </SvgText>
+          </React.Fragment>
+        );
+    } catch (e) {
+        console.error('Error rendering connection line', e);
+        return null;
+    }
   });
 });
 
 const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig, onRun, onDelete, isSelected, onDragStart, onDragEnd, isActive, priority }: any) => {
-  const pan = useRef(new Animated.ValueXY({ x: node.x, y: node.y })).current;
+  const pan = useRef(new Animated.ValueXY({ x: node.x || 0, y: node.y || 0 })).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -169,28 +179,37 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
   }, [isSelected, isActive]);
 
   useEffect(() => {
-    pan.setValue({ x: node.x, y: node.y });
+    pan.setValue({ x: node.x || 0, y: node.y || 0 });
   }, [node.x, node.y]);
 
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2,
     onPanResponderGrant: () => {
-      pan.setOffset({ x: (pan.x as any)._value, y: (pan.y as any)._value });
-      pan.setValue({ x: 0, y: 0 });
-      onDragStart();
+      try {
+        const currentX = (pan.x as any)._value || 0;
+        const currentY = (pan.y as any)._value || 0;
+        pan.setOffset({ x: currentX, y: currentY });
+        pan.setValue({ x: 0, y: 0 });
+        onDragStart();
+      } catch (e) { console.warn('Pan grant error', e); }
     },
     onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => {
-      pan.flattenOffset();
-      onDragEnd();
-      onFinalizePosition(node.id, (pan.x as any)._value, (pan.y as any)._value);
+      try {
+        pan.flattenOffset();
+        onDragEnd();
+        const finalX = (pan.x as any)._value || 0;
+        const finalY = (pan.y as any)._value || 0;
+        onFinalizePosition(node.id, finalX, finalY);
+      } catch (e) { console.warn('Pan release error', e); }
     },
   })).current;
 
+  const nodeColor = CATEGORY_COLORS[node.type as NodeType] || '#ccc';
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#334155', isActive ? '#10b981' : CATEGORY_COLORS[node.type as NodeType]]
+    outputRange: ['#334155', isActive ? '#10b981' : nodeColor]
   });
 
   return (
@@ -201,7 +220,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
           position: 'absolute', 
           left: pan.x, 
           top: pan.y, 
-          borderLeftColor: CATEGORY_COLORS[node.type as NodeType], 
+          borderLeftColor: nodeColor, 
           borderColor: (isSelected || isActive) ? borderColor : '#334155', 
           borderWidth: (isSelected || isActive) ? 2 : 1 
         }
@@ -209,7 +228,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
       {...panResponder.panHandlers}
     >
       <View style={styles.nodeHeader}>
-        <Ionicons name={CATEGORY_ICONS[node.type as NodeType] as any} size={20} color={CATEGORY_COLORS[node.type as NodeType]} />
+        <Ionicons name={(CATEGORY_ICONS[node.type as NodeType] as any) || 'help-outline'} size={20} color={nodeColor} />
         <View style={styles.nodeActions}>
           <TouchableOpacity onPress={onRun} style={styles.nodeMiniBtn}><Ionicons name="play" size={12} color="#fff" /></TouchableOpacity>
           <TouchableOpacity onPress={onConfig} style={styles.nodeMiniBtn}><Ionicons name="settings" size={12} color="#fff" /></TouchableOpacity>
@@ -217,10 +236,10 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
         </View>
       </View>
       <View>
-        <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
-        <Text style={styles.nodeType}>{node.type}</Text>
+        <Text style={styles.nodeTitle} numberOfLines={1}>{node.title || 'Untitled'}</Text>
+        <Text style={styles.nodeType}>{node.type || 'Unknown'}</Text>
       </View>
-      {priority && <View style={styles.priorityBadge}><Text style={styles.priorityText}>P{priority}</Text></View>}
+      {priority !== undefined && <View style={styles.priorityBadge}><Text style={styles.priorityText}>P{priority}</Text></View>}
       <TouchableOpacity style={styles.connectPlusBtn} onPress={onPress}>
         <Ionicons name="add" size={14} color="#fff" />
       </TouchableOpacity>
@@ -231,6 +250,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function CodeStudio() {
+  const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<ViewMode>('canvas');
   const [nodes, setNodes] = useState<Node[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -249,20 +269,19 @@ export default function CodeStudio() {
   const canvasPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
   const canvasPanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: (evt) => {
-        // Only start panning if we are NOT touching a node
-        return !isDragging;
-    },
-    onMoveShouldSetPanResponder: (_, gs) => {
-        return !isDragging && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2);
-    },
+    onStartShouldSetPanResponder: () => !isDragging,
+    onMoveShouldSetPanResponder: (_, gs) => !isDragging && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2),
     onPanResponderGrant: () => {
-        canvasPan.setOffset({ x: (canvasPan.x as any)._value, y: (canvasPan.y as any)._value });
-        canvasPan.setValue({ x: 0, y: 0 });
+        try {
+            const currentX = (canvasPan.x as any)._value || 0;
+            const currentY = (canvasPan.y as any)._value || 0;
+            canvasPan.setOffset({ x: currentX, y: currentY });
+            canvasPan.setValue({ x: 0, y: 0 });
+        } catch (e) { console.warn('Canvas pan grant error', e); }
     },
     onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: canvasPan.y }], { useNativeDriver: false }),
     onPanResponderRelease: () => {
-        canvasPan.flattenOffset();
+        try { canvasPan.flattenOffset(); } catch (e) { console.warn('Canvas pan release error', e); }
     },
   })).current;
 
@@ -299,14 +318,16 @@ export default function CodeStudio() {
 
   const initWorkspace = useCallback(async () => {
     try {
-      await keyManager.syncKeysFromContext(settings);
+      if (keyManager && keyManager.syncKeysFromContext) {
+        await keyManager.syncKeysFromContext(settings);
+      }
       const [sa, sk, saved] = await Promise.all([
         getSubAgents(),
         getAllSkills(),
         AsyncStorage.getItem('@code_studio_workspace')
       ]);
-      setSubAgents(sa);
-      setAllSkills(sk);
+      setSubAgents(sa || []);
+      setAllSkills(sk || []);
       if (saved) {
         const parsed = JSON.parse(saved);
         setNodes(parsed.nodes || []);
@@ -345,19 +366,21 @@ export default function CodeStudio() {
   }, [newAgentConfig, nodes, connections, debouncedSave]);
 
   const handleSaveSkill = useCallback(async () => {
-    if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Numele si prompt-ul sunt obligatorii.');
-    const skill: Skill = {
-      id: editingSkill.id || `skill_custom_${Date.now()}`,
-      name: editingSkill.name,
-      category: editingSkill.category || 'custom',
-      systemPrompt: editingSkill.systemPrompt,
-      triggers: editingSkill.triggers || [],
-      examples: editingSkill.examples || [],
-    };
-    await saveSkill(skill);
-    const sk = await getAllSkills();
-    setAllSkills(sk);
-    setIsSkillEditorVisible(false);
+    try {
+        if (!editingSkill.name || !editingSkill.systemPrompt) return Alert.alert('Eroare', 'Numele si prompt-ul sunt obligatorii.');
+        const skill: Skill = {
+          id: editingSkill.id || `skill_custom_${Date.now()}`,
+          name: editingSkill.name,
+          category: editingSkill.category || 'custom',
+          systemPrompt: editingSkill.systemPrompt,
+          triggers: editingSkill.triggers || [],
+          examples: editingSkill.examples || [],
+        };
+        await saveSkill(skill);
+        const sk = await getAllSkills();
+        setAllSkills(sk);
+        setIsSkillEditorVisible(false);
+    } catch (e) { console.error('Error saving skill', e); }
   }, [editingSkill]);
 
   const finalizeNodePosition = useCallback((id: string, x: number, y: number) => {
@@ -416,8 +439,8 @@ export default function CodeStudio() {
               if (!fromNode || !toNode) return null;
               return (
                 <LinearGradient key={`grad-${i}`} id={`grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type as NodeType]} />
-                  <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type as NodeType]} />
+                  <Stop offset="0%" stopColor={CATEGORY_COLORS[fromNode.type as NodeType] || '#ccc'} />
+                  <Stop offset="100%" stopColor={CATEGORY_COLORS[toNode.type as NodeType] || '#ccc'} />
                 </LinearGradient>
               );
             })}
@@ -464,7 +487,7 @@ export default function CodeStudio() {
       </Animated.View>
 
       {/* Zoom Controls */}
-      <View style={styles.zoomControls}>
+      <View style={[styles.zoomControls, { bottom: 90 + insets.bottom }]}>
         <TouchableOpacity style={styles.zoomBtn} onPress={() => setScale(Math.min(scale + 0.1, 2.0))}><Ionicons name="add" size={20} color="#fff" /></TouchableOpacity>
         <TouchableOpacity style={styles.zoomLevel} onPress={() => setScale(1.0)}><Text style={styles.zoomLevelText}>{Math.round(scale * 100)}%</Text></TouchableOpacity>
         <TouchableOpacity style={styles.zoomBtn} onPress={() => setScale(Math.max(scale - 0.1, 0.3))}><Ionicons name="remove" size={20} color="#fff" /></TouchableOpacity>
@@ -484,14 +507,14 @@ export default function CodeStudio() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <SafeAreaView style={styles.header}>
         <View style={styles.tabSwitcher}>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'canvas' && styles.tabBtnActive]} onPress={() => setViewMode('canvas')}><Text style={[styles.tabBtnText, viewMode === 'canvas' && styles.tabBtnTextActive]}>Canvas</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'dashboard' && styles.tabBtnActive]} onPress={() => setViewMode('dashboard')}><Text style={[styles.tabBtnText, viewMode === 'dashboard' && styles.tabBtnTextActive]}>Dashboard</Text></TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.templatesBtn} onPress={() => setIsAddModalVisible(true)}><Ionicons name="layers-outline" size={20} color="#fff" /><Text style={styles.templatesBtnText}>Workspace</Text></TouchableOpacity>
-      </View>
+      </SafeAreaView>
 
       {viewMode === 'canvas' ? renderCanvas() : (
         <View style={styles.dashboard}>
@@ -511,12 +534,10 @@ export default function CodeStudio() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => { setIsWizardVisible(true); setWizardStep(1); }}><Ionicons name="add" size={32} color="#fff" /></TouchableOpacity>
+      <TouchableOpacity style={[styles.fab, { bottom: 80 + insets.bottom }]} onPress={() => { setIsWizardVisible(true); setWizardStep(1); }}><Ionicons name="add" size={32} color="#fff" /></TouchableOpacity>
       <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
 
-      {/* Modals are remains same as before but wrapped in SafeAreaView for fullscreen */}
-      {/* (Truncated for brevity, but I will include them in the full write_file) */}
-
+      {/* Node Add Modal */}
       <Modal visible={isAddModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -546,6 +567,7 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
+      {/* Connection Modal */}
       <Modal visible={isConnectionModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -566,9 +588,9 @@ export default function CodeStudio() {
         </View>
       </Modal>
 
-      {/* Fullscreen Modals */}
+      {/* Fullscreen Wizard */}
       <Modal visible={isWizardVisible} transparent={false} animationType="slide">
-        <SafeAreaView style={styles.fullscreenModal}>
+        <View style={[styles.fullscreenModal, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.wizardContent}>
             <View style={styles.wizardHeader}><Text style={styles.wizardTitle}>{newAgentConfig.id ? 'Editare Agent' : 'Agent Wizard'}</Text><Text style={styles.wizardStep}>Pas {wizardStep}/5</Text></View>
             {wizardStep === 1 && <View style={styles.wizardBody}><Text style={styles.inputLabel}>Nume</Text><TextInput style={styles.input} value={newAgentConfig.name} onChangeText={text => setNewAgentConfig({...newAgentConfig, name: text})} /><Text style={styles.inputLabel}>Descriere</Text><TextInput style={[styles.input, { height: 80 }]} value={newAgentConfig.description} onChangeText={text => setNewAgentConfig({...newAgentConfig, description: text})} multiline /></View>}
@@ -576,11 +598,11 @@ export default function CodeStudio() {
             {wizardStep === 5 && <TouchableOpacity style={styles.finalizeBtn} onPress={handleCreateAgent}><Text style={styles.finalizeBtnText}>Salvează Agent</Text></TouchableOpacity>}
             <View style={styles.wizardFooter}><TouchableOpacity onPress={() => wizardStep > 1 && setWizardStep(wizardStep - 1)} disabled={wizardStep === 1}><Text style={styles.wizardBtnText}>Inapoi</Text></TouchableOpacity><TouchableOpacity onPress={() => setIsWizardVisible(false)}><Text style={styles.closeWizardText}>Anulează</Text></TouchableOpacity>{wizardStep < 5 && <TouchableOpacity onPress={() => setWizardStep(wizardStep + 1)}><Text style={styles.wizardBtnText}>Inainte</Text></TouchableOpacity>}</View>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Toolbar */}
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { height: 70 + insets.bottom, paddingBottom: insets.bottom }]}>
          <TouchableOpacity style={styles.toolbarBtn} onPress={() => setViewMode('canvas')}>
             <Ionicons name="apps-outline" size={24} color={viewMode === 'canvas' ? '#6366f1' : '#94a3b8'} />
             <Text style={[styles.toolbarText, viewMode === 'canvas' && { color: '#6366f1' }]}>Canvas</Text>
@@ -594,13 +616,13 @@ export default function CodeStudio() {
             <Text style={styles.toolbarText}>Wizard</Text>
          </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { height: 60, backgroundColor: '#1e293b', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#334155' },
+  header: { height: 100, backgroundColor: '#1e293b', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#334155' },
   tabSwitcher: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 10, padding: 4 },
   tabBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8 },
   tabBtnActive: { backgroundColor: '#334155' },
@@ -624,12 +646,12 @@ const styles = StyleSheet.create({
   agentCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   agentCardName: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   agentCardMeta: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
-  zoomControls: { position: 'absolute', bottom: 90, left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 5, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5, zIndex: 1001 },
+  zoomControls: { position: 'absolute', left: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e293b', borderRadius: 20, padding: 5, shadowColor: '#000', shadowOpacity: 0.3, elevation: 5, zIndex: 1001 },
   zoomBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
   zoomLevel: { paddingHorizontal: 10 },
   zoomLevelText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  fab: { position: 'absolute', bottom: 80, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 8, zIndex: 1000 },
-  toolbar: { position: 'absolute', bottom: 0, width: '100%', height: 70, backgroundColor: '#1e293b', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155', zIndex: 999, paddingBottom: 10 },
+  fab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center', elevation: 8, zIndex: 1000 },
+  toolbar: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#1e293b', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155', zIndex: 999 },
   toolbarBtn: { alignItems: 'center' },
   toolbarText: { color: '#94a3b8', fontSize: 10, marginTop: 4, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
