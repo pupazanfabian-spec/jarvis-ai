@@ -153,6 +153,12 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
 const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig, onRun, onDelete, isSelected, onDragStart, onDragEnd, isActive, priority }: any) => {
   const pan = useRef(new Animated.ValueXY({ x: node.x || 0, y: node.y || 0 })).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const valRef = useRef({ x: node.x || 0, y: node.y || 0 });
+
+  useEffect(() => {
+    const listener = pan.addListener((v) => { valRef.current = v; });
+    return () => pan.removeListener(listener);
+  }, [pan]);
 
   useEffect(() => {
     if (isSelected || isActive) {
@@ -165,11 +171,11 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
     } else {
       glowAnim.setValue(0);
     }
-  }, [isSelected, isActive]);
+  }, [isSelected, isActive, glowAnim]);
 
   useEffect(() => {
     pan.setValue({ x: node.x || 0, y: node.y || 0 });
-  }, [node.x, node.y]);
+  }, [node.x, node.y, pan]);
 
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -182,11 +188,7 @@ const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig,
     onPanResponderRelease: () => {
       pan.flattenOffset();
       onDragEnd();
-      // Using internal access is risky, but extractOffset/flattenOffset is the standard way to handle moves.
-      // To get the final values safely for the parent state:
-      const finalX = (pan.x as any)._value + (pan.x as any)._offset;
-      const finalY = (pan.y as any)._value + (pan.y as any)._offset;
-      onFinalizePosition(node.id, finalX, finalY);
+      onFinalizePosition(node.id, valRef.current.x, valRef.current.y);
     },
   })).current;
 
@@ -366,8 +368,7 @@ export default function CodeStudio() {
                 transform: [
                     { scale },
                     { translateX: canvasPan.x },
-                    { translateY: canvasPan.y },
-                    { perspective: 1000 }
+                    { translateY: canvasPan.y }
                 ],
                 transformOrigin: ['0%', '0%', 0]
             }
