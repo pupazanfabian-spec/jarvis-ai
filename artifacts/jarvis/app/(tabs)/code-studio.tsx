@@ -12,15 +12,16 @@ import {
   Dimensions,
   SafeAreaView,
   PanResponder,
+  Animated,
 } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Defs, Marker, Polygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CANVAS_SIZE = 2000;
-const NODE_WIDTH = 160;
-const NODE_HEIGHT = 80;
+const NODE_WIDTH = 180;
+const NODE_HEIGHT = 100;
 
 type NodeType = 'Agent' | 'Skill' | 'Tool' | 'Output';
 
@@ -74,9 +75,9 @@ export default function CodeStudio() {
       } else {
         const initialNodes: Node[] = [
           { id: '1', type: 'Agent', title: 'Groq Agent', x: 100, y: 150, config: { apiKey: '' } },
-          { id: '2', type: 'Skill', title: 'React Native UI', x: 300, y: 150, config: { prompt: 'Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.' } },
-          { id: '3', type: 'Tool', title: 'Web Search', x: 500, y: 150, config: { engine: 'DuckDuckGo' } },
-          { id: '4', type: 'Output', title: 'Chat Display', x: 700, y: 150, config: { destination: 'Chat Display' } },
+          { id: '2', type: 'Skill', title: 'React Native UI', x: 350, y: 150, config: { prompt: 'Esti expert React Native + Expo. Folosesti hooks, TypeScript, si optimizezi performanta componentelor mobile.' } },
+          { id: '3', type: 'Tool', title: 'Web Search', x: 600, y: 150, config: { engine: 'DuckDuckGo' } },
+          { id: '4', type: 'Output', title: 'Chat Display', x: 850, y: 150, config: { destination: 'Chat Display' } },
         ];
         const initialConnections: Connection[] = [
           { fromId: '1', toId: '2' },
@@ -125,12 +126,29 @@ export default function CodeStudio() {
        defaultConfig = { destination: 'Chat Display' };
     }
 
+    // Ensure gap of at least 20px
+    let newX = 100 + nodes.length * 40;
+    let newY = 100 + (nodes.length % 8) * 80;
+    
+    // Simple collision avoidance
+    const hasCollision = (x: number, y: number) => {
+      return nodes.some(n => Math.abs(n.x - x) < NODE_WIDTH + 20 && Math.abs(n.y - y) < NODE_HEIGHT + 20);
+    };
+
+    while (hasCollision(newX, newY)) {
+      newX += 50;
+      if (newX > CANVAS_SIZE - NODE_WIDTH) {
+        newX = 100;
+        newY += 100;
+      }
+    }
+
     const newNode: Node = {
       id: Math.random().toString(36).substr(2, 9),
       type: nodeTypeToCreate,
       title: defaultTitle,
-      x: 100 + nodes.length * 20,
-      y: 100 + (nodes.length % 8) * 60,
+      x: newX,
+      y: newY,
       config: defaultConfig,
     };
     const updatedNodes = [...nodes, newNode];
@@ -144,10 +162,11 @@ export default function CodeStudio() {
     setNodes(prev => prev.map(n => n.id === id ? { ...n, x, y } : n));
   };
 
-  const finalizeNodePosition = () => {
+  const finalizeNodePosition = (id: string, x: number, y: number) => {
     setNodes(currentNodes => {
-      saveWorkspace(currentNodes, connections);
-      return currentNodes;
+      const updated = currentNodes.map(n => n.id === id ? { ...n, x, y } : n);
+      saveWorkspace(updated, connections);
+      return updated;
     });
   };
 
@@ -202,6 +221,19 @@ export default function CodeStudio() {
     Alert.alert('Flux Rulat', 'Fluxul de lucru a fost procesat de Jarvis.');
   };
 
+  const renderGrid = () => {
+    const dots = [];
+    const step = 40;
+    for (let x = 0; x < CANVAS_SIZE; x += step) {
+      for (let y = 0; y < CANVAS_SIZE; y += step) {
+        dots.push(
+          <Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.03)" />
+        );
+      }
+    }
+    return dots;
+  };
+
   const renderConnections = () => {
     return connections.map((conn, index) => {
       const fromNode = nodes.find((n) => n.id === conn.fromId);
@@ -220,6 +252,16 @@ export default function CodeStudio() {
       const cy2 = y2;
 
       const path = `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
+      
+      // Calculate arrowhead
+      const t = 0.95; // Point near the end for tangent
+      const tx = (1-t)**3 * x1 + 3*(1-t)**2*t*cx1 + 3*(1-t)*t**2*cx2 + t**3*x2;
+      const ty = (1-t)**3 * y1 + 3*(1-t)**2*t*cy1 + 3*(1-t)*t**2*cy2 + t**3*y2;
+      const angle = Math.atan2(y2 - ty, x2 - tx);
+      const arrowSize = 8;
+      const arrowP1 = `${x2},${y2}`;
+      const arrowP2 = `${x2 - arrowSize * Math.cos(angle - Math.PI/6)},${y2 - arrowSize * Math.sin(angle - Math.PI/6)}`;
+      const arrowP3 = `${x2 - arrowSize * Math.cos(angle + Math.PI/6)},${y2 - arrowSize * Math.sin(angle + Math.PI/6)}`;
 
       return (
         <React.Fragment key={`conn-${index}`}>
@@ -227,11 +269,14 @@ export default function CodeStudio() {
             d={path}
             stroke={CATEGORY_COLORS[fromNode.type]}
             strokeWidth="3"
-            strokeOpacity="0.6"
+            strokeOpacity="0.8"
             fill="none"
           />
           <Circle cx={x1} cy={y1} r="4" fill={CATEGORY_COLORS[fromNode.type]} />
-          <Circle cx={x2} cy={y2} r="4" fill={CATEGORY_COLORS[fromNode.type]} />
+          <Polygon
+            points={`${arrowP1} ${arrowP2} ${arrowP3}`}
+            fill={CATEGORY_COLORS[fromNode.type]}
+          />
         </React.Fragment>
       );
     });
@@ -243,10 +288,10 @@ export default function CodeStudio() {
         <Text style={styles.headerTitle}>🎯 Jarvis Code Studio</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerIcon} onPress={initWorkspace}>
-            <Ionicons name="refresh-outline" size={20} color="#6366f1" />
+            <Ionicons name="refresh-outline" size={22} color="#6366f1" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon} onPress={runWorkflow}>
-            <Ionicons name="play" size={20} color="#10b981" />
+            <Ionicons name="play" size={22} color="#10b981" />
           </TouchableOpacity>
         </View>
       </View>
@@ -264,6 +309,7 @@ export default function CodeStudio() {
         >
           <View style={styles.canvas}>
             <Svg style={StyleSheet.absoluteFill}>
+              {renderGrid()}
               {renderConnections()}
             </Svg>
             {nodes.map((node) => (
@@ -287,7 +333,7 @@ export default function CodeStudio() {
         style={styles.floatingAddButton} 
         onPress={() => { setSelectedCategory(null); setIsAddModalVisible(true); }}
       >
-        <Ionicons name="add" size={32} color="#fff" />
+        <Ionicons name="add" size={36} color="#fff" />
       </TouchableOpacity>
 
       <View style={styles.toolbar}>
@@ -297,7 +343,7 @@ export default function CodeStudio() {
         <ToolbarItem icon="paper-plane" label="Output" color={CATEGORY_COLORS.Output} onPress={() => { setSelectedCategory('Output'); setIsAddModalVisible(true); }} />
       </View>
 
-      {/* Modals remain mostly the same but with updated logic if needed */}
+      {/* Modals */}
       <Modal visible={isAddModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -400,7 +446,7 @@ export default function CodeStudio() {
 interface NodeCardProps {
   node: Node;
   updateNodePosition: (id: string, x: number, y: number) => void;
-  onFinalizePosition: () => void;
+  onFinalizePosition: (id: string, x: number, y: number) => void;
   onPress: () => void;
   onLongPress: () => void;
   isSelected: boolean;
@@ -409,10 +455,21 @@ interface NodeCardProps {
 }
 
 function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLongPress, isSelected, onDragStart, onDragEnd }: NodeCardProps) {
-  const nodeRef = useRef(node);
+  const startPos = useRef({ x: 0, y: 0 });
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    nodeRef.current = node;
-  }, [node]);
+    if (isSelected) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 1000, useNativeDriver: false }),
+        ])
+      ).start();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [isSelected]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -421,36 +478,19 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
         return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
       },
       onPanResponderGrant: () => {
+        startPos.current = { x: node.x, y: node.y };
         onDragStart();
       },
       onPanResponderMove: (_, gestureState) => {
-        const newX = nodeRef.current.x + gestureState.dx;
-        const newY = nodeRef.current.y + gestureState.dy;
-        updateNodePosition(nodeRef.current.id, newX, newY);
+        const newX = startPos.current.x + gestureState.dx;
+        const newY = startPos.current.y + gestureState.dy;
+        updateNodePosition(node.id, newX, newY);
       },
-      onPanResponderRelease: async (_, gestureState) => {
+      onPanResponderRelease: (_, gestureState) => {
         onDragEnd();
-        const finalX = nodeRef.current.x + gestureState.dx;
-        const finalY = nodeRef.current.y + gestureState.dy;
-        
-        // Sync final position to parent and then save
-        updateNodePosition(nodeRef.current.id, finalX, finalY);
-        
-        // Get current workspace and save
-        try {
-          const saved = await AsyncStorage.getItem('@code_studio_workspace');
-          if (saved) {
-            const workspace = JSON.parse(saved);
-            workspace.nodes = workspace.nodes.map((n: any) => 
-              n.id === nodeRef.current.id ? { ...n, x: finalX, y: finalY } : n
-            );
-            await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify(workspace));
-          }
-        } catch (e) {
-          console.error('Failed to save position on release', e);
-        }
-        
-        onFinalizePosition();
+        const finalX = startPos.current.x + gestureState.dx;
+        const finalY = startPos.current.y + gestureState.dy;
+        onFinalizePosition(node.id, finalX, finalY);
       },
       onPanResponderTerminate: () => {
         onDragEnd();
@@ -458,8 +498,13 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
     })
   ).current;
 
+  const borderColor = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#334155', CATEGORY_COLORS[node.type]],
+  });
+
   return (
-    <View
+    <Animated.View
       style={[
         styles.node,
         {
@@ -467,9 +512,11 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
           left: node.x,
           top: node.y,
           borderLeftColor: CATEGORY_COLORS[node.type],
-          borderColor: isSelected ? '#ffffff' : '#334155',
+          borderColor: isSelected ? borderColor : '#334155',
           borderWidth: isSelected ? 2 : 1,
           zIndex: isSelected ? 10 : 1,
+          shadowOpacity: isSelected ? 0.6 : 0.3,
+          transform: [{ scale: isSelected ? 1.05 : 1 }],
         },
       ]}
       {...panResponder.panHandlers}
@@ -481,13 +528,13 @@ function NodeCard({ node, updateNodePosition, onFinalizePosition, onPress, onLon
         delayLongPress={500}
       >
         <View style={styles.nodeHeader}>
-          <Ionicons name={CATEGORY_ICONS[node.type] as any} size={18} color={CATEGORY_COLORS[node.type]} />
-          <View style={styles.statusDot} />
+          <Ionicons name={CATEGORY_ICONS[node.type] as any} size={28} color={CATEGORY_COLORS[node.type]} />
+          <View style={[styles.statusDot, { backgroundColor: node.config ? '#10b981' : '#94a3b8' }]} />
         </View>
         <Text style={styles.nodeTitle} numberOfLines={1}>{node.title}</Text>
         <Text style={styles.nodeSubtitle}>{node.type}</Text>
       </TouchableOpacity>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -495,9 +542,9 @@ function ToolbarItem({ icon, label, color, onPress }: { icon: string; label: str
   return (
     <TouchableOpacity style={styles.toolbarItem} onPress={onPress}>
       <View style={[styles.toolbarIcon, { backgroundColor: color + '15' }]}>
-        <Ionicons name={`${icon}-outline` as any} size={22} color={color} />
+        <Ionicons name={`${icon}-outline` as any} size={26} color={color} />
       </View>
-      <Text style={styles.toolbarLabel}>{label}</Text>
+      <Text style={[styles.toolbarLabel, { color: '#f8fafc' }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -508,14 +555,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
   header: {
-    height: 60,
-    backgroundColor: '#111827',
+    height: 64,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#1e293b',
+    zIndex: 100,
   },
   headerTitle: {
     color: '#fff',
@@ -527,29 +575,29 @@ const styles = StyleSheet.create({
   },
   headerIcon: {
     marginLeft: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#1e293b',
     alignItems: 'center',
     justifyContent: 'center',
   },
   floatingAddButton: {
     position: 'absolute',
-    bottom: 90,
+    bottom: 100,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#6366f1',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
-    zIndex: 10,
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 50,
   },
   canvas: {
     width: CANVAS_SIZE,
@@ -558,81 +606,80 @@ const styles = StyleSheet.create({
   },
   node: {
     width: NODE_WIDTH,
-    padding: 12,
+    padding: 16,
     backgroundColor: '#1e293b',
     borderRadius: 16,
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 12,
   },
   nodeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10b981',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   nodeTitle: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   nodeSubtitle: {
     color: '#94a3b8',
     fontSize: 11,
     textTransform: 'uppercase',
-    marginTop: 2,
+    marginTop: 4,
+    fontWeight: '600',
   },
   toolbar: {
-    height: 80,
+    height: 90,
     backgroundColor: '#111827',
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#1e293b',
-    paddingBottom: 10,
+    paddingBottom: 20,
   },
   toolbarItem: {
     alignItems: 'center',
   },
   toolbarIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   toolbarLabel: {
-    color: '#94a3b8',
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.85)',
+    backgroundColor: 'rgba(2, 6, 23, 0.9)',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#1e293b',
-    borderRadius: 28,
+    borderRadius: 32,
     padding: 24,
     borderWidth: 1,
     borderColor: '#334155',
   },
   modalTitle: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
@@ -646,41 +693,42 @@ const styles = StyleSheet.create({
     width: '48%',
     backgroundColor: '#0f172a',
     padding: 20,
-    borderRadius: 20,
-    borderLeftWidth: 4,
+    borderRadius: 24,
+    borderLeftWidth: 5,
     marginBottom: 16,
     alignItems: 'center',
+    elevation: 4,
   },
   addNodeText: {
     color: '#fff',
-    marginTop: 10,
+    marginTop: 12,
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 15,
   },
   closeButton: {
-    marginTop: 16,
+    marginTop: 20,
     alignItems: 'center',
-    padding: 10,
+    padding: 12,
   },
   closeButtonText: {
     color: '#94a3b8',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   inputLabel: {
     color: '#94a3b8',
     fontSize: 14,
     marginBottom: 8,
     marginTop: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   input: {
     backgroundColor: '#0f172a',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     color: '#fff',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#475569',
     fontSize: 16,
   },
   modalFooter: {
@@ -690,18 +738,23 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 14,
+    padding: 18,
+    borderRadius: 16,
     alignItems: 'center',
-    marginHorizontal: 6,
+    marginHorizontal: 8,
   },
   deleteButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1,
     borderColor: '#ef4444',
   },
   saveButton: {
     backgroundColor: '#6366f1',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   footerButtonText: {
     color: '#fff',
@@ -709,4 +762,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
 
