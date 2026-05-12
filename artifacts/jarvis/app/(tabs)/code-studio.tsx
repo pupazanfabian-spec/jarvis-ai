@@ -44,7 +44,7 @@ import { useAIProvider } from '@/context/AIProviderContext';
 import { useBrain } from '@/context/BrainContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CANVAS_SIZE = 5000;
+const CANVAS_SIZE = 2000;
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 120;
 
@@ -266,6 +266,18 @@ export default function CodeStudio() {
     },
   })).current;
 
+  // Memoized Grid to save memory
+  const memoizedGrid = useMemo(() => {
+    const dots = [];
+    const step = 100; // Increased step for performance
+    for (let x = 0; x < CANVAS_SIZE; x += step) {
+      for (let y = 0; y < CANVAS_SIZE; y += step) {
+        dots.push(<Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
+      }
+    }
+    return dots;
+  }, []);
+
   // Save Debounce
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
   const debouncedSave = useCallback((newNodes: Node[], newConnections: Connection[]) => {
@@ -370,7 +382,7 @@ export default function CodeStudio() {
                     { translateX: canvasPan.x },
                     { translateY: canvasPan.y }
                 ],
-                transformOrigin: ['0%', '0%', 0]
+                transformOrigin: [0, 0, 0] // Fix: Numbers only
             }
         ]}
       >
@@ -388,7 +400,7 @@ export default function CodeStudio() {
               );
             })}
           </Defs>
-          {renderGrid()}
+          {memoizedGrid}
           <ConnectionLines connections={connections} nodes={nodes} deleteConnection={handleDeleteConnection} />
         </Svg>
         {(nodes || []).map((node) => (
@@ -438,20 +450,9 @@ export default function CodeStudio() {
     </View>
   );
 
-  const renderGrid = () => {
-    const dots = [];
-    const step = 50;
-    for (let x = 0; x < 2000; x += step) {
-      for (let y = 0; y < 2000; y += step) {
-        dots.push(<Circle key={`dot-${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(255,255,255,0.1)" />);
-      }
-    }
-    return dots;
-  };
-
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12, minHeight: 60 + insets.top }]}>
         <View style={styles.tabSwitcher}>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'canvas' && styles.tabBtnActive]} onPress={() => setViewMode('canvas')}><Text style={[styles.tabBtnText, viewMode === 'canvas' && styles.tabBtnTextActive]}>Canvas</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, viewMode === 'dashboard' && styles.tabBtnActive]} onPress={() => setViewMode('dashboard')}><Text style={[styles.tabBtnText, viewMode === 'dashboard' && styles.tabBtnTextActive]}>Dashboard</Text></TouchableOpacity>
@@ -572,7 +573,7 @@ export default function CodeStudio() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { height: 100, backgroundColor: '#1e293b', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#334155' },
+  header: { backgroundColor: '#1e293b', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#334155' },
   tabSwitcher: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 10, padding: 4 },
   tabBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8 },
   tabBtnActive: { backgroundColor: '#334155' },
