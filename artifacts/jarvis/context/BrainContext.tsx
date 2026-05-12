@@ -537,35 +537,30 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ─── Sub-Agent Auto-Delegation by Trigger ──────────────────────────────
+      // ─── Sub-Agent Auto-Delegation ──────────────────────────────
       if (!response) {
-        const activeSubAgents = (await getSubAgents()).filter(a => a.isActive);
-        const matchedSkill = (await import('@/engine/code-studio/skills')).matchSkill(text);
-
-        if (matchedSkill && activeSubAgents.length > 0) {
-          let bestAgent = activeSubAgents.find(a => a.skills.includes(matchedSkill.id));
+        try {
+          const subAgents = await getSubAgents();
+          const activeAgents = subAgents.filter(a => a.isActive);
           
-          // Manual override if agent name is mentioned
-          for (const agent of activeSubAgents) {
-            if (lowerText.includes(agent.name.toLowerCase())) {
-              bestAgent = agent;
-              break;
-            }
-          }
-
-          if (bestAgent) {
-            try {
-              setLastProvider(`SubAgent: ${bestAgent.name}`);
-              const agentResponse = await callSubAgent(bestAgent.id, text);
-              response = `🤖 [${bestAgent.name}]: ${agentResponse}`;
+          if (activeAgents.length > 0) {
+            const { matchSkillFromMessage } = await import('@/engine/code-studio/skills');
+            const matchedSkill = matchSkillFromMessage(text, activeAgents);
+            
+            if (matchedSkill) {
+              setLastProvider(`SubAgent: ${matchedSkill.agentName}`);
+              const subResponse = await callSubAgent(matchedSkill.agentId, text);
               
-              // Share response to main memory
-              writeMemoryEntry(`[SubAgent ${bestAgent.name}] ${agentResponse.slice(0, 200)}...`, 'brain', 'sub_agent_response' as any).catch(() => {});
-            } catch (err: any) {
-              console.log('[SubAgent] Error during delegation:', err);
-              // Fallback to normal Jarvis logic
+              if (subResponse) {
+                response = `🤖 [${matchedSkill.agentName}]: ${subResponse}`;
+                // Salvează în memorie
+                writeMemoryEntry(`[SubAgent ${matchedSkill.agentName}] ${subResponse.slice(0, 200)}...`, 'brain', 'sub_agent_response' as any).catch(() => {});
+              }
             }
           }
+        } catch (err) {
+          if (__DEV__) console.warn('[BrainContext] Sub-agent delegation failed:', err);
+          // Fallback to normal Jarvis logic
         }
       }
 

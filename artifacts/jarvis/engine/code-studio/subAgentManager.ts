@@ -1,7 +1,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getKeyForProvider } from './keyManager';
-import { getSkillById } from './skills';
+import { getSkillById, getSkillPrompt } from './skills';
 
 const SUB_AGENTS_STORAGE_KEY = '@jarvis_sub_agents';
 
@@ -31,6 +31,11 @@ export async function getSubAgents(): Promise<SubAgent[]> {
   }
 }
 
+export async function getSubAgentById(id: string): Promise<SubAgent | undefined> {
+  const agents = await getSubAgents();
+  return agents.find(a => a.id === id);
+}
+
 export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgent> {
   const agents = await getSubAgents();
   const newAgent: SubAgent = {
@@ -38,7 +43,7 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
     name: config.name || 'New Sub-Agent',
     agentProvider: config.agentProvider || 'groq',
     apiKey: config.apiKey,
-    model: config.model || (config.agentProvider === 'groq' ? 'llama3-70b-8192' : 'openai/gpt-3.5-turbo'),
+    model: config.model || (config.agentProvider === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-3.3-70b-instruct:free'),
     skills: config.skills || [],
     tools: config.tools || [],
     systemPrompt: config.systemPrompt || '',
@@ -70,18 +75,12 @@ export async function toggleSubAgent(id: string, isActive: boolean) {
  * Implements retries and timeout.
  */
 export async function callSubAgent(agentId: string, message: string): Promise<string> {
-  const agents = await getSubAgents();
-  const agent = agents.find(a => a.id === agentId);
+  const agent = await getSubAgentById(agentId);
   if (!agent) throw new Error('Agent not found');
 
   // Build system prompt from skills
-  let fullSystemPrompt = agent.systemPrompt || 'Esti un asistent AI specializat.';
-  agent.skills.forEach(skillId => {
-    const skill = getSkillById(skillId);
-    if (skill) {
-      fullSystemPrompt += `\n\n[Expertise: ${skill.name}]\n${skill.systemPrompt}`;
-    }
-  });
+  const skillPrompts = agent.skills.map(s => getSkillPrompt(s)).join('\n\n');
+  const fullSystemPrompt = (agent.systemPrompt || 'Esti un asistent AI specializat.') + '\n\n' + skillPrompts;
 
   // Get API key
   const apiKey = agent.apiKey || await getKeyForProvider(agent.agentProvider);
@@ -100,17 +99,21 @@ export async function callSubAgent(agentId: string, message: string): Promise<st
     headers['HTTP-Referer'] = 'https://jarvis-ai.app';
     headers['X-Title'] = 'Jarvis AI';
   } else {
-    throw new Error(`Provider ${provider} not yet fully implemented for direct sub-agent calls.`);
+    // Fallback to OpenRouter base for others if key exists
+    url = 'https://openrouter.ai/api/v1/chat/completions';
+    headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
+  const model = agent.model || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-3.3-70b-instruct:free');
+
   const body = {
-    model: agent.model,
+    model: model,
     messages: [
       { role: 'system', content: fullSystemPrompt },
       { role: 'user', content: message }
     ],
     temperature: 0.7,
-    max_tokens: 2000,
+    max_tokens: 2048,
   };
 
   const fetchWithRetry = async (retries = 1): Promise<Response> => {
