@@ -141,123 +141,123 @@ export async function clearAgentLogs(): Promise<void> {
     await AsyncStorage.removeItem(AGENT_LOGS_STORAGE_KEY);
 }
 
+import { callGroq, callOpenRouter } from '../aiProviders';
+
 export async function callSubAgent(agentId: string, message: string): Promise<AgentResult> {
   const startTime = Date.now();
   const agents = await getSubAgents();
   const agent = agents.find(a => a.id === agentId);
+  
   if (!agent) {
-      return {
-          agentId, agentName: 'Unknown', skill: '', response: 'Agent negăsit.',
-          durationMs: 0, success: false
-      };
+    return {
+      agentId,
+      agentName: 'Unknown',
+      skill: '',
+      response: 'Agentul nu a fost găsit în baza de date.',
+      durationMs: 0,
+      success: false
+    };
   }
 
-  // Build specialized prompt
-  let specializedPrompt = agent.systemPrompt;
+  // Construire prompt specializat: systemPrompt agent + skill prompts
+  let specializedPrompt = agent.systemPrompt || 'Ești un asistent util.';
   let usedSkill = 'General';
   
   if (agent.skills && agent.skills.length > 0) {
-      const skills = await Promise.all(agent.skills.map(sid => getSkillById(sid)));
-      const prompts = skills.filter(s => !!s).map(s => s!.systemPrompt);
-      if (prompts.length > 0) {
-          specializedPrompt = `${agent.systemPrompt}\n\n### SKILLS ACTIVATE:\n${prompts.join('\n\n')}`;
-          usedSkill = skills.filter(s => !!s).map(s => s!.name).join(', ');
+    const skills = await Promise.all(agent.skills.map(sid => getSkillById(sid)));
+    const activeSkills = skills.filter(s => !!s);
+    const prompts = activeSkills.map(s => s!.systemPrompt);
+    if (prompts.length > 0) {
+      specializedPrompt = `${agent.systemPrompt}\n\n### SKILLS ACTIVATE:\n${prompts.join('\n\n')}`;
+      usedSkill = activeSkills.map(s => s!.name).join(', ');
+    }
+  }
+
+  const primaryProvider = agent.agentProvider;
+  const secondaryProvider = primaryProvider === 'groq' ? 'openrouter' : 'groq';
+
+  const executeCall = async (provider: 'groq' | 'openrouter'): Promise<string | null> => {
+    const apiKey = (agent.apiKey && agent.apiKey.trim()) 
+      ? agent.apiKey.trim()
+      : await getKeyForProvider(provider);
+
+    if (!apiKey) return null;
+
+    try {
+      // AbortController pentru timeout de 30s
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      let result: string | null = null;
+      if (provider === 'groq') {
+        result = await callGroq(message, apiKey, specializedPrompt);
+      } else {
+        result = await callOpenRouter(message, apiKey, specializedPrompt);
       }
-  }
-
-  // Get API key
-  const apiKey = (agent.apiKey && agent.apiKey.trim()) 
-    ? agent.apiKey.trim()
-    : await getKeyForProvider(agent.agentProvider);
-
-  if (!apiKey) {
-      console.error(`[Agent] No API key for ${agent.agentProvider}`);
-      return {
-          agentId: agent.id, agentName: agent.name, skill: usedSkill,
-          response: `Eroare: Cheia API lipsește pentru ${agent.agentProvider}.`,
-          durationMs: 0, success: false
-      };
-  }
-  
-  console.log(`[Agent] Calling ${agent.name} via ${agent.agentProvider} (${agent.apiKey ? 'custom' : 'global'} key)`);
-
-  let url = '';
-  let model = '';
-  const headers: any = { 'Content-Type': 'application/json' };
-
-  if (agent.agentProvider === 'groq') {
-    url = 'https://api.groq.com/openai/v1/chat/completions';
-    headers['Authorization'] = `Bearer ${apiKey}`;
-    model = 'llama-3.3-70b-versatile';
-  } else {
-    url = 'https://openrouter.ai/api/v1/chat/completions';
-    headers['Authorization'] = `Bearer ${apiKey}`;
-    headers['HTTP-Referer'] = 'https://jarvis-ai.app';
-    headers['X-Title'] = 'Jarvis AI';
-    model = 'mistralai/mistral-7b-instruct:free';
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          { role: 'system', content: specializedPrompt },
-          { role: 'user', content: message }
-        ],
-        temperature: 0.7,
-      }),
-    });
-
-    const data = await response.json();
-    const duration = Date.now() - startTime;
-    
-    if (!response.ok) {
-        const errorMsg = data.error?.message || `API Error ${response.status}`;
-        throw new Error(errorMsg);
-    }
-
-    const resultText = data.choices?.[0]?.message?.content;
-    if (!resultText || resultText.trim().length === 0) {
-        throw new Error('Răspuns gol de la API.');
-    }
-
-    // Update agent stats and last used
-    const newStats = {
-        totalCalls: (agent.stats.totalCalls || 0) + 1,
-        successCalls: (agent.stats.successCalls || 0) + 1,
-        avgResponseTime: Math.round(((agent.stats.avgResponseTime || 0) * (agent.stats.totalCalls || 0) + duration) / ((agent.stats.totalCalls || 0) + 1))
-    };
-    
-    await updateSubAgent(agent.id, { lastUsed: Date.now(), stats: newStats });
-
-    // Save log
-    await saveAgentLog({
-      agentId: agent.id, agentName: agent.name, timestamp: Date.now(),
-      input: message, output: resultText, skill: usedSkill,
-      durationMs: duration, success: true
-    });
-
-    return {
-      agentId: agent.id, agentName: agent.name, skill: usedSkill,
-      response: resultText, durationMs: duration, success: true
-    };
-
-  } catch (e: any) {
-    const duration = Date.now() - startTime;
-    console.error(`[Agent] ${agent.name} failed:`, e.message);
-    await saveAgentLog({
-        agentId: agent.id, agentName: agent.name, timestamp: Date.now(),
-        input: message, output: '', skill: usedSkill,
-        durationMs: duration, success: false, error: e.message
-      });
       
-      return {
-        agentId: agent.id, agentName: agent.name, skill: usedSkill,
-        response: `Eroare agent: ${e.message}`,
-        durationMs: duration, success: false
-      };
+      clearTimeout(timeoutId);
+      return result;
+    } catch (e) {
+      console.warn(`[SubAgent] Provider ${provider} eșuat:`, e);
+      return null;
+    }
+  };
+
+  // Încearcă providerul primar
+  let responseText = await executeCall(primaryProvider);
+  let finalProvider = primaryProvider;
+
+  // Fallback la providerul secundar dacă primul a eșuat
+  if (!responseText) {
+    console.log(`[SubAgent] Fallback de la ${primaryProvider} la ${secondaryProvider}`);
+    responseText = await executeCall(secondaryProvider);
+    finalProvider = secondaryProvider;
   }
+
+  const duration = Date.now() - startTime;
+  const success = !!responseText && responseText.trim().length > 0;
+
+  if (success) {
+    // Actualizează statistici agent
+    const currentStats = agent.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0 };
+    const newStats = {
+      totalCalls: currentStats.totalCalls + 1,
+      successCalls: currentStats.successCalls + 1,
+      avgResponseTime: Math.round((currentStats.avgResponseTime * currentStats.totalCalls + duration) / (currentStats.totalCalls + 1))
+    };
+    await updateSubAgent(agent.id, { lastUsed: Date.now(), stats: newStats });
+  } else {
+    // În caz de eșec total
+    const currentStats = agent.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0 };
+    await updateSubAgent(agent.id, {
+      lastUsed: Date.now(),
+      stats: { ...currentStats, totalCalls: currentStats.totalCalls + 1 }
+    });
+  }
+
+  // Guard final: responseText este string garantat după acest punct
+  const finalResponse: string = responseText ?? `Eroare: Ambii provideri AI (${primaryProvider}, ${secondaryProvider}) au eșuat sau timeout.`;
+
+  // Salvare log
+  await saveAgentLog({
+    agentId: agent.id,
+    agentName: agent.name,
+    timestamp: Date.now(),
+    input: message,
+    output: finalResponse,
+    skill: usedSkill,
+    durationMs: duration,
+    success,
+    error: success ? undefined : 'AI Provider failure or timeout'
+  });
+
+  return {
+    agentId: agent.id,
+    agentName: agent.name,
+    skill: usedSkill,
+    response: finalResponse,
+    durationMs: duration,
+    success
+  };
 }
+

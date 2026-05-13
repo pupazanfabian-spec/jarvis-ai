@@ -79,9 +79,11 @@ import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engin
 import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
 
-import { type Project, getAllProjects, switchActiveProject } from '@/engine/project';
+import { type Project, getAllProjects, setActiveProject } from '@/engine/projectMemory';
 import { usePin } from '@/context/PinContext';
-import { providerIcon, providerLabel } from '@/engine/aiProviders';
+import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 SplashScreen.preventAutoHideAsync();
 

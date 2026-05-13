@@ -44,7 +44,8 @@ import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearne
 import { useDevMode } from '@/context/DevModeContext';
 
 import * as studioManager from '@/engine/code-studio/studioManager';
-import { getSubAgents, callSubAgent, SubAgent } from '@/engine/code-studio/subAgentManager';
+import { getSubAgents, callSubAgent, SubAgent, deleteSubAgent, toggleSubAgent, createSubAgent } from '@/engine/code-studio/subAgentManager';
+import { getAllSkills, detectSkill } from '@/engine/code-studio/skills';
 import { orchestrator } from '@/engine/orchestrator';
 import { useAIProvider } from '@/context/AIProviderContext';
 
@@ -186,8 +187,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
     const agents = await getSubAgents();
-    const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('
-') || 'Nu sunt sub-agenți activi.';
+    const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('\n') || 'Nu sunt sub-agenți activi.';
     return buildRichSystemPrompt({
       userName: state.userName || undefined,
       learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
@@ -223,97 +223,60 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const lowerText = text.toLowerCase();
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      // 1. Studio Special Commands
+      // 1. Comenzi Sub-Agenți (listeaza, creeaza, sterge, activeaza/dezactiveaza)
       const canvasKey = '@code_studio_workspace';
-      if (normalizedText.includes('listeaza agent') || normalizedText.includes('ce agenti ai')) {
+      const cleanText = normalizedText.trim();
+      
+      if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
           const agents = await getSubAgents();
-          response = agents.length === 0 ? "Nu ai sub-agenți activi. 🤖" : "🤖 **Sub-Agenții tăi:**
-
-" + agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅' : '❌'}`).join('
-');
-      } else if (normalizedText.includes('adauga agent') || normalizedText.includes('creeaza agent') || normalizedText.includes('creaza agent')) {
-          const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+agent\s+(.+)/i);
-          const agentName = nameMatch?.[1]?.trim() || 'Agent Nou';
-          try {
-            const { createSubAgent } = await import('@/engine/code-studio/subAgentManager');
-            const { detectSkill, getAllSkills } = await import('@/engine/code-studio/skills');
-            const skills = await getAllSkills();
-            const detSkill = detectSkill(text, skills);
-            const agent = await createSubAgent({
-              name: agentName, skills: [detSkill.id], agentProvider: 'groq', isActive: true, priority: 5, systemPrompt: detSkill.systemPrompt,
-            });
-            await addNodeToCanvas({ id: agent.id, type: 'Agent', title: agent.name, config: { agentId: agent.id, provider: agent.agentProvider } });
-            response = `✅ Am creat agentul **${agent.name}** cu skill-ul **${detSkill.name}** și l-am adăugat pe canvas.
-
-Deschide tab-ul **Studio** să îl vezi! 🤖`;
-          } catch(e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
-      } else if (normalizedText.includes('adauga skill') || normalizedText.includes('creeaza skill') || normalizedText.includes('creaza skill')) {
-          const nameMatch = text.match(/(?:adauga|creeaza|creaza)\s+skill\s+(.+)/i);
-          const skillName = nameMatch?.[1]?.trim() || 'Skill Nou';
-          try {
-            const { saveSkill, getAllSkills, detectSkill } = await import('@/engine/code-studio/skills');
-            const allSkills = await getAllSkills();
-            const found = allSkills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
-            if (found) {
-              await addNodeToCanvas({ id: found.id, type: 'Skill', title: found.name, config: { skillId: found.id, category: found.category } });
-              response = `✅ Am adăugat skill-ul existent **${found.name}** pe canvas! 🎯`;
-            } else { 
-              const detected = detectSkill(skillName, allSkills);
-              const newSkill = {
-                id: 'skill_' + Date.now().toString(36), name: skillName, category: detected.category, description: `Skill creat de Jarvis: ${skillName}`,
-                triggers: skillName.toLowerCase().split(' '), systemPrompt: `Ești un expert în ${skillName}. Ajuți utilizatorul cu sarcini legate de ${skillName}.`,
-                provider: 'auto' as const, tools: []
-              };
-              await saveSkill(newSkill);
-              await addNodeToCanvas({ id: newSkill.id, type: 'Skill', title: newSkill.name, config: { skillId: newSkill.id, category: newSkill.category } });
-              response = `✅ Am creat skill-ul **${skillName}** și l-am adăugat pe canvas! 🎯`;
-            }
-          } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
-      } else if (normalizedText.includes('conecteaza') && normalizedText.includes('cu')) {
-          const match = text.match(/conecteaza\s+(.+?)\s+cu\s+(.+)/i);
+          response = agents.length === 0 ? "Nu ai sub-agenți creați. 🤖" : "🤖 **Sub-Agenții tăi:**\n\n" + 
+              agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'} (Skill: ${a.skills.join(', ')})`).join('\n');
+      } else if (cleanText.includes('creeaza agent') || cleanText.includes('creaza agent')) {
+          // Format: creeaza agent [nume] cu skill [skillId] pe [groq|openrouter]
+          const match = text.match(/(?:creeaza|creaza)\s+agent\s+(.+?)(?:\s+cu\s+skill\s+(.+?))?(?:\s+pe\s+(groq|openrouter))?$/i);
           if (match) {
-              const name1 = match[1].trim(), name2 = match[2].trim();
+              const name = match[1].trim();
+              const skillId = match[2]?.trim() || 'conversatie';
+              const provider = (match[3]?.toLowerCase() === 'openrouter' ? 'openrouter' : 'groq') as 'groq' | 'openrouter';
+              
+              const allSkills = await getAllSkills();
+              const targetSkill = allSkills.find(s => s.id === skillId || s.name.toLowerCase() === skillId.toLowerCase()) || allSkills[0];
+              
               try {
-                  const saved = await AsyncStorage.getItem(canvasKey);
-                  const ws = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
-                  const n1 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name1.toLowerCase()));
-                  const n2 = ws.nodes.find((n: any) => n.title.toLowerCase().includes(name2.toLowerCase()));
-                  if (n1 && n2) {
-                      if (!ws.connections.find((c: any) => c.fromId === n1.id && c.toId === n2.id)) {
-                          ws.connections.push({ fromId: n1.id, toId: n2.id });
-                          await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
-                      }
-                      response = `✅ Am conectat **${n1.title}** ➡️ **${n2.title}** pe canvas! 🔗`;
-                  } else { response = `❌ Nu am găsit nodurile. Pe canvas ai: ${ws.nodes.map((n: any) => n.title).join(', ') || 'nimic'}`; }
-              } catch(e: any) { response = `❌ Eroare: ${e.message}`; }
+                  const agent = await createSubAgent({
+                      name,
+                      skills: [targetSkill.id],
+                      agentProvider: provider,
+                      isActive: true,
+                      systemPrompt: targetSkill.systemPrompt
+                  });
+                  response = `✅ Agentul **${agent.name}** a fost creat cu succes!\n🎯 Skill: **${targetSkill.name}**\n🚀 Provider: **${provider.toUpperCase()}**`;
+              } catch (e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
           }
-      } else if (normalizedText.startsWith('sterge agent')) {
-          const name = text.replace(/sterge agent /i, '').trim().toLowerCase();
+      } else if (cleanText.startsWith('sterge agent ')) {
+          const name = text.replace(/sterge agent /i, '').trim();
           const agents = await getSubAgents();
-          const agent = agents.find(a => a.name.toLowerCase() === name);
-          if (agent) { 
-              await deleteSubAgent(agent.id); 
-              const saved = await AsyncStorage.getItem(canvasKey);
-              if (saved) {
-                  const ws = JSON.parse(saved);
-                  ws.nodes = ws.nodes.filter((n: any) => n.id !== agent.id && n.config?.agentId !== agent.id);
-                  ws.connections = ws.connections.filter((c: any) => c.fromId !== agent.id && c.toId !== agent.id);
-                  await AsyncStorage.setItem(canvasKey, JSON.stringify(ws));
-              }
-              response = `Agentul **${agent.name}** a fost șters. 🗑️`; 
-          } else response = `Nu am găsit agentul **${name}**.`;
-      } else if (normalizedText.includes('reseteaza studio') || normalizedText.includes('reset studio')) {
-          await AsyncStorage.multiRemove(['@code_studio_workspace', '@jarvis_subagents_v2', '@jarvis_agent_logs_v2', '@jarvis_default_agents_seeded']);
-          response = "✅ Code Studio a fost resetat complet. 🧼";
-      } else if (normalizedText.includes('afiseaza canvas') || normalizedText.includes('ce e pe canvas')) {
-          const saved = await AsyncStorage.getItem(canvasKey);
-          if (saved) {
-              const ws = JSON.parse(saved);
-              const items = (ws.nodes || []).map((n: any) => `${n.type}: ${n.title}`).join('
-• ');
-              response = items ? `📊 **Elemente pe canvas:**
-• ${items}` : "Canvas-ul este gol. 🎨";
-          } else { response = "Canvas-ul este gol. 🎨"; }
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              await deleteSubAgent(agent.id);
+              response = `🗑️ Agentul **${agent.name}** a fost șters.`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (cleanText.startsWith('activeaza agent ')) {
+          const name = text.replace(/activeaza agent /i, '').trim();
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              await toggleSubAgent(agent.id, true);
+              response = `✅ Agentul **${agent.name}** a fost activat.`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (cleanText.startsWith('dezactiveaza agent ')) {
+          const name = text.replace(/dezactiveaza agent /i, '').trim();
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              await toggleSubAgent(agent.id, false);
+              response = `⏸️ Agentul **${agent.name}** a fost dezactivat.`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
       }
 
       if (response) {
@@ -324,7 +287,32 @@ Deschide tab-ul **Studio** să îl vezi! 🤖`;
           setIsThinking(false); isProcessing.current = false; return;
       }
 
-      // 2. Orchestrator Routing
+      // 2. Auto-delegare către Sub-Agenți (Detecție Skill -> Apel Agent Activ)
+      const allSkills = await getAllSkills();
+      const matchedSkill = detectSkill(text, allSkills);
+      if (matchedSkill && matchedSkill.id !== 'conversatie') {
+          const agents = await getSubAgents();
+          const activeAgent = agents.find(a => a.isActive && a.skills.includes(matchedSkill.id));
+          
+          if (activeAgent) {
+              const result = await callSubAgent(activeAgent.id, text);
+              if (result.success) {
+                  const finalMsg: Message = { 
+                      id: Date.now().toString(), 
+                      role: 'assistant', 
+                      content: `[Agent: ${activeAgent.name}] ${result.response}`, 
+                      timestamp: new Date() 
+                  };
+                  const nextMsgs = [...messages, userMsg, finalMsg];
+                  setMessages(nextMsgs); 
+                  persist(nextMsgs, brainRef.current);
+                  setLastProvider(activeAgent.name);
+                  setIsThinking(false); isProcessing.current = false; return;
+              }
+          }
+      }
+
+      // 3. Orchestrator Routing
       const intent = await orchestrator.analyzeIntent(text);
       console.log(`[Brain] Intent complexity: ${intent.complexity}, skill: ${intent.skill.id}`);
       

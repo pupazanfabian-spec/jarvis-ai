@@ -356,12 +356,10 @@ export default function CodeStudio() {
   const autoGeneratePrompt = () => {
       const selected = allSkills.filter(s => newAgentConfig.skills?.includes(s.id));
       const prompt = selected
-        .map(s => '### ' + s.name + '
-' + (s.systemPrompt || ''))
-        .join('
-
-');
-      setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });  };
+        .map(s => '### ' + s.name + '\n' + (s.systemPrompt || ''))
+        .join('\n\n');
+      setNewAgentConfig({ ...newAgentConfig, systemPrompt: prompt });
+  };
 
   const filteredLogs = useMemo(() => {
       if (logFilter === 'success') return agentLogs.filter(l => l.success);
