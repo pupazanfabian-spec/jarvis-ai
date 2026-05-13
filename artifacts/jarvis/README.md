@@ -5,6 +5,8 @@ Aplicație mobilă (Android/iOS) de asistent AI personal, complet în limba rom�
 ## Funcționalități
 
 - **Brain v6 Engine** — motor AI cu 270+ topicuri de cunoaștere în română
+- **Sub-Agenți AI** — agenți specializați pe skill-uri (cod, research, etc.) cu fallback automat între Groq și OpenRouter
+- **Code Studio** — workspace vizual stil n8n pentru construirea și conectarea sub-agenților
 - **4 Provideri AI Cloud** — Gemini, ChatGPT, Groq (gratuit), OpenRouter (gratuit)
 - **Căutare web** — răspunsuri actualizate cu sinteză automată
 - **Memorie persistentă** — SQLite + JSON, învață și reține fapte între sesiuni
@@ -23,6 +25,8 @@ Aplicație mobilă (Android/iOS) de asistent AI personal, complet în limba rom�
 | **Groq** | Llama 3.3 70B / Mixtral | **Gratuit** | [console.groq.com/keys](https://console.groq.com/keys) |
 | **OpenRouter** | Llama / Mistral / Gemma | **Gratuit** | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
+Jarvis utilizează Groq ca provider principal, folosind OpenRouter ca fallback automat pentru funcționalitățile avansate și sub-agenții activi.
+
 ## Instalare
 
 ### APK Android (cel mai simplu)
@@ -33,8 +37,8 @@ Aplicație mobilă (Android/iOS) de asistent AI personal, complet în limba rom�
 ### Din cod sursă
 ```bash
 # Clonează repository-ul
-git clone https://github.com/pupazanfabian-spec/jarvis-01.git
-cd jarvis-01
+git clone https://github.com/pupazanfabian-spec/jarvis-ai.git
+cd jarvis-ai
 
 # Instalează dependențele
 npm install
@@ -83,7 +87,7 @@ npx expo start
 
 ## Tehnologii
 
-- **React Native** + **Expo** (SDK 53)
+- **React Native** + **Expo** (SDK 54)
 - **TypeScript**
 - **SQLite** (expo-sqlite) — persistență locală
 - **SecureStore** — stocare securizată chei API
