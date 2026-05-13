@@ -2,6 +2,7 @@
 import { Skill, getAllSkills, detectSkill } from './code-studio/skills';
 import { SubAgent, getSubAgents, createSubAgent, callSubAgent, AgentResult } from './code-studio/subAgentManager';
 import { hasValidKey } from './code-studio/keyManager';
+import * as studioManager from './code-studio/studioManager';
 
 export interface RouteResult {
   response: string;
@@ -102,7 +103,7 @@ export class JarvisOrchestrator {
 
   async autoCreateAgent(skill: Skill): Promise<SubAgent> {
     const provider = await hasValidKey('groq') ? 'groq' : 'openrouter';
-    return await createSubAgent({
+    const agent = await createSubAgent({
       name: `Expert ${skill.name}`,
       description: `Agent creat automat pentru ${skill.name}`,
       agentProvider: provider,
@@ -111,6 +112,15 @@ export class JarvisOrchestrator {
       priority: 5,
       isActive: true
     });
+    
+    // Sync with Studio workspace
+    try {
+      await studioManager.addNode('Agent', agent.name, { agentId: agent.id, provider: agent.agentProvider });
+    } catch (e) {
+      console.warn('[Orchestrator] Failed to sync auto-created agent to workspace:', e);
+    }
+    
+    return agent;
   }
 
   async route(message: string): Promise<RouteResult> {

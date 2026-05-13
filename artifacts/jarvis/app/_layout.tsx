@@ -109,24 +109,9 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    async function checkSplash() {
-      try {
-        const today = new Date().toDateString();
-        const lastSplash = await AsyncStorage.getItem('@jarvis_last_splash');
-        if (lastSplash === today) {
-          setShowSplash(false);
-        } else {
-          setShowSplash(true);
-          await AsyncStorage.setItem('@jarvis_last_splash', today);
-        }
-      } catch (e) {
-        console.error("Error checking splash screen status:", e);
-        setShowSplash(false); // Default to not showing splash on error
-      } finally {
-        setSplashLoaded(true);
-      }
-    }
-    checkSplash();
+    // Always show splash screen on app mount
+    setShowSplash(true);
+    setSplashLoaded(true);
   }, []);
 
   useEffect(() => {

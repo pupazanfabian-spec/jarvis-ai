@@ -247,7 +247,6 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
       // 1. Comenzi Sub-Agenți (listeaza, creeaza, sterge, activeaza/dezactiveaza)
-      const canvasKey = '@code_studio_workspace';
       const cleanText = normalizedText.trim();
       
       if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
@@ -275,6 +274,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                       isActive: true,
                       systemPrompt: targetSkill.systemPrompt
                   });
+                  
+                  // Sync with Studio workspace
+                  await studioManager.addNode('Agent', agent.name, { agentId: agent.id, provider: agent.agentProvider });
+                  
                   response = `✅ Agentul **${agent.name}** a fost creat cu succes!\n🎯 Skill: **${targetSkill.name}**\n🚀 Provider: **${provider.toUpperCase()}**`;
               } catch (e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
           }
@@ -285,6 +288,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
           if (agent) {
               await deleteSubAgent(agent.id);
+              
+              // Sync with Studio workspace: remove the node if it exists
+              try {
+                  const ws = await studioManager.getWorkspace();
+                  const node = ws.nodes.find(n => n.config?.agentId === agent.id);
+                  if (node) await studioManager.deleteNode(node.id);
+              } catch (e) { console.warn('[Brain] Failed to remove node from workspace:', e); }
+
               response = `🗑️ Agentul **${agent.name}** a fost șters.`;
           } else response = `❌ Nu am găsit agentul **${name}**.`;
       } else if (cleanText.startsWith('activeaza agent ')) {
