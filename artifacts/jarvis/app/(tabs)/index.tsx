@@ -9,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ScrollView,
   Alert,
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
