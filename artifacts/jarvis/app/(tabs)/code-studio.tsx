@@ -253,7 +253,7 @@ export default function CodeStudio() {
           setAllSkills(uniqueSK);
           
           if (saved) {
-            const parsed = JSON.JSON.parse(saved);
+            const parsed = JSON.parse(saved);
             const savedNodes = parsed.nodes || [];
             const savedConns = parsed.connections || [];
             
@@ -301,8 +301,8 @@ export default function CodeStudio() {
     onStartShouldSetPanResponder: () => !isDraggingRef.current,
     onMoveShouldSetPanResponder: (_, gs) => !isDraggingRef.current && (Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2),
     onPanResponderGrant: () => canvasPan.extractOffset(),
-    onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: pan.y }], { useNativeDriver: false }),
-    onPanResponderRelease: () => { pan.flattenOffset(); onDragEnd(); },
+    onPanResponderMove: Animated.event([null, { dx: canvasPan.x, dy: canvasPan.y }], { useNativeDriver: false }),
+    onPanResponderRelease: () => { canvasPan.flattenOffset(); },
   })).current;
 
   const memoizedGrid = useMemo(() => {
@@ -523,7 +523,7 @@ export default function CodeStudio() {
             <TouchableOpacity key={`cat-chip-${c}`} style={[styles.catChip, editingSkill.category === c && styles.catChipActive]} onPress={() => setEditingSkill({...editingSkill, category: c as any})}><Text style={styles.catChipText}>{c}</Text></TouchableOpacity>
         ))}</ScrollView>
         <TextInput style={[styles.input, { height: 120, marginTop: 10 }]} placeholder="System Prompt (instrucțiuni)" value={editingSkill.systemPrompt} onChangeText={t => setEditingSkill({...editingSkill, systemPrompt: t})} multiline placeholderTextColor="#475569" />
-        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : editingSkill.triggers} onChangeText={t => setEditingSkill({...editingSkill, triggers: t})} placeholderTextColor="#475569" />
+        <TextInput style={[styles.input, { marginTop: 10 }]} placeholder="Cuvinte cheie (separate prin virgulă)" value={Array.isArray(editingSkill.triggers) ? editingSkill.triggers.join(', ') : (editingSkill.triggers as any || '')} onChangeText={t => setEditingSkill({...editingSkill, triggers: t.split(',').map(s => s.trim()).filter(Boolean)})} placeholderTextColor="#475569" />
         <TouchableOpacity style={styles.finalizeBtn} onPress={handleSaveSkill}><Text style={styles.finalizeBtnText}>Salvează Skill</Text></TouchableOpacity>
         {editingSkill.id && <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#ef4444', marginTop: 8 }]} onPress={async () => { await deleteSkill(editingSkill.id!); setIsSkillEditorVisible(false); }}><Text style={styles.finalizeBtnText}>Șterge Skill</Text></TouchableOpacity>}
         <TouchableOpacity style={styles.closeBtn} onPress={() => setIsSkillEditorVisible(false)}><Text style={styles.closeBtnText}>Anulează</Text></TouchableOpacity>
