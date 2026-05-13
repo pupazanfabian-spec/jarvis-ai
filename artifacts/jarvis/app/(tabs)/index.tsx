@@ -119,6 +119,38 @@ export default function ChatScreen() {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [showSandbox, setShowSandbox] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
+
+  // API Key management logic
+  const [apiKeys, setApiKeys] = useState<{groq: string[], openrouter: string[]}>({groq: ['', '', ''], openrouter: ['', '', '']});
+  
+  useEffect(() => {
+    async function loadKeys() {
+        const { getKeys } = await import('@/engine/code-studio/keyManager');
+        const k = await getKeys();
+        const g = k.filter(x => x.provider === 'groq').map(x => x.key);
+        const o = k.filter(x => x.provider === 'openrouter').map(x => x.key);
+        setApiKeys({
+            groq: [...g, '', '', ''].slice(0, 3),
+            openrouter: [...o, '', '', ''].slice(0, 3)
+        });
+    }
+    loadKeys();
+  }, [showAPIKeyModal]);
+
+  const saveKey = async (provider: 'groq' | 'openrouter', index: number, key: string) => {
+      const { addKey } = await import('@/engine/code-studio/keyManager');
+      await addKey(provider, key);
+      Alert.alert('Succes', 'Cheie salvată!');
+      setShowAPIKeyModal(false);
+  };
+
+  const deleteKey = async (provider: 'groq' | 'openrouter', key: string) => {
+      const { deleteKey } = await import('@/engine/code-studio/keyManager');
+      await deleteKey(provider);
+      Alert.alert('Succes', 'Cheie ștearsă!');
+      setShowAPIKeyModal(false);
+  };
 
   const [pinMode, setPinMode] = useState<PinMode>(null);
   const [pendingNewPin, setPendingNewPin] = useState('');
@@ -473,8 +505,49 @@ export default function ChatScreen() {
                 </TouchableOpacity>
               </>
             )}
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setShowMoreMenu(false); setShowAPIKeyModal(true); }}
+            >
+              <Feather name="key" size={18} color={colors.accent} />
+              <Text style={styles.menuItemText}>Gestionare chei API</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showAPIKeyModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>API Keys Management</Text>
+            <ScrollView>
+              {['groq', 'openrouter'].map((provider) => (
+                <View key={provider} style={styles.providerSection}>
+                  <Text style={styles.providerLabel}>{provider.toUpperCase()}</Text>
+                  {apiKeys[provider as 'groq' | 'openrouter'].map((key, num) => (
+                    <View key={`${provider}-${num}`} style={styles.keyRow}>
+                      <TextInput 
+                        style={styles.keyInput} 
+                        value={key}
+                        onChangeText={(t) => {
+                            const newKeys = {...apiKeys};
+                            newKeys[provider as 'groq' | 'openrouter'][num] = t;
+                            setApiKeys(newKeys);
+                        }}
+                        placeholder={`${provider.toUpperCase()} #${num + 1}`} 
+                        placeholderTextColor="#6b7280"
+                      />
+                      <TouchableOpacity style={styles.saveBtn} onPress={() => saveKey(provider as 'groq' | 'openrouter', num, key)}><Text style={styles.btnText}>Salvează</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteKey(provider as 'groq' | 'openrouter', key)}><Ionicons name="trash" size={16} color="#ef4444" /></TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setShowAPIKeyModal(false)}><Text style={styles.closeBtnText}>Închide</Text></TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       <Modal
@@ -873,4 +946,13 @@ const styles = StyleSheet.create({
   projectStack: {
     fontSize: 11, color: colors.textSecondary, marginTop: 2,
   },
+  providerSection: { marginBottom: 16, backgroundColor: '#1f2937', padding: 16, borderRadius: 12 },
+  providerLabel: { color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 12 },
+  keyRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  keyInput: { flex: 1, backgroundColor: '#374151', borderRadius: 8, padding: 10, color: '#fff', marginRight: 8, fontSize: 13 },
+  saveBtn: { backgroundColor: '#6366f1', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8 },
+  deleteBtn: { padding: 8 },
+  btnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  closeBtn: { marginTop: 18, alignItems: 'center' },
+  closeBtnText: { color: '#94a3b8', fontWeight: 'bold', fontSize: 14 },
 });

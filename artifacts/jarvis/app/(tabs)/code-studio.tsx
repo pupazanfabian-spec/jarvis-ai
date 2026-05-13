@@ -434,28 +434,6 @@ export default function CodeStudio() {
 
       {viewMode === 'canvas' ? renderCanvas() : (
         <ScrollView style={styles.dashboard}>
-          <Text style={styles.dashboardTitle}>Dashboard</Text>
-          <View style={styles.dashboardSection}>
-            <Text style={styles.dashboardSubtitle}>API Keys</Text>
-            {['groq', 'openrouter'].map((provider) => (
-              <View key={provider} style={styles.providerSection}>
-                <Text style={styles.providerLabel}>{provider.toUpperCase()}</Text>
-                {[1, 2, 3].map((num) => (
-                  <View key={`${provider}-${num}`} style={styles.keyRow}>
-                    <TextInput 
-                      style={styles.keyInput} 
-                      placeholder={`${provider.toUpperCase()} #${num}`} 
-                      placeholderTextColor="#6b7280"
-                    />
-                    <TouchableOpacity style={styles.saveBtn}><Text style={styles.btnText}>Salvează</Text></TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteBtn}><Ionicons name="trash" size={16} color="#ef4444" /></TouchableOpacity>
-                    <View style={[styles.statusIndicator, { backgroundColor: '#ef4444' }]} />
-                  </View>
-                ))}
-              </View>
-            ))}
-          </View>
-
           <View style={styles.row}>
               <Text style={styles.dashboardTitle}>Agenți ({subAgents.length})</Text>
               <TouchableOpacity onPress={() => setIsAddModalVisible(true)}><Text style={styles.logsLink}>+ Adaugă Node</Text></TouchableOpacity>
