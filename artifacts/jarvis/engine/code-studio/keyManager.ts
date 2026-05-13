@@ -80,6 +80,27 @@ export async function addKey(provider: string, key: string) {
   }
 }
 
+export async function saveKeysForProvider(provider: string, keyStrings: string[]) {
+    try {
+        const allKeys = await getKeys();
+        const otherKeys = allKeys.filter(k => k.provider.toLowerCase() !== provider.toLowerCase());
+        
+        const newProviderKeys: APIKey[] = keyStrings
+            .filter(k => k.trim().length > 0)
+            .map((k, i) => ({
+                provider,
+                key: k.trim(),
+                index: i,
+                label: `${provider} #${i + 1}`
+            }));
+            
+        const updated = [...otherKeys, ...newProviderKeys];
+        await AsyncStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {
+        console.error(`Failed to save keys for ${provider}`, e);
+    }
+}
+
 export async function deleteKey(provider: string) {
   try {
     const keys = await getKeys();

@@ -235,9 +235,17 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
           {markers.map((m, i) => (
             <View key={`m-${i}`} style={[
               m.isLarge ? styles.markerLarge : styles.markerSmall,
-              { transform: [{ rotate: `${m.angle}deg` }, { translateY: -145 }] }
+              { 
+                position: 'absolute',
+                top: 150 - (m.isLarge ? 14 : 8) / 2,
+                left: 150 - 1.5,
+                transform: [
+                  { rotate: `${m.angle}deg` }, 
+                  { translateY: -145 }
+                ] 
+              }
             ]}>
-              {m.isLarge && <Text style={styles.hudLabel}>{m.angle}</Text>}
+              {m.isLarge && <Text style={[styles.hudLabel, { transform: [{ rotate: `${-m.angle}deg` }] }]}>{m.angle}</Text>}
             </View>
           ))}
         </Animated.View>
