@@ -367,9 +367,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   } else {
                       response = `❌ Nu am găsit niciun nod cu numele "**${name}**" în canvas.`;
                   }
-              } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
-          }
-      }
+                  } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
+                  }
+                  }
 
       if (response) {
           const m: Message = { id: Date.now().toString(), role: 'assistant', content: response, timestamp: new Date() };
