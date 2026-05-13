@@ -433,12 +433,38 @@ export default function CodeStudio() {
       </View>
 
       {viewMode === 'canvas' ? renderCanvas() : (
-        <View style={styles.dashboard}>
+        <ScrollView style={styles.dashboard}>
+          <Text style={styles.dashboardTitle}>Dashboard</Text>
+          <View style={styles.dashboardSection}>
+            <Text style={styles.dashboardSubtitle}>API Keys</Text>
+            {['groq', 'openrouter'].map((provider) => (
+              <View key={provider} style={styles.providerSection}>
+                <Text style={styles.providerLabel}>{provider.toUpperCase()}</Text>
+                {[1, 2, 3].map((num) => (
+                  <View key={`${provider}-${num}`} style={styles.keyRow}>
+                    <TextInput 
+                      style={styles.keyInput} 
+                      placeholder={`${provider.toUpperCase()} #${num}`} 
+                      placeholderTextColor="#6b7280"
+                    />
+                    <TouchableOpacity style={styles.saveBtn}><Text style={styles.btnText}>Salvează</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtn}><Ionicons name="trash" size={16} color="#ef4444" /></TouchableOpacity>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#ef4444' }]} />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+
           <View style={styles.row}>
               <Text style={styles.dashboardTitle}>Agenți ({subAgents.length})</Text>
               <TouchableOpacity onPress={() => setIsAddModalVisible(true)}><Text style={styles.logsLink}>+ Adaugă Node</Text></TouchableOpacity>
           </View>
-          <FlatList data={subAgents} keyExtractor={(item, index) => `agent-${item.id}-${index}`} renderItem={({ item }) => (
+          <FlatList 
+            scrollEnabled={false}
+            data={subAgents} 
+            keyExtractor={(item, index) => `agent-${item.id}-${index}`} 
+            renderItem={({ item }) => (
             <View style={styles.agentCard}>
               <View style={styles.agentCardHeader}><Text style={styles.agentCardName}>{item.name}</Text><Switch value={item.isActive} onValueChange={v => toggleSubAgent(item.id, v).then(initWorkspace)} /></View>
               <Text style={styles.agentCardMeta}>{item.agentProvider.toUpperCase()} • P{item.priority} • {item.skills?.length || 0} skills</Text>
@@ -449,7 +475,7 @@ export default function CodeStudio() {
               </View>
             </View>
           )} ListEmptyComponent={<Text style={styles.emptyText}>Niciun agent creat.</Text>} />
-        </View>
+        </ScrollView>
       )}
 
       <TouchableOpacity style={[styles.fab, { bottom: 80 + insets.bottom }]} onPress={() => { setNewAgentConfig({ name: '', description: '', agentProvider: 'groq', skills: [], tools: [], systemPrompt: '', priority: 5 }); setIsWizardVisible(true); setWizardStep(1); }}><Ionicons name="add" size={32} color="#fff" /></TouchableOpacity>
@@ -663,4 +689,14 @@ const styles = StyleSheet.create({
   eyeBtn: { padding: 12, backgroundColor: '#334155', borderRadius: 12 },
   validateKeyBtn: { marginTop: 12, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#6366f1', padding: 14, borderRadius: 12, alignItems: 'center' },
   validateKeyBtnText: { color: '#6366f1', fontWeight: 'bold', fontSize: 14 },
+  dashboardSection: { marginBottom: 24 },
+  dashboardSubtitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 16 },
+  providerSection: { marginBottom: 16, backgroundColor: '#1f2937', padding: 16, borderRadius: 12 },
+  providerLabel: { color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 12 },
+  keyRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  keyInput: { flex: 1, backgroundColor: '#374151', borderRadius: 8, padding: 10, color: '#fff', marginRight: 8, fontSize: 13 },
+  saveBtn: { backgroundColor: '#6366f1', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8 },
+  deleteBtn: { padding: 8 },
+  btnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  statusIndicator: { width: 10, height: 10, borderRadius: 5, marginLeft: 8 },
 });

@@ -19,35 +19,41 @@ const COMPLEXITY_COLORS: Record<number, string> = {
   8: '#ff0040',
 };
 
-const ringStyle = (size: number, bw: number) => ({
+const ringStyle = (size: number, bw: number, color: string) => ({
   width: size,
   height: size,
   borderRadius: size / 2,
   borderWidth: bw,
   backgroundColor: 'transparent',
+  borderColor: color,
+  shadowColor: color,
+  shadowRadius: 15,
+  shadowOpacity: 0.9,
+  elevation: 10,
 });
 
-// Pre-calculate orbits
+// Pre-calculate elliptical orbits
 const PARTICLE_COUNT = 8;
-const RADIUS_PARTICLE = 100;
+const RX = 130;
+const RY = 80;
 const STEPS = 60;
-const createTrajectory = (radius: number) => {
-  const cosTable: number[] = [];
-  const sinTable: number[] = [];
+const createEllipticalTrajectory = (rx: number, ry: number) => {
+  const xTable: number[] = [];
+  const yTable: number[] = [];
   for (let i = 0; i <= STEPS; i++) {
     const angle = (i * 360 / STEPS) * Math.PI / 180;
-    cosTable.push(radius * Math.cos(angle));
-    sinTable.push(radius * Math.sin(angle));
+    xTable.push(rx * Math.cos(angle));
+    yTable.push(ry * Math.sin(angle));
   }
-  return { cosTable, sinTable };
+  return { xTable, yTable };
 };
-const TRAJECTORY = createTrajectory(RADIUS_PARTICLE);
+const TRAJECTORY = createEllipticalTrajectory(RX, RY);
 const INPUT_RANGE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 
 export default function ThinkingIndicator({ visible, complexity }: ThinkingIndicatorProps) {
   const [shouldRender, setShouldRender] = useState(visible);
   
-  // Animation Values
+  // Base Animation Values
   const outerRotate = useRef(new Animated.Value(0)).current;
   const outerScale = useRef(new Animated.Value(1)).current;
   const arcRotate = useRef(new Animated.Value(0)).current;
@@ -59,6 +65,15 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   
   const segmentAnims = useRef(Array.from({ length: 12 }, () => new Animated.Value(0))).current;
   const particleAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(0))).current;
+  const particleScaleAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(1))).current;
+  const particleOpacityAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(1))).current;
+  
+  // HUD v4 Additions
+  const rippleScale = useRef(new Animated.Value(0)).current;
+  const rippleOpacity = useRef(new Animated.Value(0)).current;
+  const lightningOpacity = useRef(new Animated.Value(0)).current;
+  const flickerAnims = useRef(Array.from({ length: 4 }, () => new Animated.Value(0))).current;
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -86,10 +101,12 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
       const loop = (anim: Animated.Value, to: number, duration: number, easing = Easing.linear) => 
         Animated.loop(Animated.timing(anim, { toValue: to, duration, easing, useNativeDriver: true }));
 
+      // Continuous Rotations
       const outerRotAnim = loop(outerRotate, 1, 8000);
       const arcRotAnim = loop(arcRotate, 1, 6000);
       const midRotAnim = loop(midRotate, -1, 4000);
       
+      // Pulsing Effects
       const outerPulseAnim = Animated.loop(Animated.sequence([
         Animated.timing(outerScale, { toValue: 1.03, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(outerScale, { toValue: 0.97, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -116,29 +133,67 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         Animated.timing(textOpacity, { toValue: 0.7, duration: 750, useNativeDriver: true }),
       ]));
 
+      // Energy Loading / Progressive Segments
       const segAnims = segmentAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 100),
-        Animated.timing(anim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.1, duration: 200, useNativeDriver: true }),
+        Animated.delay(i * 250), // Progressive offset (3000ms / 12 = 250ms)
+        Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.1, duration: 400, useNativeDriver: true }),
       ])));
 
-      const partAnims = particleAnims.map((anim, i) => loop(anim, 1, 1000 + i * 250));
+      // Particles Orbits & Individual Pulses
+      const partOrbits = particleAnims.map((anim, i) => loop(anim, 1, 2000 + i * 500));
+      const partScales = particleScaleAnims.map((anim, i) => Animated.loop(Animated.sequence([
+        Animated.delay(i * 100),
+        Animated.timing(anim, { toValue: 1.2, duration: 200, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.8, duration: 200, useNativeDriver: true }),
+      ])));
+      const partOpacities = particleOpacityAnims.map((anim, i) => Animated.loop(Animated.sequence([
+        Animated.delay(i * 150),
+        Animated.timing(anim, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.2, duration: 150, useNativeDriver: true }),
+      ])));
+
+      // Periodic Effects (Ripple & Lightning)
+      const periodicEffects = Animated.loop(Animated.sequence([
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(rippleOpacity, { toValue: 0.6, duration: 100, useNativeDriver: true }),
+            Animated.timing(rippleOpacity, { toValue: 0, duration: 900, useNativeDriver: true }),
+          ]),
+          Animated.timing(rippleScale, { toValue: 3.5, duration: 1000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          Animated.sequence([
+            Animated.timing(lightningOpacity, { toValue: 0.15, duration: 60, useNativeDriver: true }),
+            Animated.timing(lightningOpacity, { toValue: 0, duration: 60, useNativeDriver: true }),
+          ]),
+        ]),
+        Animated.delay(3000), // Total cycle 4s
+      ]));
+
+      // Electric Flickers
+      const flickAnims = flickerAnims.map((anim) => Animated.loop(Animated.sequence([
+        Animated.delay(1500 + Math.random() * 1500),
+        Animated.timing(anim, { toValue: 1, duration: 40, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 40, useNativeDriver: true }),
+      ])));
 
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
         outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim,
-        ...segAnims, ...partAnims
+        periodicEffects, ...segAnims, ...partOrbits, ...partScales, ...partOpacities, ...flickAnims
       ]).start();
 
       return () => {
-        [outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim, ...segAnims, ...partAnims].forEach(a => a.stop());
+        [outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim, periodicEffects, ...segAnims, ...partOrbits, ...partScales, ...partOpacities, ...flickAnims].forEach(a => a.stop());
       };
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 0.5, duration: 300, useNativeDriver: true }),
-      ]).start(() => setShouldRender(false));
+      ]).start(() => {
+        setShouldRender(false);
+        rippleScale.setValue(0);
+      });
     }
   }, [visible]);
 
@@ -152,6 +207,9 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   return (
     <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="none">
       
+      {/* HUD v4 Lightning Flash Overlay */}
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: lightningOpacity, zIndex: 10000 }]} />
+
       {/* Background HUD Elements */}
       <View style={styles.hudBg}>
         {scanlines.map((top, i) => <View key={`sl-${i}`} style={[styles.scanline, { top }]} />)}
@@ -163,15 +221,17 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
 
       <Animated.View style={[styles.center, { transform: [{ scale: scaleAnim }] }]}>
         
-        {/* Ring 1 - Outer 300x300 */}
-        <Animated.View style={[ringStyle(300, 8), {
-          position: 'absolute',
-          borderColor: hudColor,
-          shadowColor: hudColor,
-          shadowRadius: 12,
-          shadowOpacity: 0.8,
-          transform: [{ rotate: spinOuter }, { scale: outerScale }]
-        }]}>
+        {/* Ripple Shockwave */}
+        <Animated.View style={[
+          styles.ripple, 
+          { borderColor: hudColor, transform: [{ scale: rippleScale }], opacity: rippleOpacity }
+        ]} />
+
+        {/* Ring 1 - Outer 300x300 (Fixed Graduation Markers inside) */}
+        <Animated.View style={[
+          ringStyle(300, 8, hudColor), 
+          { position: 'absolute', transform: [{ rotate: spinOuter }, { scale: outerScale }] }
+        ]}>
           {markers.map((m, i) => (
             <View key={`m-${i}`} style={[
               m.isLarge ? styles.markerLarge : styles.markerSmall,
@@ -187,12 +247,11 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
            <View style={styles.arcSegment} />
         </Animated.View>
 
-        {/* Ring 2 - 240x240 Mid */}
-        <Animated.View style={[ringStyle(240, 2), {
-          position: 'absolute',
-          borderColor: hudColor,
-          transform: [{ rotate: spinMid }]
-        }]}>
+        {/* Ring 2 - 240x240 Mid (Energy Loading Segments) */}
+        <Animated.View style={[
+          ringStyle(240, 2, hudColor), 
+          { position: 'absolute', transform: [{ rotate: spinMid }] }
+        ]}>
            {segmentAnims.map((anim, i) => (
              <Animated.View key={`seg-${i}`} style={[
                styles.midSegment, 
@@ -201,28 +260,52 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
            ))}
         </Animated.View>
 
-        {/* Ring 3 - Breathing 180x180 */}
-        <Animated.View style={[ringStyle(180, 1.5), {
-          position: 'absolute',
-          borderColor: hudColor,
-          opacity: 0.6,
-          transform: [{ scaleX: breatheX }, { scaleY: breatheY }]
-        }]} />
+        {/* Electric Flickers */}
+        {flickerAnims.map((anim: Animated.Value, i: number) => (
+          <Animated.View key={`flick-${i}`} style={[
+            styles.flicker, 
+            { 
+              backgroundColor: hudColor, 
+              opacity: anim, 
+              transform: [
+                { rotate: `${i * 90 + Math.random() * 45}deg` }, 
+                { translateY: -105 }
+              ] 
+            }
+          ]} />
+        ))}
 
-        {/* Layer 4 - Orbiting Particles */}
+        {/* Ring 3 - Breathing 180x180 */}
+        <Animated.View style={[
+          ringStyle(180, 1.5, hudColor), 
+          { position: 'absolute', opacity: 0.6, transform: [{ scaleX: breatheX }, { scaleY: breatheY }] }
+        ]} />
+
+        {/* Layer 4 - Orbiting Particles (Elliptical Trajectory + Scale/Opacity Pulse) */}
         {particleAnims.map((anim, i) => {
-           const tx = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.cosTable });
-           const ty = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.sinTable });
+           const tx = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.xTable });
+           const ty = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.yTable });
            return (
              <Animated.View key={`p-${i}`} style={[
                styles.particle, 
-               { backgroundColor: hudColor, transform: [{ translateX: tx }, { translateY: ty }] }
+               { 
+                 backgroundColor: hudColor, 
+                 opacity: particleOpacityAnims[i],
+                 transform: [
+                   { translateX: tx }, 
+                   { translateY: ty },
+                   { scale: particleScaleAnims[i] }
+                 ] 
+               }
              ]} />
            );
         })}
 
         {/* Ring 5 - Core 70x70 */}
-        <Animated.View style={[styles.core, { borderColor: hudColor, transform: [{ scale: coreScale }] }]}>
+        <Animated.View style={[
+          styles.core, 
+          { borderColor: hudColor, shadowColor: hudColor, shadowRadius: 10, shadowOpacity: 0.8, transform: [{ scale: coreScale }] }
+        ]}>
            <View style={styles.coreInner} />
         </Animated.View>
 
@@ -270,4 +353,8 @@ const styles = StyleSheet.create({
   subtext: { fontSize: 10, letterSpacing: 2, opacity: 0.7, marginTop: 4 },
   
   ray: { position: 'absolute', width: 2, height: 20, opacity: 0.5 },
+  
+  // v4 New Styles
+  ripple: { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 2 },
+  flicker: { position: 'absolute', width: 1, height: 30 },
 });
