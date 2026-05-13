@@ -11,6 +11,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
   const rotateAnim2 = useRef(new Animated.Value(0)).current;
   const fadeText = useRef(new Animated.Value(0)).current;
   const fadeSubText = useRef(new Animated.Value(0)).current;
+  const fadeSystemOnline = useRef(new Animated.Value(0)).current;
   const fadeOut = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -59,13 +60,19 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
       }).start();
     }, 1400);
 
+    setTimeout(() => {
+      Animated.timing(fadeSystemOnline, {
+        toValue: 1, duration: 600, easing: linear, useNativeDriver: true
+      }).start();
+    }, 2000);
+
     // Fade out si finish
     setTimeout(() => {
       Animated.timing(fadeOut, {
         toValue: 0, duration: 600, easing: linear, useNativeDriver: true
       }).start(() => onFinish());
     }, 3200);
-  }, [onFinish, rotateAnim, rotateAnim2, scaleAnim, pulseAnim, fadeText, fadeSubText, fadeOut]);
+  }, [onFinish, rotateAnim, rotateAnim2, scaleAnim, pulseAnim, fadeText, fadeSubText, fadeSystemOnline, fadeOut]);
 
   const spin1 = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -104,6 +111,9 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         </Animated.Text>
         <Animated.Text style={[styles.subText, { opacity: fadeSubText }]}>
           Just A Rather Very Intelligent System
+        </Animated.Text>
+        <Animated.Text style={[styles.systemOnlineText, { opacity: fadeSystemOnline }]}>
+          SYSTEM ONLINE
         </Animated.Text>
       </Animated.View>
 
@@ -175,6 +185,13 @@ const styles = StyleSheet.create({
     color: 'rgba(0, 212, 255, 0.6)',
     fontSize: 11,
     letterSpacing: 2,
+    textAlign: 'center',
+  },
+  systemOnlineText: {
+    marginTop: 8,
+    color: BLUE,
+    fontSize: 11,
+    letterSpacing: 4,
     textAlign: 'center',
   },
   corner: {
