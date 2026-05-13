@@ -318,6 +318,14 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               await toggleSubAgent(agent.id, false);
               response = `⏸️ Agentul **${agent.name}** a fost dezactivat.`;
           } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (cleanText === 'reseteaza studio' || cleanText === 'curata studio' || cleanText === 'reset studio') {
+          setThinkingComplexity(1);
+          try {
+              await studioManager.clearWorkspace();
+              response = `🧹 Canvas-ul Code Studio a fost resetat. Toate nodurile și conexiunile au fost șterse.`;
+          } catch (e: any) {
+              response = `❌ Eroare la resetarea studioului: ${e.message}`;
+          }
       }
 
       if (response) {

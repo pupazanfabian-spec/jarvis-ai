@@ -75,6 +75,15 @@ export async function deleteNode(id: string): Promise<void> {
   await saveWorkspace(workspace);
 }
 
+export async function clearWorkspace(): Promise<void> {
+  try {
+    const emptyWorkspace: Workspace = { nodes: [], connections: [] };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(emptyWorkspace));
+  } catch (e) {
+    console.error('Failed to clear workspace', e);
+  }
+}
+
 export async function runWorkflow(): Promise<void> {
   const workspace = await getWorkspace();
   if (workspace.connections.length === 0) {
