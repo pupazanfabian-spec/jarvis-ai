@@ -13,7 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
