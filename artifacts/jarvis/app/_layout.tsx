@@ -134,9 +134,7 @@ export default function RootLayout() {
                     <PinProvider>
                       <BrainProvider>
                         <RootLayoutNav />
-                        {showSplash && (
-                          <JarvisSplash onFinish={() => setShowSplash(false)} />
-                        )}
+                        <JarvisSplash onFinish={() => setShowSplash(false)} />
                       </BrainProvider>
                     </PinProvider>
                   </DevModeProvider>

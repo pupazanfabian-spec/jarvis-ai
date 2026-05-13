@@ -318,13 +318,56 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               await toggleSubAgent(agent.id, false);
               response = `⏸️ Agentul **${agent.name}** a fost dezactivat.`;
           } else response = `❌ Nu am găsit agentul **${name}**.`;
-      } else if (cleanText === 'reseteaza studio' || cleanText === 'curata studio' || cleanText === 'reset studio') {
+      } else if (
+          cleanText === 'reseteaza studio' || cleanText === 'curata studio' || cleanText === 'reset studio' ||
+          cleanText === 'reseteaza canvas' || cleanText === 'curata canvas' || cleanText === 'reset canvas'
+      ) {
           setThinkingComplexity(1);
           try {
               await studioManager.clearWorkspace();
               response = `🧹 Canvas-ul Code Studio a fost resetat. Toate nodurile și conexiunile au fost șterse.`;
           } catch (e: any) {
               response = `❌ Eroare la resetarea studioului: ${e.message}`;
+          }
+      } else if (
+          cleanText.includes('adauga in canvas') || cleanText.includes('adauga in dashboard') || 
+          cleanText.includes('fa asta in studio') || cleanText.includes('adauga nod')
+      ) {
+          setThinkingComplexity(1);
+          let name = text.replace(/adauga in canvas/i, '')
+                         .replace(/adauga in dashboard/i, '')
+                         .replace(/fa asta in studio/i, '')
+                         .replace(/adauga nod/i, '')
+                         .trim();
+          if (!name) name = "Nod Nou";
+          try {
+              await studioManager.addNode('Agent', name);
+              response = `✅ Am adăugat nodul "**${name}**" în canvas-ul Studio.`;
+          } catch (e: any) { response = `❌ Eroare la adăugarea în canvas: ${e.message}`; }
+      } else if (
+          (cleanText.includes('sterge') || cleanText.includes('elimina')) && 
+          (cleanText.includes('din canvas') || cleanText.includes('din studio') || cleanText.includes('din dashboard'))
+      ) {
+          setThinkingComplexity(1);
+          let name = text.replace(/sterge/i, '')
+                         .replace(/elimina/i, '')
+                         .replace(/din canvas/i, '')
+                         .replace(/din studio/i, '')
+                         .replace(/din dashboard/i, '')
+                         .trim();
+          if (!name) {
+              response = "Ce anume vrei să șterg din canvas? Specifică numele nodului.";
+          } else {
+              try {
+                  const ws = await studioManager.getWorkspace();
+                  const node = ws.nodes.find(n => n.title.toLowerCase() === name.toLowerCase());
+                  if (node) {
+                      await studioManager.deleteNode(node.id);
+                      response = `🗑️ Am șters nodul "**${node.title}**" din canvas.`;
+                  } else {
+                      response = `❌ Nu am găsit niciun nod cu numele "**${name}**" în canvas.`;
+                  }
+              } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
           }
       }
 

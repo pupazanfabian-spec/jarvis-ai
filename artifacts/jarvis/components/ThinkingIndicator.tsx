@@ -33,10 +33,10 @@ const ringStyle = (size: number, bw: number, color: string) => ({
 });
 
 // Pre-calculate elliptical orbits
-const PARTICLE_COUNT = 8;
-const RX = 130;
-const RY = 80;
-const STEPS = 60;
+const PARTICLE_COUNT = 24;
+const RX = 140;
+const RY = 90;
+const STEPS = 80;
 const createEllipticalTrajectory = (rx: number, ry: number) => {
   const xTable: number[] = [];
   const yTable: number[] = [];
