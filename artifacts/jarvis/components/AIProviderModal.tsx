@@ -15,6 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { useAIProvider, providerLabel } from '@/context/AIProviderContext';
 import type { AIProvider } from '@/engine/aiProviders';
+import { getKeysForProvider, saveKeysForProvider } from '@/engine/code-studio/keyManager';
 
 const { colors } = Colors;
 
@@ -54,13 +55,13 @@ const PROVIDER_OPTIONS: { id: AIProvider; label: string; icon: FeatherIconName; 
     id: 'groq',
     label: 'Groq (Llama 3.3 / Mixtral)',
     icon: 'cpu',
-    desc: 'Ultra-rapid și GRATUIT. Llama 3.3 70B. Cheie de la console.groq.com',
+    desc: 'Ultra-rapid și GRATUIT. Llama 3.3 70B. Suportă rotație chei (3 sloturi).',
   },
   {
     id: 'openrouter',
     label: 'OpenRouter (modele gratuite)',
     icon: 'globe',
-    desc: 'Acces la modele gratuite: Llama, Mistral, Gemma. Cheie de la openrouter.ai',
+    desc: 'Acces la modele gratuite: Llama, Mistral, Gemma. Suportă rotație chei (3 sloturi).',
   },
 ];
 
@@ -91,6 +92,7 @@ function KeySection({ title, hint, value, onChange, placeholder, showKey, toggle
               onChangeText={v => { onChange(v); clearError(); }}
               placeholder={placeholder}
               placeholderTextColor={colors.textMuted}
+              secureStoreEntry={!showKey}
               secureTextEntry={!showKey}
               autoCapitalize="none"
               autoCorrect={false}
@@ -124,8 +126,10 @@ export default function AIProviderModal({ visible, onClose }: Props) {
 
   const [geminiInput, setGeminiInput] = useState(settings.geminiKey);
   const [openaiInput, setOpenaiInput] = useState(settings.openaiKey);
-  const [groqInput, setGroqInput] = useState(settings.groqKey);
-  const [openrouterInput, setOpenrouterInput] = useState(settings.openrouterKey);
+  
+  const [groqKeys, setGroqKeys] = useState<string[]>(['', '', '']);
+  const [openrouterKeys, setOpenrouterKeys] = useState<string[]>(['', '', '']);
+
   const [savingProvider, setSavingProvider] = useState<AIProvider | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -135,31 +139,41 @@ export default function AIProviderModal({ visible, onClose }: Props) {
     if (visible) {
       setGeminiInput(settings.geminiKey);
       setOpenaiInput(settings.openaiKey);
-      setGroqInput(settings.groqKey);
-      setOpenrouterInput(settings.openrouterKey);
+      
+      const loadMultiKeys = async () => {
+          const g = await getKeysForProvider('groq');
+          const o = await getKeysForProvider('openrouter');
+          setGroqKeys([...g.map(k => k.key), '', '', ''].slice(0, 3));
+          setOpenrouterKeys([...o.map(k => k.key), '', '', ''].slice(0, 3));
+      };
+      loadMultiKeys();
+
       setSuccessMsg('');
       setLocalError('');
     }
-  }, [visible, settings.geminiKey, settings.openaiKey, settings.groqKey, settings.openrouterKey]);
+  }, [visible, settings.geminiKey, settings.openaiKey]);
 
   const handleSelectProvider = async (provider: AIProvider) => {
-    const keyMap: Record<string, string> = {
-      gemini: settings.geminiKey,
-      openai: settings.openaiKey,
-      groq: settings.groqKey,
-      openrouter: settings.openrouterKey,
-    };
-
     if (provider === 'auto') {
-      const hasAnyFreeKey = settings.geminiKey || settings.groqKey || settings.openrouterKey;
+      const hasAnyFreeKey = settings.geminiKey || groqKeys.some(k => k.trim()) || openrouterKeys.some(k => k.trim());
       if (!hasAnyFreeKey) {
-        Alert.alert('Chei lipsă', 'Adaugă și validează cel puțin o cheie pentru Gemini, Groq sau OpenRouter pentru a folosi modul Automat.', [{ text: 'OK' }]);
+        Alert.alert('Chei lipsă', 'Adaugă cel puțin o cheie pentru Gemini, Groq sau OpenRouter pentru a folosi modul Automat.', [{ text: 'OK' }]);
         return;
       }
-    } else if (provider !== 'none' && !keyMap[provider]) {
-      Alert.alert('Cheie lipsă', 'Adaugă și validează o cheie API mai întâi, apoi poți activa providerul.', [{ text: 'OK' }]);
-      return;
+    } else if (provider === 'gemini' && !settings.geminiKey) {
+        Alert.alert('Cheie lipsă', 'Adaugă o cheie Gemini mai întâi.', [{ text: 'OK' }]);
+        return;
+    } else if (provider === 'openai' && !settings.openaiKey) {
+        Alert.alert('Cheie lipsă', 'Adaugă o cheie OpenAI mai întâi.', [{ text: 'OK' }]);
+        return;
+    } else if (provider === 'groq' && !groqKeys.some(k => k.trim())) {
+        Alert.alert('Cheie lipsă', 'Adaugă cel puțin o cheie Groq mai întâi.', [{ text: 'OK' }]);
+        return;
+    } else if (provider === 'openrouter' && !openrouterKeys.some(k => k.trim())) {
+        Alert.alert('Cheie lipsă', 'Adaugă cel puțin o cheie OpenRouter mai întâi.', [{ text: 'OK' }]);
+        return;
     }
+
     setSavingProvider(provider);
     clearError();
     setSuccessMsg('');
@@ -187,10 +201,33 @@ export default function AIProviderModal({ visible, onClose }: Props) {
     const ok = await testKey(provider, trimmed);
     if (ok) {
       await saveFn(trimmed);
+      if (provider === 'groq') {
+          await saveKeysForProvider('groq', [trimmed, ...groqKeys.slice(1)]);
+      } else if (provider === 'openrouter') {
+          await saveKeysForProvider('openrouter', [trimmed, ...openrouterKeys.slice(1)]);
+      }
       await setActiveProvider(provider);
       setSuccessMsg(`✅ ${providerLabel(provider)} activat și funcționează!`);
       setTimeout(() => setSuccessMsg(''), 3000);
     }
+  };
+
+  const handleUpdateMultiKey = async (provider: 'groq' | 'openrouter', index: number, val: string) => {
+      if (provider === 'groq') {
+          const next = [...groqKeys];
+          next[index] = val;
+          setGroqKeys(next);
+          await saveKeysForProvider('groq', next);
+          // Also sync primary key to context for main chat compatibility
+          if (index === 0) await saveGroqKey(val);
+      } else {
+          const next = [...openrouterKeys];
+          next[index] = val;
+          setOpenrouterKeys(next);
+          await saveKeysForProvider('openrouter', next);
+          // Also sync primary key to context
+          if (index === 0) await saveOpenRouterKey(val);
+      }
   };
 
   const toggleKey = (k: string) => setShowKeys(prev => ({ ...prev, [k]: !prev[k] }));
@@ -272,31 +309,73 @@ export default function AIProviderModal({ visible, onClose }: Props) {
             clearError={() => { setLocalError(''); clearError(); }}
           />
 
-          <KeySection
-            title="Cheie API Groq (GRATUIT)"
-            hint="Obține gratuit de la console.groq.com/keys — ultra-rapid!"
-            value={groqInput}
-            onChange={setGroqInput}
-            placeholder="gsk_... (lipește cheia)"
-            showKey={!!showKeys.groq}
-            toggleShow={() => toggleKey('groq')}
-            onTest={() => handleTest('groq', groqInput, saveGroqKey)}
-            isTesting={isTesting}
-            clearError={() => { setLocalError(''); clearError(); }}
-          />
+          <Text style={styles.sectionTitle}>Chei API Groq (GRATUIT)</Text>
+          <View style={styles.card}>
+              <Text style={styles.cardHint}>Obține de la console.groq.com. Suportă rotație automată.</Text>
+              {groqKeys.map((key, i) => (
+                  <View key={`groq-${i}`} style={[styles.keyRow, { marginBottom: i < 2 ? 8 : 0 }]}>
+                      <View style={styles.keyInputWrapper}>
+                          <TextInput
+                              style={styles.keyInput}
+                              value={key}
+                              onChangeText={v => handleUpdateMultiKey('groq', i, v)}
+                              placeholder={`Groq #${i + 1}`}
+                              placeholderTextColor={colors.textMuted}
+                              secureTextEntry={!showKeys.groq}
+                              autoCapitalize="none"
+                          />
+                          {i === 0 && (
+                            <TouchableOpacity style={styles.eyeBtn} onPress={() => toggleKey('groq')}>
+                                <Feather name={showKeys.groq ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
+                            </TouchableOpacity>
+                          )}
+                      </View>
+                      {i === 0 && (
+                          <TouchableOpacity
+                              style={[styles.testBtn, (!key.trim() || isTesting) && styles.testBtnDisabled]}
+                              onPress={() => handleTest('groq', key, saveGroqKey)}
+                              disabled={!key.trim() || isTesting}
+                          >
+                              {isTesting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.testBtnText}>Testează</Text>}
+                          </TouchableOpacity>
+                      )}
+                  </View>
+              ))}
+          </View>
 
-          <KeySection
-            title="Cheie API OpenRouter (GRATUIT)"
-            hint="Obține gratuit de la openrouter.ai/keys — modele Llama, Mistral, Gemma"
-            value={openrouterInput}
-            onChange={setOpenrouterInput}
-            placeholder="sk-or-... (lipește cheia)"
-            showKey={!!showKeys.openrouter}
-            toggleShow={() => toggleKey('openrouter')}
-            onTest={() => handleTest('openrouter', openrouterInput, saveOpenRouterKey)}
-            isTesting={isTesting}
-            clearError={() => { setLocalError(''); clearError(); }}
-          />
+          <Text style={styles.sectionTitle}>Chei API OpenRouter (GRATUIT)</Text>
+          <View style={styles.card}>
+              <Text style={styles.cardHint}>Obține de la openrouter.ai. Suportă rotație automată.</Text>
+              {openrouterKeys.map((key, i) => (
+                  <View key={`or-${i}`} style={[styles.keyRow, { marginBottom: i < 2 ? 8 : 0 }]}>
+                      <View style={styles.keyInputWrapper}>
+                          <TextInput
+                              style={styles.keyInput}
+                              value={key}
+                              onChangeText={v => handleUpdateMultiKey('openrouter', i, v)}
+                              placeholder={`OpenRouter #${i + 1}`}
+                              placeholderTextColor={colors.textMuted}
+                              secureTextEntry={!showKeys.openrouter}
+                              autoCapitalize="none"
+                          />
+                          {i === 0 && (
+                            <TouchableOpacity style={styles.eyeBtn} onPress={() => toggleKey('openrouter')}>
+                                <Feather name={showKeys.openrouter ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
+                            </TouchableOpacity>
+                          )}
+                      </View>
+                      {i === 0 && (
+                          <TouchableOpacity
+                              style={[styles.testBtn, (!key.trim() || isTesting) && styles.testBtnDisabled]}
+                              onPress={() => handleTest('openrouter', key, saveOpenRouterKey)}
+                              disabled={!key.trim() || isTesting}
+                          >
+                              {isTesting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.testBtnText}>Testează</Text>}
+                          </TouchableOpacity>
+                      )}
+                  </View>
+              ))}
+          </View>
 
           {displayError ? (
             <View style={styles.errorBox}>
