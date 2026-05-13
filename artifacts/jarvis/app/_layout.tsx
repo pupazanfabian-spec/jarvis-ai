@@ -100,7 +100,6 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashChecked, setSplashLoaded] = useState(false);
-  const { settings } = useAIProvider(); // Access settings for keys
 
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
