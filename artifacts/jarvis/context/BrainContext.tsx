@@ -57,6 +57,7 @@ interface BrainContextType {
   messages: Message[];
   isThinking: boolean;
   webSearching: boolean;
+  thinkingComplexity: number;
   wantsOnline: boolean;
   brainState: BrainState;
   dbReady: boolean;
@@ -109,6 +110,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [isThinking, setIsThinking] = useState(false);
   const [webSearching, setWebSearching] = useState(false);
+  const [thinkingComplexity, setThinkingComplexity] = useState(3);
   const [wantsOnline, setWantsOnline] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const [lastProvider, setLastProvider] = useState('Groq');
@@ -249,10 +251,12 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const cleanText = normalizedText.trim();
       
       if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
+          setThinkingComplexity(1);
           const agents = await getSubAgents();
           response = agents.length === 0 ? "Nu ai sub-agenți creați. 🤖" : "🤖 **Sub-Agenții tăi:**\n\n" + 
               agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'} (Skill: ${a.skills.join(', ')})`).join('\n');
       } else if (cleanText.includes('creeaza agent') || cleanText.includes('creaza agent')) {
+          setThinkingComplexity(1);
           // Format: creeaza agent [nume] cu skill [skillId] pe [groq|openrouter]
           const match = text.match(/(?:creeaza|creaza)\s+agent\s+(.+?)(?:\s+cu\s+skill\s+(.+?))?(?:\s+pe\s+(groq|openrouter))?$/i);
           if (match) {
@@ -275,6 +279,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               } catch (e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
           }
       } else if (cleanText.startsWith('sterge agent ')) {
+          setThinkingComplexity(1);
           const name = text.replace(/sterge agent /i, '').trim();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
@@ -283,6 +288,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               response = `🗑️ Agentul **${agent.name}** a fost șters.`;
           } else response = `❌ Nu am găsit agentul **${name}**.`;
       } else if (cleanText.startsWith('activeaza agent ')) {
+          setThinkingComplexity(1);
           const name = text.replace(/activeaza agent /i, '').trim();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
@@ -291,6 +297,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
               response = `✅ Agentul **${agent.name}** a fost activat.`;
           } else response = `❌ Nu am găsit agentul **${name}**.`;
       } else if (cleanText.startsWith('dezactiveaza agent ')) {
+          setThinkingComplexity(1);
           const name = text.replace(/dezactiveaza agent /i, '').trim();
           const agents = await getSubAgents();
           const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
@@ -316,6 +323,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           const activeAgent = agents.find(a => a.isActive && a.skills.includes(matchedSkill.id));
           
           if (activeAgent) {
+              // Analyze intent for complexity score even here
+              const localIntent = await orchestrator.analyzeIntent(text);
+              setThinkingComplexity(localIntent.complexityScore || 5);
+
               const result = await callSubAgent(activeAgent.id, text);
               if (result.success) {
                   const finalMsg: Message = { 
@@ -335,7 +346,8 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
       // 3. Orchestrator Routing
       const intent = await orchestrator.analyzeIntent(text);
-      console.log(`[Brain] Intent complexity: ${intent.complexity}, skill: ${intent.skill.id}`);
+      setThinkingComplexity(intent.complexityScore || 3);
+      console.log(`[Brain] Intent complexity score: ${intent.complexityScore}, skill: ${intent.skill.id}`);
       
       if (intent.complexity !== 'simple') {
           const result = await orchestrator.route(text);
@@ -370,6 +382,7 @@ ${content}`;
       }
 
       // 3. Normal Flow (Groq/OpenRouter fallback)
+      setThinkingComplexity(2);
       const currentHistory = [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }));
       if (aiProvider.settings.activeProvider !== 'none') {
           const cloudCtx = await buildCloudCtx(text);
@@ -404,12 +417,13 @@ ${content}`;
       persist([...messages, userMsg, fallbackMsg], brainRef.current);
     } finally {
       setIsThinking(false); isProcessing.current = false;
+      setThinkingComplexity(3);
     }
-  }, [messages, aiProvider, buildCloudCtx, autoLearnFromWeb, _handleOfflineFallback, persist, persistEntities, setMessages, setIsThinking, isProcessing, setLastProvider, setBrainState]);
+  }, [messages, aiProvider, buildCloudCtx, autoLearnFromWeb, _handleOfflineFallback, persist, persistEntities, setMessages, setIsThinking, isProcessing, setLastProvider, setBrainState, setThinkingComplexity]);
 
   return (
     <BrainContext.Provider value={{
-      messages, isThinking, webSearching, wantsOnline, brainState, dbReady, lastProvider,
+      messages, isThinking, webSearching, thinkingComplexity, wantsOnline, brainState, dbReady, lastProvider,
       sendMessage, clearConversation, addDocument, removeDocument, setWantsOnline, studio: studioManager
     }}>
       {children}

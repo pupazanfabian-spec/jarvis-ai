@@ -99,7 +99,7 @@ function EmptyState() {
 
 export default function ChatScreen() {
   const {
-    messages, isThinking, webSearching, brainState, lastProvider,
+    messages, isThinking, webSearching, thinkingComplexity, brainState, lastProvider,
     sendMessage, clearConversation, addDocument, removeDocument,
   } = useBrain();
 
@@ -593,7 +593,7 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      <ThinkingIndicator visible={isThinking || webSearching} />
+      <ThinkingIndicator visible={isThinking || webSearching} complexity={thinkingComplexity} />
 
       {!hasPin && (
         <TouchableOpacity style={styles.pinTip} onPress={() => setPinMode('set')}>

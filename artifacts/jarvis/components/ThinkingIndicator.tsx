@@ -1,127 +1,200 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
 
+interface ThinkingIndicatorProps {
+  visible: boolean;
+  complexity: number;
+}
 
-const { width, height } = Dimensions.get('window');
+const COMPLEXITY_COLORS: Record<number, string> = {
+  1: '#00ffff',
+  2: '#00e5ff',
+  3: '#00d4ff',
+  4: '#00b4d8',
+  5: '#48cae4',
+  6: '#00b09b',
+  7: '#ff6b6b',
+  8: '#ff0040',
+};
 
-// Safe linear easing function
-const linear = (t: number) => t;
+const ring = (size: number, bw: number) => ({
+  width: size,
+  height: size,
+  borderRadius: size / 2,
+  borderWidth: bw,
+  backgroundColor: 'transparent',
+});
 
-export default function ThinkingIndicator({ visible }: { visible: boolean }) {
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim2 = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0.8)).current;
+export default function ThinkingIndicator({ visible, complexity }: ThinkingIndicatorProps) {
+  const [shouldRender, setShouldRender] = useState(visible);
+  
+  const rotateA = useRef(new Animated.Value(0)).current;
+  const rotateB = useRef(new Animated.Value(0)).current;
+  const rotateC = useRef(new Animated.Value(0)).current;
+  const rotateD = useRef(new Animated.Value(0)).current;
+  
+  const pulseCore = useRef(new Animated.Value(1)).current;
+  const pulseInner = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
     if (visible) {
-      // Fade in + scale in
+      setShouldRender(true);
+      
+      // Animations for rings
+      const loopRotate = (anim: Animated.Value, duration: number, clockwise: boolean) => {
+        return Animated.loop(
+          Animated.timing(anim, {
+            toValue: clockwise ? 1 : -1,
+            duration,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        );
+      };
+
+      const rotateAAnim = loopRotate(rotateA, 8000, true);
+      const rotateBAnim = loopRotate(rotateB, 5000, false);
+      const rotateCAnim = loopRotate(rotateC, 3000, true);
+      const rotateDAnim = loopRotate(rotateD, 2000, false);
+
+      // Pulse Core
+      const pulseCoreAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseCore, { toValue: 1.15, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseCore, { toValue: 0.85, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+
+      // Pulse Inner (inverse)
+      const pulseInnerAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseInner, { toValue: 0.85, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseInner, { toValue: 1.15, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+
+      // Pulse Opacity
+      const pulseOpacityAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseOpacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+      );
+
+      // Entry sequence
       Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1, duration: 300, useNativeDriver: true
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1, tension: 60, friction: 8, useNativeDriver: true
-        })
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
+        rotateAAnim,
+        rotateBAnim,
+        rotateCAnim,
+        rotateDAnim,
+        pulseCoreAnim,
+        pulseInnerAnim,
+        pulseOpacityAnim,
       ]).start();
 
-      // Rotatie continua
-      Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1, duration: 2000,
-          easing: linear, useNativeDriver: true
-        })
-      ).start();
-
-      // Rotatie inversa
-      Animated.loop(
-        Animated.timing(rotateAnim2, {
-          toValue: 1, duration: 1500,
-          easing: linear, useNativeDriver: true
-        })
-      ).start();
-
-      // Pulse principal
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.1, duration: 600, easing: linear, useNativeDriver: true
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0.9, duration: 600, easing: linear, useNativeDriver: true
-          }),
-        ])
-      ).start();
-
-      // Glow pulse (opacity based, safe for native driver)
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 0.8, duration: 1000, easing: linear, useNativeDriver: true
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0.3, duration: 1000, easing: linear, useNativeDriver: true
-          }),
-        ])
-      ).start();
+      return () => {
+        [rotateAAnim, rotateBAnim, rotateCAnim, rotateDAnim, pulseCoreAnim, pulseInnerAnim, pulseOpacityAnim].forEach(a => a.stop());
+      };
     } else {
-      Animated.timing(fadeAnim, {
-        toValue: 0, duration: 200, useNativeDriver: true
-      }).start(() => {
-        rotateAnim.setValue(0);
-        rotateAnim2.setValue(0);
-        scaleAnim.setValue(0.5);
-        pulseAnim.setValue(0.8);
-        glowAnim.setValue(0.3);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.5, duration: 300, useNativeDriver: true }),
+      ]).start(() => {
+        setShouldRender(false);
+        rotateA.setValue(0);
+        rotateB.setValue(0);
+        rotateC.setValue(0);
+        rotateD.setValue(0);
       });
     }
-  }, [visible, rotateAnim, rotateAnim2, pulseAnim, fadeAnim, scaleAnim, glowAnim]);
+  }, [visible]);
 
-  const spin1 = rotateAnim.interpolate({
-    inputRange: [0, 1], outputRange: ['0deg', '360deg']
-  });
-  const spin2 = rotateAnim2.interpolate({
-    inputRange: [0, 1], outputRange: ['360deg', '0deg']
-  });
+  if (!shouldRender) return null;
 
-  if (!visible) return null;
+  const ringColor = COMPLEXITY_COLORS[complexity] || '#00d4ff';
 
-  const BLUE = '#00d4ff';
+  const spin1 = rotateA.interpolate({ inputRange: [-1, 1], outputRange: ['-360deg', '360deg'] });
+  const spin2 = rotateB.interpolate({ inputRange: [-1, 1], outputRange: ['-360deg', '360deg'] });
+  const spin3 = rotateC.interpolate({ inputRange: [-1, 1], outputRange: ['-360deg', '360deg'] });
+  const spin4 = rotateD.interpolate({ inputRange: [-1, 1], outputRange: ['-360deg', '360deg'] });
 
   return (
     <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="none">
-      <Animated.View style={[styles.container, {
-        transform: [{ scale: scaleAnim }]
-      }]}>
-        {/* Cerc exterior - Culoare fixa, rotatie animata */}
-        <Animated.View style={[styles.outerRing, {
-          transform: [{ rotate: spin1 }],
-          borderColor: BLUE,
+      <Animated.View style={[styles.center, { transform: [{ scale: scaleAnim }] }]}>
+        
+        {/* Inel 1 - 280x280 */}
+        <Animated.View style={[ring(280, 2), {
+          position: 'absolute',
+          borderTopColor: ringColor,
+          borderRightColor: 'transparent',
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          transform: [{ rotate: spin1 }]
         }]} />
-
-        {/* Cerc middle - Culoare fixa, rotatie inversa */}
-        <Animated.View style={[styles.middleRing, {
-          transform: [{ rotate: spin2 }],
-          borderColor: BLUE,
+        
+        {/* Inel 2 - 240x240 */}
+        <Animated.View style={[ring(240, 3), {
+          position: 'absolute',
+          borderTopColor: ringColor,
+          borderBottomColor: ringColor,
+          borderRightColor: 'transparent',
+          borderLeftColor: 'transparent',
+          transform: [{ rotate: spin2 }]
         }]} />
-
-        {/* Cerc interior - Glow pulse prin opacity (safe pentru native driver) */}
-        <Animated.View style={[styles.innerCircle, {
-          borderColor: BLUE,
-          transform: [{ scale: pulseAnim }],
-          opacity: glowAnim
+        
+        {/* Inel 3 - 190x190 */}
+        <Animated.View style={[ring(190, 2), {
+          position: 'absolute',
+          borderTopColor: ringColor,
+          borderRightColor: ringColor,
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          transform: [{ rotate: spin3 }]
+        }]} />
+        
+        {/* Inel 4 - 140x140 cu opacity pulse */}
+        <Animated.View style={[ring(140, 1), {
+          position: 'absolute',
+          borderColor: ringColor,
+          transform: [{ rotate: spin4 }],
+          opacity: pulseOpacity
+        }]} />
+        
+        {/* Core 80x80 */}
+        <Animated.View style={[{
+          width: 80, height: 80, borderRadius: 40,
+          backgroundColor: ringColor + '26',
+          borderWidth: 2, borderColor: ringColor,
+          justifyContent: 'center', alignItems: 'center',
+          transform: [{ scale: pulseCore }]
         }]}>
-          <View style={[styles.coreCircle, {
-            backgroundColor: BLUE
+          <Animated.View style={[{
+            width: 30, height: 30, borderRadius: 15,
+            backgroundColor: ringColor + '99',
+            transform: [{ scale: pulseInner }]
           }]} />
         </Animated.View>
 
-        {/* Text - Culoare fixa */}
-        <Text style={[styles.text, { color: BLUE }]}>
-          Procesez...
+        {/* Text complexity */}
+        <Text style={{
+          position: 'absolute',
+          bottom: -70,
+          color: ringColor,
+          fontSize: 12,
+          letterSpacing: 3,
+          fontWeight: 'bold'
+        }}>
+          {complexity <= 2 ? 'PROCESEZ...' : 
+           complexity <= 5 ? 'ANALIZEZ...' : 
+           'CALCUL COMPLEX...'}
         </Text>
+
       </Animated.View>
     </Animated.View>
   );
@@ -130,40 +203,13 @@ export default function ThinkingIndicator({ visible }: { visible: boolean }) {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 5000,
+    zIndex: 9999,
   },
-  container: { alignItems: 'center', justifyContent: 'center' },
-  outerRing: {
-    position: 'absolute',
-    width: 200, height: 200, borderRadius: 100,
-    borderWidth: 2,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-  },
-  middleRing: {
-    position: 'absolute',
-    width: 150, height: 150, borderRadius: 75,
-    borderWidth: 1.5,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-  },
-  innerCircle: {
-    width: 100, height: 100, borderRadius: 50,
-    borderWidth: 2,
-    justifyContent: 'center',
+  center: {
     alignItems: 'center',
-  },
-  coreCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    opacity: 0.8,
-  },
-  text: {
-    marginTop: 120,
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 3,
+    justifyContent: 'center',
   },
 });

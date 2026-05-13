@@ -9,6 +9,7 @@ export interface RouteResult {
   skillUsed: string;
   wasAutoCreated: boolean;
   success: boolean;
+  complexityScore: number; // 1-8
 }
 
 export class JarvisOrchestrator {
@@ -18,40 +19,62 @@ export class JarvisOrchestrator {
     needsAgent: boolean;
     suggestedAgentName: string;
     complexity: 'simple' | 'medium' | 'complex';
+    complexityScore: number;
   }> {
     const allSkills = await getAllSkills();
     const skill = detectSkill(message, allSkills);
-    const wordCount = message.trim().split(/\s+/).length;
+    const words = message.trim().split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
     
-    // Simple ONLY if greeting/short question AND conversation skill
-    const isSimpleGreeting = wordCount <= 4 && skill.id === 'conversatie';
-    
-    // Complex if contains action words
-    const complexKeywords = [
-        'planifica', 'creeaza', 'creaza', 'scrie', 'cauta', 
-        'cerceteaza', 'verifica', 'debug', 'script', 'cod', 'program',
-        'research', 'analizeaza', 'explica in detaliu', 'implementeaza',
-        'workflow', 'organizeaza', 'arhitectura'
-    ];
-    const hasComplexKeyword = complexKeywords.some(kw => 
-      message.toLowerCase().includes(kw));
-    
-    let complexity: 'simple' | 'medium' | 'complex';
-    if (isSimpleGreeting) {
-      complexity = 'simple';
-    } else if (hasComplexKeyword || skill.id !== 'conversatie') {
-      complexity = hasComplexKeyword ? 'complex' : 'medium';
+    // Scorul de bază bazat pe reguli:
+    // 1 = salut/da/nu (sub 3 cuvinte, conversatie)
+    // 2 = intrebare simpla (3-6 cuvinte, conversatie)
+    // 3 = intrebare normala (conversatie, orice lungime)
+    // 4 = task simplu (codare/cercetare, sub 10 cuvinte)
+    // 5 = task mediu (codare/cercetare, 10-20 cuvinte)
+    // 6 = task complex (multi-skill sau tools active)
+    // 7 = task foarte complex (workflow, planifica, coordoneaza)
+    // 8 = orchestrare multi-agent (mai multi agenti implicati)
+
+    let score = 3;
+    const isConversation = skill.id === 'conversatie';
+
+    if (isConversation) {
+        if (wordCount < 3) score = 1;
+        else if (wordCount <= 6) score = 2;
+        else score = 3;
     } else {
-      complexity = wordCount > 8 ? 'medium' : 'simple';
+        if (wordCount < 10) score = 4;
+        else if (wordCount <= 20) score = 5;
+        else score = 6;
     }
+
+    const complexKeywords = [
+        'planifica', 'workflow', 'coordoneaza', 'organizeaza', 'arhitectura',
+        'orchestreaza', 'pas cu pas', 'etapa'
+    ];
+    const hasComplexKeywords = complexKeywords.some(kw => message.toLowerCase().includes(kw));
     
-    console.log(`[Orchestrator] Msg: "${message.substring(0,30)}..." Skill: ${skill.id} Complexity: ${complexity}`);
+    if (hasComplexKeywords) score = 7;
+    
+    // 8 if specifically asking for multiple agents or very heavy task
+    if (message.toLowerCase().includes('agenti') || message.toLowerCase().includes('echipa')) {
+        score = 8;
+    }
+
+    let complexity: 'simple' | 'medium' | 'complex';
+    if (score <= 2) complexity = 'simple';
+    else if (score <= 5) complexity = 'medium';
+    else complexity = 'complex';
+    
+    console.log(`[Orchestrator] Msg: "${message.substring(0,30)}..." Skill: ${skill.id} Complexity: ${complexity} Score: ${score}`);
     
     return {
       skill,
       needsAgent: complexity !== 'simple',
       suggestedAgentName: `Expert ${skill.name}`,
-      complexity
+      complexity,
+      complexityScore: score
     };
   }
 
@@ -100,7 +123,8 @@ export class JarvisOrchestrator {
           agentUsed: null,
           skillUsed: intent.skill.id,
           wasAutoCreated: false,
-          success: true
+          success: true,
+          complexityScore: intent.complexityScore
         };
       }
       
@@ -123,7 +147,8 @@ export class JarvisOrchestrator {
           agentUsed: null,
           skillUsed: intent.skill.id,
           wasAutoCreated: false,
-          success: false
+          success: false,
+          complexityScore: intent.complexityScore
         };
       }
       
@@ -132,7 +157,8 @@ export class JarvisOrchestrator {
         agentUsed: agent.name,
         skillUsed: intent.skill.name,
         wasAutoCreated,
-        success: true
+        success: true,
+        complexityScore: intent.complexityScore
       };
     } catch(e: any) {
       console.error('[Orchestrator] route error:', e);
@@ -141,7 +167,8 @@ export class JarvisOrchestrator {
         agentUsed: null,
         skillUsed: 'error',
         wasAutoCreated: false,
-        success: false
+        success: false,
+        complexityScore: 3
       };
     }
   }
