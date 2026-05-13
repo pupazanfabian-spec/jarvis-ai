@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import JarvisIcon from "@/components/JarvisIcon";
+import StudioIcon from "@/components/StudioIcon";
 
 export default function TabLayout() {
   return (
@@ -30,8 +31,8 @@ export default function TabLayout() {
         name="code-studio" 
         options={{ 
           title: "Studio",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="code-slash-outline" size={size} color={color} />
+          tabBarIcon: ({ focused, color, size }) => (
+            <StudioIcon focused={focused} color={color} size={size} />
           ),
         }} 
       />
