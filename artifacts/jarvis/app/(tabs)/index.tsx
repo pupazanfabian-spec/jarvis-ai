@@ -330,7 +330,7 @@ export default function ChatScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.statusDot} />
           <View>
-            <Animated.Text style={[styles.headerTitle, { color: headerColor }]}>J.A.R.V.I.S</Animated.Text>
+            <Animated.Text style={[styles.headerTitle, { color: colors.primary }]}>J.A.R.V.I.S</Animated.Text>
             <Text style={styles.headerSub}>
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'

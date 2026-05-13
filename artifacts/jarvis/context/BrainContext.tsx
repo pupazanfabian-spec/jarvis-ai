@@ -42,8 +42,10 @@ import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder,
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
 import { useDevMode } from '@/context/DevModeContext';
-
 import * as studioManager from '@/engine/code-studio/studioManager';
+import { useLLM } from '@/context/LLMContext';
+
+// ... (existing code, keep existing imports)
 import { getSubAgents, callSubAgent, SubAgent, deleteSubAgent, toggleSubAgent, createSubAgent } from '@/engine/code-studio/subAgentManager';
 import { getAllSkills, detectSkill } from '@/engine/code-studio/skills';
 import { orchestrator } from '@/engine/orchestrator';
@@ -210,6 +212,25 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     }
     return response;
   }, [dbReady, llmGenerate, llmStatus]);
+
+  const clearConversation = useCallback(async () => {
+    archiveCurrentSession(brainRef.current, 0);
+    setMessages([WELCOME]);
+    await AsyncStorage.removeItem(MESSAGES_KEY);
+    console.log('[Brain] Conversation cleared');
+  }, []);
+
+  const addDocument = useCallback(async (name: string, content: string): Promise<void> => {
+    await processDocument(name, content, brainRef.current);
+    setBrainState({ ...brainRef.current });
+    await persist(messages, brainRef.current);
+  }, [messages, persist]);
+
+  const removeDocument = useCallback((id: string) => {
+    brainRef.current.learnedDocuments = brainRef.current.learnedDocuments.filter(d => d.id !== id);
+    setBrainState({ ...brainRef.current });
+    persist(messages, brainRef.current).catch(() => {});
+  }, [messages, persist]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
@@ -409,7 +430,7 @@ async function _syncEntitiesFromDB(state: BrainState): Promise<void> {
     const existing = new Set((state.entityTracker.entities || []).map(e => e.normalized));
     rows.forEach(row => {
       if (!existing.has(row.name)) {
-        state.entityTracker.entities.push({ id: row.name, type: 'concept', value: row.data.value, normalized: row.name, firstSeen: Date.now(), occurrences: 1 });
+        state.entityTracker.entities.push({ id: row.name, type: 'concept', value: row.data.value, context: row.data.context || '', normalized: row.name, firstSeen: Date.now(), occurrences: 1 });
       }
     });
   } catch {}
