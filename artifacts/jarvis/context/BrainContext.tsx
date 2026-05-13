@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Keyboard } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Message, BrainState, processMessage, processDocument,
@@ -236,6 +237,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
+    Keyboard.dismiss();
     isProcessing.current = true; setIsThinking(true);
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text.trim(), timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
