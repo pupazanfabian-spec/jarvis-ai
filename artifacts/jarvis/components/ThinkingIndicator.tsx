@@ -25,6 +25,25 @@ const ring = (size: number, bw: number) => ({
   backgroundColor: 'transparent',
 });
 
+// Pre-calculate trajectories for 8 particles
+const PARTICLE_COUNT = 8;
+const RADIUS = 120;
+const STEPS = 60; // Granularity of interpolation
+
+const createTrajectory = (radius: number) => {
+  const cosTable: number[] = [];
+  const sinTable: number[] = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const angle = (i * 360 / STEPS) * Math.PI / 180;
+    cosTable.push(radius * Math.cos(angle));
+    sinTable.push(radius * Math.sin(angle));
+  }
+  return { cosTable, sinTable };
+};
+
+const TRAJECTORY = createTrajectory(RADIUS);
+const INPUT_RANGE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
+
 export default function ThinkingIndicator({ visible, complexity }: ThinkingIndicatorProps) {
   const [shouldRender, setShouldRender] = useState(visible);
   
@@ -40,11 +59,20 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
 
+  // Layer 1: Segments (12)
+  const segmentAnims = useRef(Array.from({ length: 12 }, () => new Animated.Value(0))).current;
+
+  // Layer 2: Particles (8)
+  const particleAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(0))).current;
+
+  // Layer 3: Deformation (Ring 140)
+  const deformX = useRef(new Animated.Value(1)).current;
+  const deformY = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
     if (visible) {
       setShouldRender(true);
       
-      // Animations for rings
       const loopRotate = (anim: Animated.Value, duration: number, clockwise: boolean) => {
         return Animated.loop(
           Animated.timing(anim, {
@@ -61,7 +89,6 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
       const rotateCAnim = loopRotate(rotateC, 3000, true);
       const rotateDAnim = loopRotate(rotateD, 2000, false);
 
-      // Pulse Core
       const pulseCoreAnim = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseCore, { toValue: 1.15, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -69,7 +96,6 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         ])
       );
 
-      // Pulse Inner (inverse)
       const pulseInnerAnim = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseInner, { toValue: 0.85, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -77,7 +103,6 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         ])
       );
 
-      // Pulse Opacity
       const pulseOpacityAnim = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -85,7 +110,43 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         ])
       );
 
-      // Entry sequence
+      // Layer 1: Segments Pulse
+      const segmentPulseAnims = segmentAnims.map((anim, i) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(i * 100),
+            Animated.timing(anim, { toValue: 1, duration: 200, useNativeDriver: true }),
+            Animated.timing(anim, { toValue: 0.2, duration: 200, useNativeDriver: true }),
+          ])
+        );
+      });
+
+      // Layer 2: Particle Orbits
+      const particleOrbitAnims = particleAnims.map((anim, i) => {
+        return Animated.loop(
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 1000 + (i * 250),
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        );
+      });
+
+      // Layer 3: Deformation
+      const deformAnim = Animated.loop(
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(deformX, { toValue: 1.2, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            Animated.timing(deformY, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          ]),
+          Animated.parallel([
+            Animated.timing(deformX, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            Animated.timing(deformY, { toValue: 1.2, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          ]),
+        ])
+      );
+
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
@@ -96,10 +157,13 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         pulseCoreAnim,
         pulseInnerAnim,
         pulseOpacityAnim,
+        deformAnim,
+        ...segmentPulseAnims,
+        ...particleOrbitAnims,
       ]).start();
 
       return () => {
-        [rotateAAnim, rotateBAnim, rotateCAnim, rotateDAnim, pulseCoreAnim, pulseInnerAnim, pulseOpacityAnim].forEach(a => a.stop());
+        [rotateAAnim, rotateBAnim, rotateCAnim, rotateDAnim, pulseCoreAnim, pulseInnerAnim, pulseOpacityAnim, deformAnim, ...segmentPulseAnims, ...particleOrbitAnims].forEach(a => a.stop());
       };
     } else {
       Animated.parallel([
@@ -107,10 +171,6 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         Animated.timing(scaleAnim, { toValue: 0.5, duration: 300, useNativeDriver: true }),
       ]).start(() => {
         setShouldRender(false);
-        rotateA.setValue(0);
-        rotateB.setValue(0);
-        rotateC.setValue(0);
-        rotateD.setValue(0);
       });
     }
   }, [visible]);
@@ -147,6 +207,25 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
           borderLeftColor: 'transparent',
           transform: [{ rotate: spin2 }]
         }]} />
+
+        {/* Layer 1: 12 Segments positioned on 240 ring */}
+        {segmentAnims.map((anim, i) => (
+          <Animated.View
+            key={`seg-${i}`}
+            style={[{
+              position: 'absolute',
+              width: 15,
+              height: 4,
+              backgroundColor: ringColor,
+              borderRadius: 2,
+              opacity: anim,
+              transform: [
+                { rotate: `${i * 30}deg` },
+                { translateY: -120 }
+              ]
+            }]}
+          />
+        ))}
         
         {/* Inel 3 - 190x190 */}
         <Animated.View style={[ring(190, 2), {
@@ -158,11 +237,34 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
           transform: [{ rotate: spin3 }]
         }]} />
         
-        {/* Inel 4 - 140x140 cu opacity pulse */}
+        {/* Layer 2: 8 Particles (6x6) */}
+        {particleAnims.map((anim, i) => {
+           const tx = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.cosTable });
+           const ty = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.sinTable });
+           return (
+             <Animated.View
+               key={`part-${i}`}
+               style={[{
+                 position: 'absolute',
+                 width: 6,
+                 height: 6,
+                 borderRadius: 3,
+                 backgroundColor: ringColor,
+                 transform: [{ translateX: tx }, { translateY: ty }]
+               }]}
+             />
+           );
+        })}
+        
+        {/* Inel 4 - 140x140 cu deformation pulse */}
         <Animated.View style={[ring(140, 1), {
           position: 'absolute',
           borderColor: ringColor,
-          transform: [{ rotate: spin4 }],
+          transform: [
+            { rotate: spin4 },
+            { scaleX: deformX },
+            { scaleY: deformY }
+          ],
           opacity: pulseOpacity
         }]} />
         
@@ -184,7 +286,7 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         {/* Text complexity */}
         <Text style={{
           position: 'absolute',
-          bottom: -70,
+          bottom: -85,
           color: ringColor,
           fontSize: 12,
           letterSpacing: 3,
