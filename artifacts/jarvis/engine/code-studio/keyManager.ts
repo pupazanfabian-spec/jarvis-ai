@@ -2,10 +2,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS_STORAGE_KEY = '@jarvis_api_keys';
+const INDEX_STORAGE_PREFIX = '@jarvis_key_index_';
 
 export interface APIKey {
   provider: string;
   key: string;
+  index: number;
+  label?: string;
+  failed?: boolean;
+  failedAt?: number;
 }
 
 export async function getKeys(): Promise<APIKey[]> {
@@ -17,11 +22,58 @@ export async function getKeys(): Promise<APIKey[]> {
   }
 }
 
+export async function getKeysForProvider(provider: string): Promise<APIKey[]> {
+  const keys = await getKeys();
+  return keys.filter(k => k.provider.toLowerCase() === provider.toLowerCase());
+}
+
+export async function getWorkingKey(provider: 'groq' | 'openrouter'): Promise<string | null> {
+    const keys = await getKeysForProvider(provider);
+    const now = Date.now();
+    // 15 minute = 900000 ms
+    const workingKeys = keys.filter(k => !k.failed || (k.failedAt && (now - k.failedAt > 900000)));
+
+    if (workingKeys.length === 0) return null;
+
+    return await getNextKey(provider, workingKeys);
+}
+
+export async function getNextKey(provider: string, workingKeys?: APIKey[]): Promise<string | null> {
+    const keys = workingKeys || await getKeysForProvider(provider);
+    if (keys.length === 0) return null;
+
+    const indexKey = `${INDEX_STORAGE_PREFIX}${provider.toLowerCase()}`;
+    const currentIndexStr = await AsyncStorage.getItem(indexKey);
+    const currentIndex = currentIndexStr ? parseInt(currentIndexStr, 10) : 0;
+
+    const nextIndex = (currentIndex + 1) % keys.length;
+    await AsyncStorage.setItem(indexKey, nextIndex.toString());
+
+    return keys[nextIndex].key;
+}
+
+export async function markKeyFailed(provider: string, key: string) {
+    const allKeys = await getKeys();
+    const updated = allKeys.map(k => {
+        if (k.provider.toLowerCase() === provider.toLowerCase() && k.key === key) {
+            return { ...k, failed: true, failedAt: Date.now() };
+        }
+        return k;
+    });
+    await AsyncStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(updated));
+}
+
 export async function addKey(provider: string, key: string) {
   try {
     const keys = await getKeys();
-    const updated = keys.filter(k => k.provider.toLowerCase() !== provider.toLowerCase());
-    updated.push({ provider, key: key.trim() });
+    const providerKeys = keys.filter(k => k.provider.toLowerCase() === provider.toLowerCase());
+    const newKey: APIKey = { 
+        provider, 
+        key: key.trim(), 
+        index: providerKeys.length,
+        label: `${provider} #${providerKeys.length + 1}`
+    };
+    const updated = [...keys.filter(k => !(k.provider.toLowerCase() === provider.toLowerCase() && k.key === key.trim())), newKey];
     await AsyncStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(updated));
   } catch (e) {
     console.error('Failed to add API key', e);

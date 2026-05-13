@@ -63,7 +63,7 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   const coreScale = useRef(new Animated.Value(1)).current;
   const textOpacity = useRef(new Animated.Value(0.7)).current;
   
-  const segmentAnims = useRef(Array.from({ length: 12 }, () => new Animated.Value(0))).current;
+  const segmentAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(0))).current;
   const particleAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(0))).current;
   const particleScaleAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(1))).current;
   const particleOpacityAnims = useRef(Array.from({ length: 8 }, () => new Animated.Value(1))).current;
@@ -133,11 +133,11 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         Animated.timing(textOpacity, { toValue: 0.7, duration: 750, useNativeDriver: true }),
       ]));
 
-      // Energy Loading / Progressive Segments
+      // Energy Loading / Progressive Segments (8 segments, 3000ms loop)
       const segAnims = segmentAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 250), // Progressive offset (3000ms / 12 = 250ms)
-        Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.1, duration: 400, useNativeDriver: true }),
+        Animated.delay(i * 375), // 3000ms / 8 = 375ms
+        Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.1, duration: 500, useNativeDriver: true }),
       ])));
 
       // Particles Orbits & Individual Pulses
@@ -255,7 +255,7 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
            {segmentAnims.map((anim, i) => (
              <Animated.View key={`seg-${i}`} style={[
                styles.midSegment, 
-               { backgroundColor: hudColor, opacity: anim, transform: [{ rotate: `${i * 30}deg` }, { translateY: -120 }] }
+               { backgroundColor: hudColor, opacity: anim, transform: [{ rotate: `${i * 45}deg` }, { translateY: -120 }] }
              ]} />
            ))}
         </Animated.View>

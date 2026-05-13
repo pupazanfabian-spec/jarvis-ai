@@ -176,41 +176,44 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
   const primaryProvider = agent.agentProvider;
   const secondaryProvider = primaryProvider === 'groq' ? 'openrouter' : 'groq';
 
-  const executeCall = async (provider: 'groq' | 'openrouter'): Promise<string | null> => {
-    const apiKey = (agent.apiKey && agent.apiKey.trim()) 
-      ? agent.apiKey.trim()
-      : await getKeyForProvider(provider);
+  const executeCall = async (provider: 'groq' | 'openrouter', retry = true): Promise<{ text: string | null, key: string | null }> => {
+    const key = await getWorkingKey(provider);
 
-    if (!apiKey) return null;
+    if (!key) return { text: null, key: null };
 
     try {
-      // AbortController pentru timeout de 30s
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       let result: string | null = null;
       if (provider === 'groq') {
-        result = await callGroq(message, apiKey, specializedPrompt);
+        result = await callGroq(message, key, specializedPrompt);
       } else {
-        result = await callOpenRouter(message, apiKey, specializedPrompt);
+        result = await callOpenRouter(message, key, specializedPrompt);
       }
       
       clearTimeout(timeoutId);
-      return result;
-    } catch (e) {
+      return { text: result, key };
+    } catch (e: any) {
+      if (e.response?.status === 429 || e.message?.includes('429')) {
+          await markKeyFailed(provider, key);
+          if (retry) return executeCall(provider, false);
+      }
       console.warn(`[SubAgent] Provider ${provider} eșuat:`, e);
-      return null;
+      return { text: null, key };
     }
   };
 
   // Încearcă providerul primar
-  let responseText = await executeCall(primaryProvider);
+  let { text: responseText, key: usedKey } = await executeCall(primaryProvider);
   let finalProvider = primaryProvider;
 
   // Fallback la providerul secundar dacă primul a eșuat
   if (!responseText) {
     console.log(`[SubAgent] Fallback de la ${primaryProvider} la ${secondaryProvider}`);
-    responseText = await executeCall(secondaryProvider);
+    let fallback = await executeCall(secondaryProvider);
+    responseText = fallback.text;
+    usedKey = fallback.key;
     finalProvider = secondaryProvider;
   }
 
