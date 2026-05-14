@@ -69,32 +69,94 @@ async function _saveCategory(category: keyof typeof STORAGE_KEYS) {
   }
 }
 
-export function autoCategorize(content: string, source: MemoryEntry['source']): MemoryEntry['category'] {
-  const c = content.toLowerCase();
+export function autoCategorize(content: string, source: MemoryEntry['source']): MemoryEntry['category'] | null {
+  const c = content.toLowerCase().trim();
   
-  if (source === 'user_explicit' && (c.includes('regulă') || c.includes('regula') || c.includes('vreau să') || c.includes('vreau sa') || c.includes('obligatoriu') || c.includes('niciodată') || c.includes('niciodata'))) {
-    return 'reguli';
+  // STEP 1 — Keywords sigure & Delete pattern
+  if (c.startsWith('uită ') || c.startsWith('uita ')) return null;
+
+  if (source === 'user_explicit') {
+    // Pattern "vreau să respecți regula:" / "regula este să" / "obligatoriu să"
+    const hasRegulaKey = c.includes('regulă') || c.includes('regula') || c.includes('obligatoriu');
+    const isExplicitRequest = c.includes('vreau să') || c.includes('vreau sa') || c.includes('trebuie să') || c.includes('trebuie sa');
+    
+    if (hasRegulaKey || isExplicitRequest) {
+      // STEP 2 — Keywords RESPINSE (anti-pattern)
+      const isQuestion = c.includes('explică-mi') || c.includes('explica-mi') || 
+                        c.includes('ce este') || c.includes('ce e ') || 
+                        c.includes('cum funcționează') || c.includes('cât este') || 
+                        c.includes('care este') || c.includes('?') || c.startsWith('de ce');
+      
+      if (!isQuestion && (hasRegulaKey || isExplicitRequest)) {
+        return 'reguli';
+      }
+    }
+
+    // Fapte despre user (importanta)
+    if (c.includes('îmi place') || c.includes('imi place') || c.includes('prefer') || 
+        c.includes('locuiesc') || c.includes('numele meu') || c.includes('mă numesc') || 
+        c.includes('ma numesc') || c.includes('sunt un') || c.includes('lucrez ca')) {
+      return 'importanta';
+    }
   }
   
-  if (source === 'jarvis_inferred' && (c.includes('eu sunt') || c.includes('eu pot') || c.includes('pot să') || c.includes('pot sa') || c.includes('capabilitățile mele'))) {
-    return 'sistem';
+  if (source === 'jarvis_inferred') {
+    if (c.includes('eu sunt jarvis') || c.includes('eu pot să') || c.includes('eu pot sa') || c.includes('identitatea mea')) {
+      return 'sistem';
+    }
+  }
+
+  // STEP 3 — Heuristică pentru fapte (dacă nu e match pe keywords)
+  // Salvăm doar dacă pare a fi o afirmație despre sine sau context personal
+  if (source === 'user_explicit' && c.length > 15 && !c.includes('?')) {
+    if (/(?:eu sunt|am |lucrez|stau în|stau in|vreau ca|mi-ar plăcea|mi-ar placea)/.test(c)) {
+      return 'importanta';
+    }
   }
   
-  if (c.includes('îmi place') || c.includes('imi place') || c.includes('prefer') || c.includes('locuiesc') || c.includes('numele meu') || c.includes('sunt un')) {
-    return 'importanta';
-  }
-  
-  if (source === 'conversation' || source === 'jarvis_inferred') {
-    return 'mai_putin';
-  }
-  
-  return 'irelevanta';
+  return null;
 }
 
-export async function addEntry(content: string, source: MemoryEntry['source'], hints?: Partial<MemoryEntry>): Promise<MemoryEntry> {
+export async function deleteByKeyword(keyword: string): Promise<number> {
+  await _loadAll();
+  let count = 0;
+  const kw = keyword.toLowerCase().trim();
+  if (!kw) return 0;
+
+  for (const cat of Object.keys(_memoryCache)) {
+    const initialLen = _memoryCache[cat].length;
+    _memoryCache[cat] = _memoryCache[cat].filter(e => !e.content.toLowerCase().includes(kw));
+    const deleted = initialLen - _memoryCache[cat].length;
+    if (deleted > 0) {
+      count += deleted;
+      await _saveCategory(cat as any);
+    }
+  }
+  return count;
+}
+
+export async function addEntry(
+  content: string, 
+  source: MemoryEntry['source'], 
+  hints?: Partial<MemoryEntry>,
+  classifier?: (text: string) => Promise<MemoryEntry['category'] | null>
+): Promise<MemoryEntry | null> {
   await _loadAll();
   
-  const category = hints?.category || autoCategorize(content, source);
+  let category = hints?.category || autoCategorize(content, source);
+  
+  // STEP 3 — AI Fallback dacă e ambiguu și avem un classifier
+  if (!category && classifier && source === 'user_explicit' && content.length > 10 && !content.includes('?')) {
+    try {
+      const aiCategory = await classifier(content);
+      if (aiCategory) category = aiCategory;
+    } catch (e) {
+      console.warn('[MemoryManager] AI Classification failed:', e);
+    }
+  }
+
+  if (!category) return null;
+
   const entry: MemoryEntry = {
     id: `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     category,

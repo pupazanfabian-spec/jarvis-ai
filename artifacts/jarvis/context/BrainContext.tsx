@@ -382,6 +382,15 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   }
               } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
           }
+      } else if (cleanText.startsWith('uită ') || cleanText.startsWith('uita ')) {
+          setThinkingComplexity(1);
+          const keyword = text.replace(/uită |uita /i, '').trim();
+          if (keyword) {
+              const count = await MemoryManager.deleteByKeyword(keyword);
+              response = count > 0 ? `🗑️ Am uitat ${count} amintiri legate de "**${keyword}**".` : `🔍 Nu am găsit nicio amintire care să conțină "**${keyword}**".`;
+          } else {
+              response = "Ce anume vrei să uit? Scrie `uită [cuvânt cheie]`.";
+          }
       }
 
       if (response) {
@@ -462,9 +471,23 @@ ${content}`;
       setThinkingComplexity(2);
       const currentHistory = [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }));
       
+      // AI Classifier for Memory
+      const memoryClassifier = async (t: string) => {
+          if (llmStatus !== 'ready') return null;
+          const prompt = `Ești un modul de clasificare a memoriei. Analizează textul și decide dacă este o regulă personală ('reguli'), un fapt despre utilizator ('importanta') sau nimic relevant ('null').
+Text: "${t}"
+Răspunde DOAR cu 'reguli', 'importanta' sau 'null'.`;
+          try {
+              const res = await llmGenerate(prompt, { maxTokens: 10 });
+              const cat = res?.trim().toLowerCase().replace(/['"`\.]/g, '');
+              if (cat === 'reguli' || cat === 'importanta') return cat as any;
+          } catch (e) {}
+          return null;
+      };
+
       // Auto-learn from user message before AI call
-      if (text.length > 10 && text.length < 500) {
-        MemoryManager.addEntry(text, 'user_explicit').catch(() => {});
+      if (text.length > 10 && text.length < 500 && !text.includes('?')) {
+        MemoryManager.addEntry(text, 'user_explicit', {}, memoryClassifier).catch(() => {});
       }
 
       if (aiProvider.settings.activeProvider !== 'none') {
@@ -481,11 +504,6 @@ ${content}`;
               autoLearnFromWeb(aiResult.text, aiResult.provider, text);
               setLastProvider(aiResult.provider.toUpperCase());
               
-              // Auto-learn from AI response
-              if (fullAIContent.length > 20) {
-                MemoryManager.addEntry(fullAIContent.slice(0, 500), 'jarvis_inferred').catch(() => {});
-              }
-
               // Final persist for streaming
               setMessages(prev => { persist(prev, brainRef.current); return prev; });
           }

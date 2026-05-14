@@ -26,7 +26,6 @@ import MemoryManager from '@/components/MemoryManager';
 import FileUploadModal from '@/components/FileUploadModal';
 import PinScreen from '@/components/PinScreen';
 import ModelSetupScreen from '@/components/ModelSetupScreen';
-import FloatingBubble from '@/components/FloatingBubble';
 import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
@@ -638,17 +637,6 @@ export default function ChatScreen() {
       <CodeSandboxScreen
         visible={showSandbox}
         onClose={() => setShowSandbox(false)}
-      />
-
-      <FloatingBubble
-        onSendToChat={(text) => {
-          sendMessage(text);
-          scrollToBottom();
-        }}
-        onMemorize={(text) => {
-          sendMessage(`Memorează asta: "${text.slice(0, 300)}"`);
-          scrollToBottom();
-        }}
       />
     </View>
   );
