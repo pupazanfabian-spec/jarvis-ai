@@ -1,5 +1,5 @@
 # 🤖 JARVIS MASTER - STATUS + CLAUDE RULES + GEMINI GHID
-Actualizat: Sesiunea 5 — după implementare 4 task-uri majore (Memory + Animations v5 + API rotation + Tab bar)
+Actualizat: Sesiunea 6 — după FIX Memory Core UI (Lobi, Animații, CRUD)
 
 ---
 
@@ -36,10 +36,18 @@ Actualizat: Sesiunea 5 — după implementare 4 task-uri majore (Memory + Animat
 - aiProviders.ts: integrat getWorkingKey + retry pe 429 + markKeyFailed automat
 - AsyncStorage: @jarvis_api_keys, @jarvis_key_index, @jarvis_request_count_groq, @jarvis_request_count_openrouter
 
-### Sistem Memorie 5-Tier ✅
+### Sistem Memorie 5-Tier & BrainSphere UI ✅
 - 5 subfoldere: reguli (500), sistem (1000), importanta (1000), mai_putin (2000), irelevanta (3000)
 - AsyncStorage chei separate per categorie
-- engine/memoryManager.ts (CREAT): schema MemoryEntry uniform, auto-categorize, recall, migrate lifecycle, promote, checkContradiction, export/import
+- engine/memoryManager.ts: schema MemoryEntry uniform, auto-categorize, recall, migrate lifecycle, promote, checkContradiction, export/import
+- UI BrainSphere.tsx (FIXED):
+  - Lobii sunt vizibili (interpolare 3D reală pe X/Scale/Opacity)
+  - Animații 100% nativeDriver (auto-rotație 30s, pulsare noduri orbitali)
+  - Sfera apare corect în orice stare
+- UI MemoryManager.tsx (FIXED):
+  - CRUD complet: Tap pe nod -> Modal detalii -> Edit/Delete funcțional
+  - Export/Import prin Share API și Alert prompt
+  - Refresh button și Statistici integrate
 - Auto-CRUD 100% AUTONOM în BrainContext.sendMessage:
   - Recall înainte de AI: TOATE reguli + Top 5 sistem + Top 10 importanta + Top 5 mai_putin + Top 3 irelevanta
   - Save după AI: addEntry autonom din user msg + AI response
