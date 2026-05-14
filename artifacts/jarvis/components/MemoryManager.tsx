@@ -8,9 +8,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Animated,
   Dimensions,
   TextInput,
+  Share,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as MemoryManagerEngine from '@/engine/memoryManager';
@@ -122,6 +122,42 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const data = await MemoryManagerEngine.exportAll();
+      await Share.share({
+        message: data,
+        title: 'Jarvis Memory Export',
+      });
+    } catch (err) {
+      Alert.alert('Eroare', 'Exportul a eșuat.');
+    }
+  };
+
+  const handleImport = () => {
+    Alert.prompt(
+      'Import Memorie',
+      'Lipește JSON-ul exportat aici:',
+      [
+        { text: 'Anulează', style: 'cancel' },
+        { 
+          text: 'Importă', 
+          onPress: async (text: string | undefined) => {
+            if (!text) return;
+            try {
+              await MemoryManagerEngine.importAll(text);
+              loadStats();
+              if (activeLobe) loadEntries(activeLobe);
+              Alert.alert('Succes', 'Memoria a fost importată.');
+            } catch (err) {
+              Alert.alert('Eroare', 'Format JSON invalid.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const lobesData = useMemo(() => LOBE_CONFIG.map(l => ({
     ...l,
     count: stats?.[l.id] || 0
@@ -183,7 +219,8 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
                  <Text style={[styles.categoryTitle, { color: LOBE_CONFIG.find(l => l.id === activeLobe)?.color }]}>
                    {activeLobe.toUpperCase()}
                  </Text>
-                 <TouchableOpacity onPress={() => setActiveLobe(null)}>
+                 <TouchableOpacity onPress={() => setActiveLobe(null)} style={styles.backBtn}>
+                    <Feather name="chevron-left" size={14} color={colors.textSecondary} />
                     <Text style={styles.backBtnText}>ÎNAPOI LA CREIER</Text>
                  </TouchableOpacity>
               </View>
@@ -192,43 +229,62 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
 
           {/* Footer Actions */}
           <View style={styles.footer}>
-            <TouchableOpacity 
-              style={[styles.actionBtn, cleaning && { opacity: 0.5 }]} 
-              onPress={handleCompact} 
-              disabled={cleaning}
-            >
-              <Feather name="zap" size={16} color="#000" />
-              <Text style={styles.actionText}>OPTIMIZEAZĂ CORE</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.secondaryBtn]} 
-              onPress={async () => { 
-                await MemoryManagerEngine.migrateLifecycle(); 
-                loadStats(); 
-                if(activeLobe) loadEntries(activeLobe);
-                Alert.alert('Migrare', 'Procesul de lifecycle a fost finalizat.');
-              }}
-            >
-              <Feather name="layers" size={16} color={colors.primary} />
-              <Text style={[styles.actionText, { color: colors.primary }]}>MIGREAZĂ LIFECYCLE</Text>
-            </TouchableOpacity>
+            <View style={styles.footerRow}>
+              <TouchableOpacity 
+                style={[styles.actionBtn, cleaning && { opacity: 0.5 }]} 
+                onPress={handleCompact} 
+                disabled={cleaning}
+              >
+                <Feather name="zap" size={16} color="#000" />
+                <Text style={styles.actionText}>OPTIMIZEAZĂ</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.secondaryBtn]} 
+                onPress={async () => { 
+                  await MemoryManagerEngine.migrateLifecycle(); 
+                  loadStats(); 
+                  if(activeLobe) loadEntries(activeLobe);
+                  Alert.alert('Migrare', 'Procesul de lifecycle a fost finalizat.');
+                }}
+              >
+                <Feather name="layers" size={16} color={colors.primary} />
+                <Text style={[styles.actionText, { color: colors.primary }]}>LIFECYCLE</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footerRow}>
+              <TouchableOpacity style={[styles.actionBtn, styles.tertiaryBtn]} onPress={handleExport}>
+                <Feather name="download" size={16} color={colors.text} />
+                <Text style={[styles.actionText, { color: colors.text }]}>EXPORT</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={[styles.actionBtn, styles.tertiaryBtn]} onPress={handleImport}>
+                <Feather name="upload" size={16} color={colors.text} />
+                <Text style={[styles.actionText, { color: colors.text }]}>IMPORT</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         {/* Entry Detail Modal (View / Edit / Delete) */}
         {selectedEntry && (
-          <Modal transparent animationType="slide" visible={!!selectedEntry}>
+          <Modal transparent animationType="fade" visible={!!selectedEntry}>
             <View style={styles.entryModalOverlay}>
               <View style={[styles.entryDetailCard, { borderColor: LOBE_CONFIG.find(l => l.id === selectedEntry.category)?.color || colors.primary }]}>
                  <View style={styles.detailHeader}>
-                    <Text style={styles.detailSource}>{selectedEntry.source.toUpperCase()} | {selectedEntry.category.toUpperCase()}</Text>
-                    <TouchableOpacity onPress={() => setSelectedEntry(null)}>
+                    <View>
+                      <Text style={styles.detailSource}>{selectedEntry.source.toUpperCase()}</Text>
+                      <Text style={[styles.detailCategory, { color: LOBE_CONFIG.find(l => l.id === selectedEntry.category)?.color }]}>
+                        {selectedEntry.category.toUpperCase()}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedEntry(null)} style={styles.closeBtn}>
                        <Feather name="x" size={22} color={colors.text} />
                     </TouchableOpacity>
                  </View>
                  
-                 <ScrollView style={styles.detailScroll} contentContainerStyle={{ paddingBottom: 20 }}>
+                 <ScrollView style={styles.detailScroll} showsVerticalScrollIndicator={false}>
                     {isEditing ? (
                       <TextInput
                         style={styles.editInput}
@@ -243,11 +299,21 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
                  </ScrollView>
 
                  <View style={styles.detailFooter}>
-                    <View>
-                       <Text style={styles.detailStat}>Accesări: {selectedEntry.accessCount}</Text>
-                       <Text style={styles.detailStat}>Importanță: {selectedEntry.importance}/10</Text>
-                       <Text style={styles.detailStat}>Creat: {new Date(selectedEntry.createdAt).toLocaleDateString()}</Text>
+                    <View style={styles.detailStats}>
+                       <View style={styles.statRow}>
+                         <Feather name="eye" size={12} color={colors.textSecondary} />
+                         <Text style={styles.detailStat}> {selectedEntry.accessCount}</Text>
+                       </View>
+                       <View style={styles.statRow}>
+                         <Feather name="star" size={12} color={colors.textSecondary} />
+                         <Text style={styles.detailStat}> {selectedEntry.importance}/10</Text>
+                       </View>
+                       <View style={styles.statRow}>
+                         <Feather name="calendar" size={12} color={colors.textSecondary} />
+                         <Text style={styles.detailStat}> {new Date(selectedEntry.createdAt).toLocaleDateString()}</Text>
+                       </View>
                     </View>
+                    
                     <View style={styles.detailActions}>
                        {isEditing ? (
                          <TouchableOpacity onPress={handleUpdateEntry} style={[styles.iconBtnDetail, { backgroundColor: colors.primary }]}>
@@ -304,7 +370,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
+    backgroundColor: 'rgba(0,0,0,0.95)',
   },
   scanline: {
     position: 'absolute',
@@ -312,7 +378,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: 'rgba(0, 240, 255, 0.1)',
+    backgroundColor: 'rgba(0, 240, 255, 0.15)',
     zIndex: 10,
   },
   container: {
@@ -324,7 +390,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   headerActions: {
     flexDirection: 'row',
@@ -333,12 +399,12 @@ const styles = StyleSheet.create({
   iconBtn: {
     padding: 10,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 10,
-    borderWidth: 0.5,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
     color: colors.primary,
     letterSpacing: 2,
@@ -353,40 +419,57 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginVertical: 10,
   },
   loader: {
     position: 'absolute',
-    top: 20,
+    top: 0,
+    zIndex: 100,
   },
   hintText: {
     color: colors.textSecondary,
     fontSize: 10,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     marginTop: 20,
     textAlign: 'center',
     opacity: 0.6,
+    fontWeight: '800',
   },
   categoryTitleContainer: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 10,
   },
   categoryTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    letterSpacing: 4,
-    textShadowColor: 'rgba(255,255,255,0.3)',
-    textShadowRadius: 10,
+    letterSpacing: 6,
+    textShadowColor: 'rgba(255,255,255,0.4)',
+    textShadowRadius: 15,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   backBtnText: {
     color: colors.textSecondary,
     fontSize: 10,
-    marginTop: 8,
-    textDecorationLine: 'underline',
+    fontWeight: '800',
+    marginLeft: 4,
   },
   footer: {
+    gap: 10,
+    paddingVertical: 10,
+  },
+  footerRow: {
     flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 20,
+    gap: 10,
   },
   actionBtn: {
     flex: 1,
@@ -395,71 +478,86 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary,
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     gap: 8,
   },
   secondaryBtn: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.2)',
+    borderColor: 'rgba(0, 240, 255, 0.3)',
+  },
+  tertiaryBtn: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   actionText: {
     color: '#000',
     fontWeight: '900',
-    fontSize: 11,
+    fontSize: 10,
+    letterSpacing: 1,
   },
   // Modal Styles
   entryModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   entryDetailCard: {
     width: '100%',
-    maxHeight: '70%',
-    backgroundColor: '#050d14',
-    borderWidth: 2,
-    borderRadius: 20,
+    maxHeight: '75%',
+    backgroundColor: '#0a0f18',
+    borderWidth: 1.5,
+    borderRadius: 24,
     padding: 24,
     shadowColor: colors.primary,
-    shadowRadius: 30,
-    shadowOpacity: 0.4,
-    elevation: 20,
+    shadowRadius: 40,
+    shadowOpacity: 0.3,
+    elevation: 25,
   },
   detailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
-    paddingBottom: 12,
+    paddingBottom: 15,
   },
   detailSource: {
-    color: colors.primary,
-    fontWeight: '900',
-    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '800',
+    fontSize: 10,
     letterSpacing: 1,
+  },
+  detailCategory: {
+    fontWeight: '900',
+    fontSize: 18,
+    letterSpacing: 2,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 5,
   },
   detailScroll: {
     marginBottom: 20,
   },
   detailContent: {
     color: colors.text,
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 17,
+    lineHeight: 26,
     fontWeight: '500',
   },
   editInput: {
     color: colors.text,
-    fontSize: 16,
-    lineHeight: 24,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
-    padding: 12,
-    minHeight: 120,
+    fontSize: 17,
+    lineHeight: 26,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 150,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -467,65 +565,74 @@ const styles = StyleSheet.create({
   detailFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingTop: 16,
+    alignItems: 'center',
+    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  detailStats: {
+    gap: 4,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   detailStat: {
     color: colors.textSecondary,
     fontSize: 10,
-    marginBottom: 2,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   detailActions: {
     flexDirection: 'row',
     gap: 12,
   },
   iconBtnDetail: {
-    padding: 12,
+    padding: 14,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   statsCard: {
     width: '100%',
-    height: '75%',
-    backgroundColor: '#050d14',
+    height: '80%',
+    backgroundColor: '#0a0f18',
     borderWidth: 2,
     borderColor: colors.primary,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 24,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   statRank: {
     color: colors.primary,
     fontWeight: '900',
-    width: 35,
-    fontSize: 12,
+    width: 40,
+    fontSize: 14,
   },
   statItemText: {
     flex: 1,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
     marginRight: 10,
+    fontWeight: '500',
   },
   statCount: {
     color: colors.primary,
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 14,
   },
   emptyText: {
     textAlign: 'center',
     color: colors.textSecondary,
-    marginTop: 50,
-    fontWeight: '600',
+    marginTop: 60,
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 1,
   },
 });
