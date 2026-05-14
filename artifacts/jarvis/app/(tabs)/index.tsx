@@ -29,6 +29,7 @@ import ModelSetupScreen from '@/components/ModelSetupScreen';
 import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
+import NeuralBackground from '@/components/NeuralBackground';
 import { useBrain } from '@/context/BrainContext';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
@@ -199,6 +200,21 @@ export default function ChatScreen() {
     if (item.role === 'survey_permission') {
       return <SurveyBubble onSelect={(msg) => sendMessage(msg)} isPermissionOnly={true} />;
     }
+    if (item.role === 'agent_proposal' && item.proposalData) {
+      return (
+        <SurveyBubble 
+          onSelect={(msg) => sendMessage(msg)} 
+          type="agent_proposal"
+          proposalData={item.proposalData}
+          onConfirmProposal={async () => {
+              if (item.proposalData) {
+                  const cmd = `creeaza agent ${item.proposalData.name} cu skill ${item.proposalData.skills[0]}`;
+                  await sendMessage(cmd);
+              }
+          }}
+        />
+      );
+    }
     return <ChatBubble message={item} index={index} />;
   }, [sendMessage]);
 
@@ -326,6 +342,7 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
+      <NeuralBackground intensity={isThinking ? 'thinking' : 'idle'} />
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.statusDot} />

@@ -47,7 +47,6 @@ import { useDevMode } from '@/context/DevModeContext';
 import * as studioManager from '@/engine/code-studio/studioManager';
 import { useLLM } from '@/context/LLMContext';
 
-// ... (existing code, keep existing imports)
 import { getSubAgents, callSubAgent, SubAgent, deleteSubAgent, toggleSubAgent, createSubAgent } from '@/engine/code-studio/subAgentManager';
 import { getAllSkills, detectSkill } from '@/engine/code-studio/skills';
 import { orchestrator } from '@/engine/orchestrator';
@@ -267,33 +266,42 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
           setThinkingComplexity(1);
           const agents = await getSubAgents();
-          response = agents.length === 0 ? "Nu ai sub-agenți creați. 🤖" : "🤖 **Sub-Agenții tăi:**\n\n" + 
-              agents.map(a => `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'} (Skill: ${a.skills.join(', ')})`).join('\n');
-      } else if (cleanText.includes('creeaza agent') || cleanText.includes('creaza agent')) {
+          if (agents.length === 0) {
+              response = "Nu ai sub-agenți creați. 🤖";
+          } else {
+              const agentList = agents.map(a => 
+                  `• **${a.name}** [${a.agentProvider.toUpperCase()}] — ${a.isActive ? '✅ Activ' : '❌ Inactiv'}\n  🎯 Skills: ${a.skills.join(', ')}`
+              ).join('\n\n');
+              response = `🤖 **Sub-Agenții tăi:**\n\n${agentList}`;
+          }
+      } else if (/(creeaz[ăa]|creează|adaug[ăa]) (un )?agent (nou )?(.+?)( cu (skill|skill-uri) (.+?))?( pe (groq|openrouter))?$/i.test(text)) {
           setThinkingComplexity(1);
-          // Format: creeaza agent [nume] cu skill [skillId] pe [groq|openrouter]
-          const match = text.match(/(?:creeaza|creaza)\s+agent\s+(.+?)(?:\s+cu\s+skill\s+(.+?))?(?:\s+pe\s+(groq|openrouter))?$/i);
+          const match = text.match(/(?:creeaz[ăa]|creează|adaug[ăa])\s+(?:un\s+)?(?:agent\s+)?(?:nou\s+)?(.+?)(?:\s+cu\s+(?:skill|skill-uri)\s+(.+?))?(?:\s+pe\s+(groq|openrouter))?$/i);
           if (match) {
               const name = match[1].trim();
-              const skillId = match[2]?.trim() || 'conversatie';
+              const skillsRaw = match[2]?.trim() || 'conversatie';
               const provider = (match[3]?.toLowerCase() === 'openrouter' ? 'openrouter' : 'groq') as 'groq' | 'openrouter';
               
+              const skillIds = skillsRaw.split(/,\s*/).map(s => s.trim());
               const allSkills = await getAllSkills();
-              const targetSkill = allSkills.find(s => s.id === skillId || s.name.toLowerCase() === skillId.toLowerCase()) || allSkills[0];
+              
+              const resolvedSkills = skillIds.map(id => {
+                  return allSkills.find(s => s.id === id || s.name.toLowerCase() === id.toLowerCase()) || allSkills[0];
+              });
               
               try {
                   const agent = await createSubAgent({
                       name,
-                      skills: [targetSkill.id],
+                      skills: resolvedSkills.map(s => s.id),
                       agentProvider: provider,
                       isActive: true,
-                      systemPrompt: targetSkill.systemPrompt
+                      systemPrompt: resolvedSkills.map(s => s.systemPrompt).join('\n\n')
                   });
                   
                   // Sync with Studio workspace
                   await studioManager.addNode('Agent', agent.name, { agentId: agent.id, provider: agent.agentProvider });
                   
-                  response = `✅ Agentul **${agent.name}** a fost creat cu succes!\n🎯 Skill: **${targetSkill.name}**\n🚀 Provider: **${provider.toUpperCase()}**`;
+                  response = `✓ Am creat agentul **${agent.name}** cu skill-urile: **${resolvedSkills.map(s => s.name).join(', ')}**. Îl găsești în Studio.`;
               } catch (e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
           }
       } else if (cleanText.startsWith('sterge agent ')) {
@@ -463,6 +471,25 @@ ${content}`;
               isProcessing.current = false; 
               return;
           }
+          
+          // Dacă orchestratorul nu a găsit/creat un agent, dar complexitatea e mare, propunem crearea unuia
+          const proposal = await orchestrator.proposeAgentCreation(text, intent.complexityScore);
+          if (proposal) {
+              const proposalMsg: Message = {
+                  id: Date.now().toString(),
+                  role: 'agent_proposal',
+                  content: `Am detectat o sarcină complexă (${intent.complexityScore}/8) în domeniul ${intent.skill.name}. Vrei să creez un agent specialist?`,
+                  timestamp: new Date(),
+                  proposalData: proposal
+              };
+              const nextMsgs = [...messages, userMsg, proposalMsg];
+              setMessages(nextMsgs);
+              persist(nextMsgs, brainRef.current);
+              setIsThinking(false);
+              isProcessing.current = false;
+              return;
+          }
+
           // If agent failed or returned empty, fall back to normal flow
           console.log('[Brain] Agent failed or empty, falling back to normal flow');
       }

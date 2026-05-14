@@ -35,10 +35,16 @@ import {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'survey' | 'survey_permission';
+  role: 'user' | 'assistant' | 'survey' | 'survey_permission' | 'agent_proposal';
   content: string;
   timestamp: Date;
   confidence?: number;
+  proposalData?: {
+    name: string;
+    skills: string[];
+    reason: string;
+    complexity: number;
+  };
 }
 
 export function isResponseVague(content: string, confidence: number): boolean {

@@ -22,11 +22,26 @@ const OPTIONS: SurveyOption[] = [
 interface Props {
   onSelect: (message: string) => void;
   isPermissionOnly?: boolean;
+  type?: 'survey' | 'agent_proposal';
+  proposalData?: {
+    name: string;
+    skills: string[];
+    reason: string;
+    complexity: number;
+  };
+  onConfirmProposal?: () => void;
 }
 
-export default function SurveyBubble({ onSelect, isPermissionOnly = true }: Props) {
+export default function SurveyBubble({ 
+  onSelect, 
+  isPermissionOnly = true, 
+  type = 'survey',
+  proposalData,
+  onConfirmProposal
+}: Props) {
   const [showOptions, setShowOptions] = useState(!isPermissionOnly);
   const [dismissed, setDismissed] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   if (dismissed) return null;
 
@@ -38,6 +53,61 @@ export default function SurveyBubble({ onSelect, isPermissionOnly = true }: Prop
     setShowOptions(true);
   };
 
+  // ─── AGENT PROPOSAL UI ───────────────────────────────────────────────────
+
+  if (type === 'agent_proposal' && proposalData) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Feather name="cpu" size={18} color={colors.primary} />
+          <Text style={styles.title}>Propunere: Creează Agent Nou</Text>
+        </View>
+        
+        <Text style={styles.proposalText}>
+          Vrei să creez un agent specialist numit "**{proposalData.name}**"?
+        </Text>
+
+        {showDetails && (
+          <View style={styles.detailsBox}>
+            <Text style={styles.detailLabel}>Motiv: <Text style={styles.detailValue}>{proposalData.reason}</Text></Text>
+            <Text style={styles.detailLabel}>Skills: <Text style={styles.detailValue}>{proposalData.skills.join(', ')}</Text></Text>
+            <Text style={styles.detailLabel}>Complexitate detectată: <Text style={styles.detailValue}>{proposalData.complexity}/8</Text></Text>
+          </View>
+        )}
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.yesBtn]}
+            onPress={() => {
+                onConfirmProposal?.();
+                setDismissed(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.yesBtnText}>Da, creează</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.detailsBtn]}
+            onPress={() => setShowDetails(!showDetails)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.detailsBtnText}>{showDetails ? 'Ascunde' : 'Detalii'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.noBtn]}
+            onPress={handleNo}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.noBtnText}>Nu</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ─── STANDARD SURVEY UI ──────────────────────────────────────────────────
   if (!showOptions) {
     return (
       <View style={styles.container}>
@@ -140,6 +210,37 @@ const styles = StyleSheet.create({
   },
   noBtnText: {
     color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+  },
+  proposalText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  detailsBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 4,
+  },
+  detailLabel: {
+    color: colors.primary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  detailValue: {
+    color: colors.text,
+    fontFamily: 'Inter_400Regular',
+  },
+  detailsBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  detailsBtnText: {
+    color: colors.text,
     fontSize: 14,
     fontFamily: 'Inter_500Medium',
   },

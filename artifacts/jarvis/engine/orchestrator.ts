@@ -79,6 +79,31 @@ export class JarvisOrchestrator {
     };
   }
 
+  async proposeAgentCreation(message: string, complexityScore: number): Promise<{
+    name: string;
+    skills: string[];
+    reason: string;
+    complexity: number;
+  } | null> {
+    if (complexityScore < 6) return null;
+
+    const allSkills = await getAllSkills();
+    const skill = detectSkill(message, allSkills);
+    
+    // Verifică dacă există deja un agent cu acest skill
+    const agents = await getSubAgents();
+    const exists = agents.some(a => (a.skills || []).includes(skill.id));
+    
+    if (exists) return null;
+
+    return {
+      name: `Expert ${skill.name}`,
+      skills: [skill.id],
+      reason: `Sarcina are o complexitate de ${complexityScore}/8 și necesită cunoștințe specializate în ${skill.name}.`,
+      complexity: complexityScore
+    };
+  }
+
   async findBestAgent(skillId: string): Promise<SubAgent | null> {
     try {
       const agents = await getSubAgents();
