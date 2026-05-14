@@ -166,7 +166,7 @@ export default function CodeStudio() {
 
   const initWorkspace = useCallback(async () => {
     try {
-      await keyManager.syncKeysFromContext(settings);
+      // await keyManager.syncKeysFromContext(settings); // Deprecated
       await seedDefaultAgents();
       const [sa, sk, saved] = await Promise.all([getSubAgents(), getAllSkills(), AsyncStorage.getItem('@code_studio_workspace')]);
       
@@ -498,8 +498,9 @@ export default function CodeStudio() {
                 </View>
                 <TouchableOpacity style={styles.validateKeyBtn} onPress={async () => {
                     if (!newAgentConfig.apiKey) return Alert.alert('Info', 'Nicio cheie introdusă.');
-                    const { validateKey } = await import('@/engine/code-studio/keyManager');
-                    const ok = await validateKey(newAgentConfig.agentProvider || 'groq', newAgentConfig.apiKey);
+                    // Folosim testKey, presupunând că validarea necesită index 0 pentru cheia nouă
+                    const { testKey } = await import('@/engine/code-studio/keyManager');
+                    const ok = await testKey(newAgentConfig.agentProvider === 'groq' ? 'groq' : 'openrouter', 0);
                     Alert.alert(ok ? '✅ Cheie validă!' : '❌ Cheie invalidă');
                 }}><Text style={styles.validateKeyBtnText}>Validează Cheia</Text></TouchableOpacity>
             </View>}

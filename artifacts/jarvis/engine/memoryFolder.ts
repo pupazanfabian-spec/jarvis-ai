@@ -20,6 +20,11 @@ export type MemoryCategory =
   | 'idee'
   | 'locatie'
   | 'munca'
+  | 'reguli'
+  | 'sistem'
+  | 'importanta'
+  | 'mai_putin'
+  | 'irelevanta'
   | 'general';
 
 export interface MemoryFileEntry {

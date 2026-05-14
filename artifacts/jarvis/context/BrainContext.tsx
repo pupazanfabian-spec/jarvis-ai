@@ -42,6 +42,7 @@ import {
 import { initMemoryFolder, writeMemoryEntry, searchMemory as searchMemoryFolder, migrateFromAsyncStorage as migrateMemoryFolder, getMemoryStats, listAllMemories, deleteMemoryByKeyword, clearAllMemory, saveConversation } from '@/engine/memoryFolder';
 import { requestFolderAccess, getExternalFolders, scanAllFolders } from '@/engine/externalFolders';
 import { autoDetectFacts, normalizeInput, detectIntentWithConfidence, loadLearnedPatterns, saveLearnedPatterns, extractPatternsFromState, type LearnedPatterns, isResponseVague } from '@/engine/brain';
+import * as MemoryManager from '@/engine/memoryManager';
 import { useDevMode } from '@/context/DevModeContext';
 import * as studioManager from '@/engine/code-studio/studioManager';
 import { useLLM } from '@/context/LLMContext';
@@ -191,15 +192,27 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const state = brainRef.current;
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
+    
+    // Recall from MemoryManager
+    const memCtx = await MemoryManager.recallContext(query || '', messages.slice(-5).map(m => m.content));
+    
     const agents = await getSubAgents();
     const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('\n') || 'Nu sunt sub-agenți activi.';
     return buildRichSystemPrompt({
       userName: state.userName || undefined,
       learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
       recentTopics: state.lastTopics.slice(-5),
-      customContext: memoryContext,
+      customContext: memoryContext + "\n" + memCtx,
       subAgents: subAgentsCtx,
     });
+  }, [messages]);
+
+  useEffect(() => {
+    // Lifecycle migration every 24h
+    const interval = setInterval(() => {
+      MemoryManager.migrateLifecycle().catch(() => {});
+    }, 24 * 3600 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const _handleOfflineFallback = useCallback(async (text: string, history: ConversationTurn[], intent: string): Promise<string> => {
@@ -367,9 +380,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   } else {
                       response = `❌ Nu am găsit niciun nod cu numele "**${name}**" în canvas.`;
                   }
-                  } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
-                  }
-                  }
+              } catch (e: any) { response = `❌ Eroare la ștergerea din canvas: ${e.message}`; }
+          }
+      }
 
       if (response) {
           const m: Message = { id: Date.now().toString(), role: 'assistant', content: response, timestamp: new Date() };
@@ -448,16 +461,31 @@ ${content}`;
       // 3. Normal Flow (Groq/OpenRouter fallback)
       setThinkingComplexity(2);
       const currentHistory = [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }));
+      
+      // Auto-learn from user message before AI call
+      if (text.length > 10 && text.length < 500) {
+        MemoryManager.addEntry(text, 'user_explicit').catch(() => {});
+      }
+
       if (aiProvider.settings.activeProvider !== 'none') {
           const cloudCtx = await buildCloudCtx(text);
           const assistantId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
+          let fullAIContent = '';
           const aiResult = await aiProvider.generateStream(text, (chunk) => {
+              fullAIContent += chunk;
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m));
           }, cloudCtx, currentHistory as any, 'general');
+          
           if (aiResult) {
               autoLearnFromWeb(aiResult.text, aiResult.provider, text);
               setLastProvider(aiResult.provider.toUpperCase());
+              
+              // Auto-learn from AI response
+              if (fullAIContent.length > 20) {
+                MemoryManager.addEntry(fullAIContent.slice(0, 500), 'jarvis_inferred').catch(() => {});
+              }
+
               // Final persist for streaming
               setMessages(prev => { persist(prev, brainRef.current); return prev; });
           }

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS_STORAGE_KEY = '@jarvis_api_keys';
 const INDEX_STORAGE_PREFIX = '@jarvis_key_index_';
+const REQ_COUNT_PREFIX = '@jarvis_request_count_';
 
 export interface APIKey {
   provider: string;
@@ -27,32 +28,52 @@ export async function getKeysForProvider(provider: string): Promise<APIKey[]> {
   return keys.filter(k => k.provider.toLowerCase() === provider.toLowerCase());
 }
 
+export async function testKey(provider: 'groq' | 'openrouter', slotIndex: number): Promise<boolean> {
+    const keys = await getKeysForProvider(provider);
+    const key = keys[slotIndex]?.key;
+    if (!key) return false;
+
+    try {
+        const { testGroqKeyDetailed, testOpenRouterKeyDetailed } = await import('@/engine/aiProviders');
+        const res = provider === 'groq' ? await testGroqKeyDetailed(key) : await testOpenRouterKeyDetailed(key);
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
 export async function getWorkingKey(provider: 'groq' | 'openrouter'): Promise<string | null> {
     const keys = await getKeysForProvider(provider);
     const now = Date.now();
-    // 15 minute = 900000 ms
     const workingKeys = keys.filter(k => !k.failed || (k.failedAt && (now - k.failedAt > 900000)));
 
     if (workingKeys.length === 0) return null;
 
-    return await getNextKey(provider, workingKeys);
+    const countKey = `${REQ_COUNT_PREFIX}${provider}`;
+    const indexKey = `${INDEX_STORAGE_PREFIX}${provider}`;
+    
+    let count = parseInt((await AsyncStorage.getItem(countKey)) || '0', 10);
+    let index = parseInt((await AsyncStorage.getItem(indexKey)) || '0', 10);
+
+    // Verifică dacă cheia curentă mai e validă
+    if (index >= workingKeys.length || workingKeys[index].failed) {
+        index = 0;
+        count = 0;
+    }
+
+    // Logică hibridă: 50 requests sau rotație externă
+    if (count >= 50) {
+        index = (index + 1) % workingKeys.length;
+        count = 0;
+    }
+
+    await AsyncStorage.setItem(indexKey, index.toString());
+    await AsyncStorage.setItem(countKey, count.toString());
+
+    return workingKeys[index].key;
 }
 
-export async function getNextKey(provider: string, workingKeys?: APIKey[]): Promise<string | null> {
-    const keys = workingKeys || await getKeysForProvider(provider);
-    if (keys.length === 0) return null;
-
-    const indexKey = `${INDEX_STORAGE_PREFIX}${provider.toLowerCase()}`;
-    const currentIndexStr = await AsyncStorage.getItem(indexKey);
-    const currentIndex = currentIndexStr ? parseInt(currentIndexStr, 10) : 0;
-
-    const nextIndex = (currentIndex + 1) % keys.length;
-    await AsyncStorage.setItem(indexKey, nextIndex.toString());
-
-    return keys[nextIndex].key;
-}
-
-export async function markKeyFailed(provider: string, key: string) {
+export async function markKeyFailed(provider: 'groq' | 'openrouter', key: string) {
     const allKeys = await getKeys();
     const updated = allKeys.map(k => {
         if (k.provider.toLowerCase() === provider.toLowerCase() && k.key === key) {
@@ -61,6 +82,12 @@ export async function markKeyFailed(provider: string, key: string) {
         return k;
     });
     await AsyncStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(updated));
+}
+
+export async function incrementRequestCount(provider: 'groq' | 'openrouter') {
+    const countKey = `${REQ_COUNT_PREFIX}${provider}`;
+    const count = parseInt((await AsyncStorage.getItem(countKey)) || '0', 10);
+    await AsyncStorage.setItem(countKey, (count + 1).toString());
 }
 
 export async function addKey(provider: string, key: string) {
@@ -117,7 +144,6 @@ export async function getKeyForProvider(provider: 'groq' | 'openrouter'): Promis
     const found = keys.find(k => k.provider.toLowerCase() === provider.toLowerCase());
     if (found) return found.key;
     
-    // Fallback to any available key if specific one missing
     if (keys.length > 0) return keys[0].key;
     
     return null;
@@ -144,26 +170,4 @@ export async function validateKey(provider: string, key: string): Promise<boolea
     } catch {
         return false;
     }
-}
-
-export async function syncKeysFromContext(settings: any) {
-  try {
-    const currentKeys = await getKeys();
-    let changed = false;
-
-    if (settings.groqKey && !currentKeys.find(k => k.provider.toLowerCase() === 'groq')) {
-      currentKeys.push({ provider: 'Groq', key: settings.groqKey });
-      changed = true;
-    }
-    if (settings.openrouterKey && !currentKeys.find(k => k.provider.toLowerCase() === 'openrouter')) {
-      currentKeys.push({ provider: 'OpenRouter', key: settings.openrouterKey });
-      changed = true;
-    }
-
-    if (changed) {
-      await AsyncStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(currentKeys));
-    }
-  } catch (e) {
-    console.error('Sync keys failed', e);
-  }
 }

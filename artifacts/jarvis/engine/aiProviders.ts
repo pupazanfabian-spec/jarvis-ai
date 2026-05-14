@@ -6,6 +6,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getWorkingKey, incrementRequestCount, markKeyFailed } from './code-studio/keyManager';
 
 // ─── Chei de stocare ────────────────────────────────────────────────────────
 
@@ -368,8 +369,16 @@ export async function callGroq(
         GROQ_API_URL, apiKey, model,
         prompt, systemInstruction, history,
       );
-      if (result) return result;
+      if (result) {
+        await incrementRequestCount('groq');
+        return result;
+      }
     } catch (e) {
+      if (e instanceof Error && e.message.startsWith('429::')) {
+          await markKeyFailed('groq', apiKey);
+          const nextKey = await getWorkingKey('groq');
+          if (nextKey) return await callGroq(prompt, nextKey, systemInstruction, history);
+      }
       if (e instanceof Error && /^(401|403)::/.test(e.message)) throw e;
       continue;
     }
@@ -421,8 +430,16 @@ export async function callOpenRouter(
         prompt, systemInstruction, history,
         { 'HTTP-Referer': 'https://jarvis-ai.app', 'X-Title': 'Jarvis AI' },
       );
-      if (result) return result;
+      if (result) {
+        await incrementRequestCount('openrouter');
+        return result;
+      }
     } catch (e) {
+      if (e instanceof Error && e.message.startsWith('429::')) {
+          await markKeyFailed('openrouter', apiKey);
+          const nextKey = await getWorkingKey('openrouter');
+          if (nextKey) return await callOpenRouter(prompt, nextKey, systemInstruction, history);
+      }
       if (e instanceof Error && /^(401|403)::/.test(e.message)) throw e;
       continue;
     }

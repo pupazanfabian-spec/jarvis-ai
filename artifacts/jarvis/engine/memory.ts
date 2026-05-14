@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { semanticSimilarity } from './semantic';
+import * as MemoryManager from './memoryManager';
 
 const MEMORY_KEY = '@jarvis_memory_v2_json';
 

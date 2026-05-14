@@ -15,7 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { useAIProvider, providerLabel } from '@/context/AIProviderContext';
 import type { AIProvider } from '@/engine/aiProviders';
-import { getKeysForProvider, saveKeysForProvider } from '@/engine/code-studio/keyManager';
+import { getKeysForProvider, saveKeysForProvider, testKey } from '@/engine/code-studio/keyManager';
 
 const { colors } = Colors;
 
@@ -92,7 +92,6 @@ function KeySection({ title, hint, value, onChange, placeholder, showKey, toggle
               onChangeText={v => { onChange(v); clearError(); }}
               placeholder={placeholder}
               placeholderTextColor={colors.textMuted}
-              secureStoreEntry={!showKey}
               secureTextEntry={!showKey}
               autoCapitalize="none"
               autoCorrect={false}
@@ -121,7 +120,7 @@ export default function AIProviderModal({ visible, onClose }: Props) {
   const {
     settings, isTesting, testError, secureStoreFallback,
     setActiveProvider, saveGeminiKey, saveOpenAIKey, saveGroqKey, saveOpenRouterKey,
-    testKey, clearError,
+    testKey: contextTestKey, clearError,
   } = useAIProvider();
 
   const [geminiInput, setGeminiInput] = useState(settings.geminiKey);
@@ -129,6 +128,9 @@ export default function AIProviderModal({ visible, onClose }: Props) {
   
   const [groqKeys, setGroqKeys] = useState<string[]>(['', '', '']);
   const [openrouterKeys, setOpenrouterKeys] = useState<string[]>(['', '', '']);
+  
+  const [testingSlots, setTestingSlots] = useState<Record<string, boolean>>({});
+  const [testResults, setTestResults] = useState<Record<string, boolean | null>>({});
 
   const [savingProvider, setSavingProvider] = useState<AIProvider | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
@@ -185,6 +187,23 @@ export default function AIProviderModal({ visible, onClose }: Props) {
     }
   };
 
+  const handleTestSlot = async (provider: 'groq' | 'openrouter', index: number) => {
+      const slotId = `${provider}-${index}`;
+      setTestingSlots(prev => ({ ...prev, [slotId]: true }));
+      setTestResults(prev => ({ ...prev, [slotId]: null }));
+      
+      const ok = await testKey(provider, index);
+      
+      setTestingSlots(prev => ({ ...prev, [slotId]: false }));
+      setTestResults(prev => ({ ...prev, [slotId]: ok }));
+      if (ok) {
+          setSuccessMsg(`✅ Cheia ${provider.toUpperCase()} #${index + 1} funcționează!`);
+          setTimeout(() => setSuccessMsg(''), 3000);
+      } else {
+          setLocalError(`❌ Cheia ${provider.toUpperCase()} #${index + 1} nu a putut fi validată.`);
+      }
+  };
+
   const handleTest = async (
     provider: 'gemini' | 'openai' | 'groq' | 'openrouter',
     input: string,
@@ -198,14 +217,9 @@ export default function AIProviderModal({ visible, onClose }: Props) {
       setLocalError('Cheia este prea scurtă. Lipește cheia completă.');
       return;
     }
-    const ok = await testKey(provider, trimmed);
+    const ok = await contextTestKey(provider, trimmed);
     if (ok) {
       await saveFn(trimmed);
-      if (provider === 'groq') {
-          await saveKeysForProvider('groq', [trimmed, ...groqKeys.slice(1)]);
-      } else if (provider === 'openrouter') {
-          await saveKeysForProvider('openrouter', [trimmed, ...openrouterKeys.slice(1)]);
-      }
       await setActiveProvider(provider);
       setSuccessMsg(`✅ ${providerLabel(provider)} activat și funcționează!`);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -218,16 +232,15 @@ export default function AIProviderModal({ visible, onClose }: Props) {
           next[index] = val;
           setGroqKeys(next);
           await saveKeysForProvider('groq', next);
-          // Also sync primary key to context for main chat compatibility
           if (index === 0) await saveGroqKey(val);
       } else {
           const next = [...openrouterKeys];
           next[index] = val;
           setOpenrouterKeys(next);
           await saveKeysForProvider('openrouter', next);
-          // Also sync primary key to context
           if (index === 0) await saveOpenRouterKey(val);
       }
+      setTestResults(prev => ({ ...prev, [`${provider}-${index}`]: null }));
   };
 
   const toggleKey = (k: string) => setShowKeys(prev => ({ ...prev, [k]: !prev[k] }));
@@ -324,21 +337,19 @@ export default function AIProviderModal({ visible, onClose }: Props) {
                               secureTextEntry={!showKeys.groq}
                               autoCapitalize="none"
                           />
-                          {i === 0 && (
-                            <TouchableOpacity style={styles.eyeBtn} onPress={() => toggleKey('groq')}>
-                                <Feather name={showKeys.groq ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
-                            </TouchableOpacity>
-                          )}
                       </View>
-                      {i === 0 && (
-                          <TouchableOpacity
-                              style={[styles.testBtn, (!key.trim() || isTesting) && styles.testBtnDisabled]}
-                              onPress={() => handleTest('groq', key, saveGroqKey)}
-                              disabled={!key.trim() || isTesting}
-                          >
-                              {isTesting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.testBtnText}>Testează</Text>}
-                          </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                          style={[styles.smallTestBtn, (!key.trim() || testingSlots[`groq-${i}`]) && styles.testBtnDisabled]}
+                          onPress={() => handleTestSlot('groq', i)}
+                          disabled={!key.trim() || testingSlots[`groq-${i}`]}
+                      >
+                          {testingSlots[`groq-${i}`] 
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : testResults[`groq-${i}`] !== null
+                              ? <Feather name={testResults[`groq-${i}`] ? 'check' : 'x'} size={16} color="#fff" />
+                              : <Text style={styles.testBtnText}>Test</Text>
+                          }
+                      </TouchableOpacity>
                   </View>
               ))}
           </View>
@@ -358,21 +369,19 @@ export default function AIProviderModal({ visible, onClose }: Props) {
                               secureTextEntry={!showKeys.openrouter}
                               autoCapitalize="none"
                           />
-                          {i === 0 && (
-                            <TouchableOpacity style={styles.eyeBtn} onPress={() => toggleKey('openrouter')}>
-                                <Feather name={showKeys.openrouter ? 'eye-off' : 'eye'} size={16} color={colors.textMuted} />
-                            </TouchableOpacity>
-                          )}
                       </View>
-                      {i === 0 && (
-                          <TouchableOpacity
-                              style={[styles.testBtn, (!key.trim() || isTesting) && styles.testBtnDisabled]}
-                              onPress={() => handleTest('openrouter', key, saveOpenRouterKey)}
-                              disabled={!key.trim() || isTesting}
-                          >
-                              {isTesting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.testBtnText}>Testează</Text>}
-                          </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                          style={[styles.smallTestBtn, (!key.trim() || testingSlots[`openrouter-${i}`]) && styles.testBtnDisabled]}
+                          onPress={() => handleTestSlot('openrouter', i)}
+                          disabled={!key.trim() || testingSlots[`openrouter-${i}`]}
+                      >
+                          {testingSlots[`openrouter-${i}`] 
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : testResults[`openrouter-${i}`] !== null
+                              ? <Feather name={testResults[`openrouter-${i}`] ? 'check' : 'x'} size={16} color="#fff" />
+                              : <Text style={styles.testBtnText}>Test</Text>
+                          }
+                      </TouchableOpacity>
                   </View>
               ))}
           </View>
@@ -471,8 +480,14 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
     alignItems: 'center', justifyContent: 'center', minWidth: 80,
   },
-  testBtnDisabled: { backgroundColor: colors.surfaceHigh },
-  testBtnText: { color: '#fff', fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  smallTestBtn: {
+      backgroundColor: colors.surfaceHigh,
+      borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+      alignItems: 'center', justifyContent: 'center', minWidth: 60,
+      borderWidth: 1, borderColor: colors.border,
+  },
+  testBtnDisabled: { backgroundColor: colors.surfaceHigh, opacity: 0.5 },
+  testBtnText: { color: colors.textSecondary, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(255,82,82,0.1)',
