@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 
@@ -77,16 +77,16 @@ export default function SurveyBubble({
 
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.yesBtn]}
-            onPress={() => {
-                onConfirmProposal?.();
-                setDismissed(true);
-            }}
-            activeOpacity={0.7}
+          style={[styles.actionBtn, styles.yesBtn]}
+          onPress={() => {
+              onConfirmProposal?.();
+              setDismissed(true);
+              Alert.alert('Succes', '✓ Agent creat. Îl găsești în Studio → Canvas.');
+          }}
+          activeOpacity={0.7}
           >
-            <Text style={styles.yesBtnText}>Da, creează</Text>
+          <Text style={styles.yesBtnText}>Da, creează</Text>
           </TouchableOpacity>
-          
           <TouchableOpacity
             style={[styles.actionBtn, styles.detailsBtn]}
             onPress={() => setShowDetails(!showDetails)}

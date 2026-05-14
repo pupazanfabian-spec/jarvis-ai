@@ -1,7 +1,7 @@
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getKeyForProvider, getWorkingKey, markKeyFailed } from './keyManager';
 import { getSkillById } from './skills';
+import 'react-native-get-random-values';
 
 const SUB_AGENTS_STORAGE_KEY = '@jarvis_subagents_v2';
 const AGENT_LOGS_STORAGE_KEY = '@jarvis_agent_logs_v2';
@@ -12,10 +12,10 @@ export interface SubAgent {
   description: string;
   agentProvider: 'groq' | 'openrouter';
   apiKey: string;
-  skills: string[];        // array de skill id-uri
-  tools: string[];         // 'webSearch' | 'memory' | 'codeRunner'
+  skills: string[];
+  tools: string[];
   systemPrompt: string;
-  priority: number;        // 1-10
+  priority: number;
   isActive: boolean;
   createdAt: number;
   lastUsed: number;
@@ -53,7 +53,6 @@ export async function getSubAgents(): Promise<SubAgent[]> {
   try {
     const saved = await AsyncStorage.getItem(SUB_AGENTS_STORAGE_KEY);
     const agents: SubAgent[] = saved ? JSON.parse(saved) : [];
-    // Sort by priority (descending)
     return (agents || []).sort((a, b) => (b.priority || 0) - (a.priority || 0));
   } catch {
     return [];
@@ -63,7 +62,7 @@ export async function getSubAgents(): Promise<SubAgent[]> {
 export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgent> {
   const agents = await getSubAgents();
   const newAgent: SubAgent = {
-    id: config.id || Math.random().toString(36).substr(2, 9),
+    id: config.id || uuidv4(),
     name: config.name || 'New Sub-Agent',
     description: config.description || '',
     agentProvider: config.agentProvider || 'groq',
@@ -75,16 +74,33 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
     isActive: config.isActive !== undefined ? config.isActive : true,
     createdAt: Date.now(),
     lastUsed: 0,
-    stats: {
-      totalCalls: 0,
-      successCalls: 0,
-      avgResponseTime: 0
-    }
+    stats: { totalCalls: 0, successCalls: 0, avgResponseTime: 0 }
   };
   
   const updated = [...agents.filter(a => a.id !== newAgent.id), newAgent];
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
+
+  const workspaceRaw = await AsyncStorage.getItem('@code_studio_workspace');
+  const workspace = workspaceRaw ? JSON.parse(workspaceRaw) : { nodes: [], connections: [] };
+  
+  const newNode = {
+      id: newAgent.id,
+      type: 'Agent',
+      title: newAgent.name,
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      config: { agentId: newAgent.id }
+  };
+
+  workspace.nodes.push(newNode);
+  await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify(workspace));
+
   return newAgent;
+}
+
+export async function refreshWorkspace(): Promise<{nodes: any[], connections: any[]}> {
+    const ws = await AsyncStorage.getItem('@code_studio_workspace');
+    return ws ? JSON.parse(ws) : { nodes: [], connections: [] };
 }
 
 export async function updateSubAgent(id: string, updates: Partial<SubAgent>): Promise<SubAgent> {
@@ -159,7 +175,6 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     };
   }
 
-  // Construire prompt specializat: systemPrompt agent + skill prompts
   let specializedPrompt = agent.systemPrompt || 'Ești un asistent util.';
   let usedSkill = 'General';
   
@@ -178,7 +193,6 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
 
   const executeCall = async (provider: 'groq' | 'openrouter', retry = true): Promise<{ text: string | null, key: string | null }> => {
     const key = await getWorkingKey(provider);
-
     if (!key) return { text: null, key: null };
 
     try {
@@ -204,24 +218,16 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     }
   };
 
-  // Încearcă providerul primar
-  let { text: responseText, key: usedKey } = await executeCall(primaryProvider);
-  let finalProvider = primaryProvider;
-
-  // Fallback la providerul secundar dacă primul a eșuat
+  let { text: responseText } = await executeCall(primaryProvider);
   if (!responseText) {
-    console.log(`[SubAgent] Fallback de la ${primaryProvider} la ${secondaryProvider}`);
     let fallback = await executeCall(secondaryProvider);
     responseText = fallback.text;
-    usedKey = fallback.key;
-    finalProvider = secondaryProvider;
   }
 
   const duration = Date.now() - startTime;
   const success = !!responseText && responseText.trim().length > 0;
 
   if (success) {
-    // Actualizează statistici agent
     const currentStats = agent.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0 };
     const newStats = {
       totalCalls: currentStats.totalCalls + 1,
@@ -230,7 +236,6 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     };
     await updateSubAgent(agent.id, { lastUsed: Date.now(), stats: newStats });
   } else {
-    // În caz de eșec total
     const currentStats = agent.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0 };
     await updateSubAgent(agent.id, {
       lastUsed: Date.now(),
@@ -238,10 +243,8 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     });
   }
 
-  // Guard final: responseText este string garantat după acest punct
   const finalResponse: string = responseText ?? `Eroare: Ambii provideri AI (${primaryProvider}, ${secondaryProvider}) au eșuat sau timeout.`;
 
-  // Salvare log
   await saveAgentLog({
     agentId: agent.id,
     agentName: agent.name,
@@ -263,4 +266,3 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     success
   };
 }
-

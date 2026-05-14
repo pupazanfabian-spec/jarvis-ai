@@ -83,16 +83,35 @@ const ConnectionLines = React.memo(({ connections, nodes, deleteConnection }: an
 
 const DraggableNode = React.memo(({ node, onFinalizePosition, onPress, onConfig, onRun, onDelete, isSelected, onDragStart, onDragEnd, isActive, priority }: any) => {
   const pan = useRef(new Animated.ValueXY({ x: node.x || 0, y: node.y || 0 })).current;
-  const valRef = useRef({ x: node.x || 0, y: node.y || 0 });
-  useEffect(() => { const l = pan.addListener(v => valRef.current = v); return () => pan.removeListener(l); }, [pan]);
-  useEffect(() => { pan.setValue({ x: node.x || 0, y: node.y || 0 }); }, [node.x, node.y]);
+  
+  // Ref-uri pentru poziție stabilă
+  const startPos = useRef({ x: 0, y: 0 });
+  const touchStart = useRef({ x: 0, y: 0 });
 
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 2 || Math.abs(gs.dy) > 2,
-    onPanResponderGrant: () => { pan.extractOffset(); onDragStart(); },
-    onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
-    onPanResponderRelease: () => { pan.flattenOffset(); onDragEnd(); onFinalizePosition(node.id, valRef.current.x, valRef.current.y); },
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (evt, gs) => {
+        startPos.current = { x: node.x, y: node.y };
+        touchStart.current = { x: gs.x0, y: gs.y0 };
+        onDragStart();
+    },
+    onPanResponderMove: (evt, gs) => {
+        const dx = gs.moveX - touchStart.current.x;
+        const dy = gs.moveY - touchStart.current.y;
+        
+        const newX = Math.max(0, Math.min(SCREEN_WIDTH - NODE_WIDTH, startPos.current.x + dx));
+        const newY = Math.max(0, Math.min(SCREEN_HEIGHT - NODE_HEIGHT, startPos.current.y + dy));
+        
+        pan.setValue({ x: newX, y: newY });
+    },
+    onPanResponderRelease: (evt, gs) => {
+        const finalX = Math.max(0, Math.min(SCREEN_WIDTH - NODE_WIDTH, startPos.current.x + (gs.moveX - touchStart.current.x)));
+        const finalY = Math.max(0, Math.min(SCREEN_HEIGHT - NODE_HEIGHT, startPos.current.y + (gs.moveY - touchStart.current.y)));
+        
+        onFinalizePosition(node.id, finalX, finalY);
+        onDragEnd();
+    },
   })).current;
 
   const color = CATEGORY_COLORS[node.type] || '#6366f1';

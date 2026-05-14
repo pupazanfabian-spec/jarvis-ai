@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, TouchableOpacity, Easing } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const RADIUS = 110;
 
 interface LobeInfo {
   id: string;
@@ -20,11 +21,12 @@ interface BrainSphereProps {
 }
 
 export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, onEntryPress }: BrainSphereProps) {
+  // Rotație continuă (0 la 1)
   const rotationY = useRef(new Animated.Value(0)).current;
   const sphereScale = useRef(new Animated.Value(1)).current;
   const nodeOpacity = useRef(new Animated.Value(0)).current;
 
-  // Auto-rotation
+  // Auto-rotație: 30s per rotație completă
   const autoRotate = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
           toValue: 1,
           duration: 30000,
           easing: Easing.linear,
-          useNativeDriver: true,
+          useNativeDriver: false, // Folosim false pentru interpolări de poziție complexe
         })
       );
       autoRotate.current.start();
@@ -63,34 +65,52 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
     })
   ).current;
 
-  const spinY = rotationY.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  // Orbital Nodes Animation
+  // Animație orbitală pentru nodurile de memorie
   const orbitAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (activeLobe) {
       Animated.loop(
         Animated.timing(orbitAnim, {
           toValue: 1,
-          duration: 10000,
+          duration: 8000,
           easing: Easing.linear,
           useNativeDriver: true,
         })
       ).start();
+    } else {
+      orbitAnim.setValue(0);
     }
   }, [activeLobe]);
 
   const renderLobe = (lobe: LobeInfo, index: number) => {
-    const angle = (index * 360) / lobes.length;
+    const angleOffset = (index * 2 * Math.PI) / lobes.length;
     const isActive = activeLobe === lobe.id;
     
-    // Position lobes in a "3D" circle
-    const rotateLobe = rotationY.interpolate({
+    // Calculăm poziția pe cerc folosind interpolare
+    // theta = (rotationY * 2*PI) + offset
+    const theta = rotationY.interpolate({
       inputRange: [0, 1],
-      outputRange: [`${angle}deg`, `${angle + 360}deg`],
+      outputRange: [angleOffset, angleOffset + 2 * Math.PI],
+    });
+
+    const translateX = theta.interpolate({
+      inputRange: [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 2 * Math.PI],
+      outputRange: [0, RADIUS, 0, -RADIUS, 0],
+    });
+
+    const scale = theta.interpolate({
+      inputRange: [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 2 * Math.PI],
+      outputRange: [1, 0.8, 0.6, 0.8, 1], // Efect de adâncime
+    });
+
+    const zIndex = theta.interpolate({
+      inputRange: [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 2 * Math.PI],
+      outputRange: [100, 50, 10, 50, 100],
+    });
+
+    const opacity = theta.interpolate({
+      inputRange: [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 2 * Math.PI],
+      outputRange: [1, 0.7, 0.4, 0.7, 1],
     });
 
     return (
@@ -99,28 +119,29 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
         style={[
           styles.lobeWrapper,
           {
+            zIndex,
+            opacity,
             transform: [
-              { rotateY: rotateLobe },
-              { perspective: 200 }, // Simulated depth via perspective
-
-              { perspective: 1000 },
+              { translateX },
+              { scale },
             ],
           },
         ]}
       >
         <TouchableOpacity
           onPress={() => onLobePress(lobe.id)}
+          activeOpacity={0.7}
           style={[
             styles.lobe,
-            { backgroundColor: lobe.color, borderColor: lobe.color },
+            { backgroundColor: lobe.color, borderColor: '#fff' },
             isActive && styles.activeLobeGlow,
           ]}
         >
           <Text style={styles.lobeText}>{lobe.name.substring(0, 3).toUpperCase()}</Text>
         </TouchableOpacity>
-        <Text style={[styles.lobeCounter, { color: lobe.color }]}>
+        <Animated.Text style={[styles.lobeCounter, { color: lobe.color }]}>
           {lobe.count}/{lobe.max}
-        </Text>
+        </Animated.Text>
       </Animated.View>
     );
   };
@@ -129,21 +150,21 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
     const total = Math.min(entries.length, 12);
     if (index >= total) return null;
 
-    const angle = (index * 360) / total;
+    const baseAngle = (index * 2 * Math.PI) / total;
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.15, duration: 1000, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 0.85, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0.9, duration: 1000, useNativeDriver: true }),
         ])
       ).start();
     }, []);
 
-    const rotationNode = orbitAnim.interpolate({
+    const spinNode = orbitAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [`${angle}deg`, `${angle + 360}deg`],
+      outputRange: ['0deg', '360deg'],
     });
 
     return (
@@ -154,8 +175,9 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
           {
             opacity: nodeOpacity,
             transform: [
-              { rotate: rotationNode },
-              { translateY: -160 },
+              { rotate: `${(baseAngle * 180) / Math.PI}deg` }, // Poziția inițială pe cerc
+              { rotate: spinNode }, // Rotația orbitală
+              { translateY: -150 }, // Distanța de la centru
               { scale: pulseAnim },
             ],
           },
@@ -163,7 +185,10 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
       >
         <TouchableOpacity
           onPress={() => onEntryPress(entry)}
-          style={[styles.entryNode, { backgroundColor: lobes.find(l => l.id === activeLobe)?.color || '#fff' }]}
+          style={[
+            styles.entryNode, 
+            { backgroundColor: lobes.find(l => l.id === activeLobe)?.color || '#fff' }
+          ]}
         />
       </Animated.View>
     );
@@ -171,22 +196,22 @@ export default function BrainSphere({ lobes, activeLobe, onLobePress, entries, o
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
-      {/* Central Sphere Glow */}
-      <View style={styles.sphereBackdrop} />
+      {/* Glow de fundal pentru sferă */}
+      <View style={[styles.sphereBackdrop, { zIndex: 0 }]} />
       
-      <Animated.View style={[styles.sphere, { transform: [{ scale: sphereScale }] }]}>
-        {/* Connection Lines (HUD effect) */}
+      <Animated.View style={[styles.sphere, { transform: [{ scale: sphereScale }], zIndex: 1 }]}>
+        {/* Linii HUD circulare */}
         <View style={styles.hudLines} />
         
         {lobes.map((lobe, i) => renderLobe(lobe, i))}
         
-        {/* Brain Core */}
-        <View style={styles.core}>
+        {/* Nucleul central al creierului */}
+        <View style={[styles.core, { zIndex: 5 }]}>
            <View style={styles.coreInner} />
         </View>
       </Animated.View>
 
-      {/* Orbital Entries */}
+      {/* Intrări orbitale care apar la selecția unui lob */}
       {activeLobe && entries.map((entry, i) => renderEntryNode(entry, i))}
     </View>
   );
@@ -207,18 +232,18 @@ const styles = StyleSheet.create({
   },
   sphereBackdrop: {
     position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     backgroundColor: 'rgba(0, 240, 255, 0.05)',
     borderWidth: 1,
     borderColor: 'rgba(0, 240, 255, 0.1)',
   },
   hudLines: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.1)',
     borderStyle: 'dashed',
@@ -226,70 +251,84 @@ const styles = StyleSheet.create({
   lobeWrapper: {
     position: 'absolute',
     alignItems: 'center',
+    justifyContent: 'center',
+    width: 60,
+    height: 80,
   },
   lobe: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
   },
   activeLobeGlow: {
-    shadowRadius: 20,
-    shadowOpacity: 1,
-    borderWidth: 3,
+    shadowRadius: 15,
+    shadowOpacity: 0.8,
+    borderWidth: 2,
     borderColor: '#fff',
+    transform: [{ scale: 1.1 }],
   },
   lobeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 9,
+    fontWeight: '900',
     color: '#000',
+    textAlign: 'center',
   },
   lobeCounter: {
-    fontSize: 9,
+    fontSize: 8,
     marginTop: 4,
     fontWeight: 'bold',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 4,
+    paddingVertical: 1,
     borderRadius: 4,
+    overflow: 'hidden',
   },
   core: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(5, 13, 20, 0.9)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 240, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#00f0ff',
+    shadowRadius: 10,
+    shadowOpacity: 0.4,
   },
   coreInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 240, 255, 0.1)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0, 240, 255, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 240, 255, 0.4)',
+    borderColor: 'rgba(0, 240, 255, 0.6)',
   },
   entryNodeWrapper: {
     position: 'absolute',
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   entryNode: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#fff',
     shadowColor: '#fff',
-    shadowRadius: 8,
+    shadowRadius: 6,
     shadowOpacity: 0.8,
+    elevation: 5,
   },
 });
+
