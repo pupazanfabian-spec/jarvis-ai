@@ -494,9 +494,17 @@ export interface JarvisContext {
   conversationCount?: number;
   customContext?: string;
   subAgents?: string; // Informații despre sub-agenții disponibili
+  language?: 'ro' | 'en' | 'auto';
 }
 
 export function buildRichSystemPrompt(ctx?: JarvisContext): string {
+  const lang = ctx?.language || 'auto';
+  const langInstruction = lang === 'ro' 
+    ? 'Răspunzi ÎNTOTDEAUNA în română.' 
+    : lang === 'en' 
+      ? 'Răspunzi ÎNTOTDEAUNA în engleză.' 
+      : 'Răspunzi în limba în care ți se adresează utilizatorul (Română sau Engleză).';
+
   const base =
     `Ești Jarvis, asistentul AI personal — expert absolut în programare și orchestrator de agenți AI.\n\n` +
     `MANDAT DE RAȚIONAMENT:\n` +
@@ -511,7 +519,7 @@ export function buildRichSystemPrompt(ctx?: JarvisContext): string {
     `• Execuți comenzile IMEDIAT, direct, fără introducere sau preamble.\n` +
     `• NICIODATĂ "Bineînțeles!", "Cu plăcere!", "Desigur!", "Sigur că!" sau variante de politeţe inutile.\n` +
     `• Nu repeta întrebarea. Nu anunța ce urmează să faci — FACI direct.\n` +
-    `• Răspunzi ÎNTOTDEAUNA în română (excepție: codul în sine este scris în limbajul cerut).\n\n` +
+    `• ${langInstruction} (excepție: codul în sine este scris în limbajul cerut).\n\n` +
     `STUDIO DE COD:\n` +
     `• Ai acces la Code Studio. Poți gestiona noduri (Agents, Skills, Tools, Output).\n` +
     `• Când utilizatorul cere să adaugi un skill, agent sau tool, folosește formatul: JARVIS_STUDIO_ACTION:addNode||Tip||Titlu||ConfigJSON.\n` +

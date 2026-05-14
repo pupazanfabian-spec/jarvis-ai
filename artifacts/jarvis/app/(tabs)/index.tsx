@@ -11,6 +11,7 @@ import {
   View,
   ScrollView,
   Alert,
+  Easing,
 } from 'react-native';
 import { getAllProjects, setActiveProject as switchActiveProject, Project } from '@/engine/projectMemory';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -108,6 +109,24 @@ export default function ChatScreen() {
   const { status: llmStatus, skipped: llmSkipped } = useLLM();
   const { settings: aiProviderSettings } = useAIProvider();
   const { isDevMode, toggleDevMode, activeProject, refreshProject } = useDevMode();
+
+  const colorAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(colorAnim, {
+        toValue: 2,
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      })
+    ).start();
+  }, []);
+
+  const headerTitleColor = colorAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [colors.primary, colors.accent, colors.primary],
+  });
 
   const [inputText, setInputText] = useState('');
   const [showMemory, setShowMemory] = useState(false);
@@ -347,7 +366,7 @@ export default function ChatScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.statusDot} />
           <View>
-            <Animated.Text style={[styles.headerTitle, { color: colors.primary }]}>J.A.R.V.I.S</Animated.Text>
+            <Animated.Text style={[styles.headerTitle, { color: headerTitleColor }]}>J.A.R.V.I.S</Animated.Text>
             <Text style={styles.headerSub}>
               {llmStatus === 'ready'
                 ? '🧠 Neural • Fără net'

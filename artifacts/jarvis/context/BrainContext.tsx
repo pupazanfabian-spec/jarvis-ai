@@ -191,10 +191,23 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     const state = brainRef.current;
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
-    
+
     // Recall from MemoryManager
     const memCtx = await MemoryManager.recallContext(query || '', messages.slice(-5).map(m => m.content));
-    
+
+    // Detect language
+    const detectLanguage = (text: string): 'ro' | 'en' | 'auto' => {
+      if (!text) return 'auto';
+      const roWords = ['si', 'este', 'sunt', 'cum', 'vreau', 'facem', 'salut', 'buna', 'multumesc', 'te rog'];
+      const enWords = ['and', 'the', 'is', 'are', 'how', 'want', 'doing', 'hello', 'thanks', 'please'];
+      const words = text.toLowerCase().split(/\s+/);
+      const roCount = words.filter(w => roWords.includes(w)).length;
+      const enCount = words.filter(w => enWords.includes(w)).length;
+      if (roCount > enCount) return 'ro';
+      if (enCount > roCount) return 'en';
+      return 'auto';
+    };
+
     const agents = await getSubAgents();
     const subAgentsCtx = agents.filter(a => a.isActive).map(a => `- ${a.name}: Expert in ${a.skills.join(', ')}`).join('\n') || 'Nu sunt sub-agenți activi.';
     return buildRichSystemPrompt({
@@ -203,9 +216,9 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       recentTopics: state.lastTopics.slice(-5),
       customContext: memoryContext + "\n" + memCtx,
       subAgents: subAgentsCtx,
+      language: detectLanguage(query || ''),
     });
   }, [messages]);
-
   useEffect(() => {
     // Lifecycle migration every 24h
     const interval = setInterval(() => {
