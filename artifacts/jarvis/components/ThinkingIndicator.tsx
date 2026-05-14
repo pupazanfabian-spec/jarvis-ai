@@ -442,9 +442,9 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
 
         {/* v5 Path Particles (Radius 100) */}
         {[0, 60, 120, 180, 240, 300].map((angle, i) => (
-           <View key={`path-p-${i}`} style={[styles.pathParticleWrapper, { transform: [{ rotate: spinOuter }, { rotate: `${angle}deg` }, { translateY: -100 }] }]}>
+           <Animated.View key={`path-p-${i}`} style={[styles.pathParticleWrapper, { transform: [{ rotate: spinOuter }, { rotate: `${angle}deg` }, { translateY: -100 }] }]}>
               <View style={[styles.pathParticle, { backgroundColor: hudColor }]} />
-           </View>
+           </Animated.View>
         ))}
 
         {/* Ring 5 - Core 70x70 */}
