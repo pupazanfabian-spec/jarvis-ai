@@ -14,15 +14,12 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as MemoryManagerEngine from '@/engine/memoryManager';
 import { 
-  getDBStats, 
-  analyzeDatabaseHealth, 
   compactKnowledgeBase, 
 } from '@/engine/database';
 import Colors from '@/constants/colors';
 import BrainSphere from './BrainSphere';
 
 const { colors } = Colors;
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface MemoryManagerProps {
   visible: boolean;
@@ -86,7 +83,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
     Alert.alert('Ștergere', 'Ești sigur că vrei să ștergi această intrare?', [
       { text: 'Nu', style: 'cancel' },
       { text: 'Da', style: 'destructive', onPress: async () => {
-        await MemoryManager.deleteEntry(id);
+        await MemoryManagerEngine.deleteEntry(id);
         if (activeLobe) loadEntries(activeLobe);
         loadStats();
         setSelectedEntry(null);
@@ -113,8 +110,6 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
   })), [stats]);
 
   const topEntries = useMemo(() => {
-    // Flatten and sort by accessCount
-    // Mock for now since we'd need to fetch all
     return entries.slice(0, 10);
   }, [entries]);
 
@@ -183,7 +178,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
             
             <TouchableOpacity 
               style={[styles.actionBtn, styles.secondaryBtn]} 
-              onPress={async () => { await MemoryManager.migrateLifecycle(); loadStats(); }}
+              onPress={async () => { await MemoryManagerEngine.migrateLifecycle(); loadStats(); }}
             >
               <Feather name="refresh-cw" size={16} color={colors.primary} />
               <Text style={[styles.actionText, { color: colors.primary }]}>MIGREAZĂ LIFECYCLE</Text>
@@ -254,3 +249,203 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
   );
 }
 
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+  },
+  scanline: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0, 240, 255, 0.1)',
+    zIndex: 10,
+  },
+  container: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 50,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  iconBtn: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 2,
+  },
+  subtitle: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    fontWeight: '700',
+  },
+  visualContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loader: {
+    position: 'absolute',
+    top: 20,
+  },
+  hintText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  categoryTitleContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  categoryTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 4,
+  },
+  backBtnText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    marginTop: 8,
+    textDecorationLine: 'underline',
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 20,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  secondaryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 240, 255, 0.2)',
+  },
+  actionText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 11,
+  },
+  entryModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  entryDetailCard: {
+    width: '100%',
+    maxHeight: '60%',
+    backgroundColor: '#050d14',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: colors.primary,
+    shadowRadius: 20,
+    shadowOpacity: 0.3,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingBottom: 10,
+  },
+  detailSource: {
+    color: colors.primary,
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  detailScroll: {
+    marginBottom: 15,
+  },
+  detailContent: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  detailFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  detailStat: {
+    color: colors.textSecondary,
+    fontSize: 10,
+  },
+  detailActions: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  deleteBtn: {
+    padding: 8,
+    backgroundColor: 'rgba(255,0,0,0.1)',
+    borderRadius: 8,
+  },
+  statsCard: {
+    width: '100%',
+    height: '70%',
+    backgroundColor: '#050d14',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    padding: 20,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  statRank: {
+    color: colors.primary,
+    fontWeight: '900',
+    width: 30,
+  },
+  statItemText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 13,
+    marginRight: 10,
+  },
+  statCount: {
+    color: colors.textSecondary,
+    fontWeight: 'bold',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    marginTop: 50,
+  },
+});
