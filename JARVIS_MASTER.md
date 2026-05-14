@@ -1,5 +1,5 @@
 # 🤖 JARVIS MASTER - STATUS + CLAUDE RULES + GEMINI GHID
-Actualizat: Sesiunea 6 — după FIX Memory Core UI (Lobi, Animații, CRUD)
+Actualizat: Sesiunea 6 — după FIX Memory Core UI & TASK P3 (UI & Lang)
 
 ---
 
@@ -21,6 +21,10 @@ Actualizat: Sesiunea 6 — după FIX Memory Core UI (Lobi, Animații, CRUD)
   - Round-robin pe sloturile rămase active
 
 ## ✅ IMPLEMENTAT
+
+### UI & Language Polishing ✅ (Sesiunea 6)
+- **Culori header ciclice:** Titlul "J.A.R.V.I.S" trece fluid între primary (#6C63FF) și accent (#00D4FF) la fiecare 8 secunde.
+- **Autodetecție limbă:** Heuristică în BrainContext (RO/EN) + prompt dinamic în aiProviders. Jarvis răspunde acum natural în limba utilizatorului.
 
 ### Sub-Agent System ✅
 - callSubAgent cu AbortController timeout 30s + fallback Groq↔OpenRouter
@@ -116,8 +120,6 @@ Actualizat: Sesiunea 6 — după FIX Memory Core UI (Lobi, Animații, CRUD)
 - Drag lag noduri canvas (PanResponder vechi, migrare la gesture-handler + Reanimated pending)
 
 ## ⏳ PLANIFICAT
-- Culori header chat ciclice
-- Română + engleză autodetect
 - Android nav bar auto-hide (necesită aprobarea expo-navigation-bar)
 - Migrare drag de la PanResponder la Gesture API + Reanimated worklets
 
