@@ -187,10 +187,24 @@ export class JarvisOrchestrator {
           const formatEntry = (e: any) => `• ${e.content} (accesat: ${e.accessCount || 0} ori)`;
           
           const lines: string[] = ['MEMORIE ACTIVĂ JARVIS:'];
-          if (reguli && reguli.length > 0) { lines.push('[REGULI]'); reguli.forEach(e => lines.push(formatEntry(e))); }
-          if (importanta && importanta.length > 0) { lines.push('[FAPTE IMPORTANTE]'); importanta.forEach(e => lines.push(formatEntry(e))); }
-          if (sistem && sistem.length > 0) { lines.push('[SISTEM]'); sistem.forEach(e => lines.push(formatEntry(e))); }
-          if (mai_putin && mai_putin.length > 0) { lines.push('[DETALII]'); mai_putin.forEach(e => lines.push(formatEntry(e))); }
+          
+          // Adăugăm categoriile în ordine
+          if (reguli && reguli.length > 0) {
+              lines.push('[REGULI]');
+              reguli.forEach(e => lines.push(formatEntry(e)));
+          }
+          if (importanta && importanta.length > 0) {
+              lines.push('[FAPTE IMPORTANTE]');
+              importanta.forEach(e => lines.push(formatEntry(e)));
+          }
+          if (sistem && sistem.length > 0) {
+              lines.push('[SISTEM]');
+              sistem.forEach(e => lines.push(formatEntry(e)));
+          }
+          if (mai_putin && mai_putin.length > 0) {
+              lines.push('[DETALII]');
+              mai_putin.forEach(e => lines.push(formatEntry(e)));
+          }
           
           lines.push('\nISTORIC RECENT:');
           if (conversationHistory) {
@@ -199,9 +213,25 @@ export class JarvisOrchestrator {
 
           systemContext = lines.join('\n');
           
-          // Max 2000 tokens (aprox 8000 caractere)
+          // Max 2000 tokens (~8000 caractere). Trunchiem de la 'mai_putin' în jos dacă depășește.
           if (systemContext.length > 8000) {
-              systemContext = systemContext.substring(0, 8000) + '\n... [Context trunchiat pentru economie de tokens]';
+              // Dacă e prea mare, încercăm să reconstruim fără 'mai_putin'
+              const shorterLines: string[] = ['MEMORIE ACTIVĂ JARVIS:'];
+              if (reguli && reguli.length > 0) { shorterLines.push('[REGULI]'); reguli.forEach(e => shorterLines.push(formatEntry(e))); }
+              if (importanta && importanta.length > 0) { shorterLines.push('[FAPTE IMPORTANTE]'); importanta.forEach(e => shorterLines.push(formatEntry(e))); }
+              if (sistem && sistem.length > 0) { shorterLines.push('[SISTEM]'); sistem.forEach(e => shorterLines.push(formatEntry(e))); }
+              
+              shorterLines.push('\nISTORIC RECENT:');
+              if (conversationHistory) {
+                  conversationHistory.forEach(m => shorterLines.push(`${m.role.toUpperCase()}: ${m.content}`));
+              }
+              
+              systemContext = shorterLines.join('\n');
+              
+              // Dacă tot e prea mare, tăiem brutal la 8000
+              if (systemContext.length > 8000) {
+                  systemContext = systemContext.substring(0, 8000) + '\n... [Context trunchiat]';
+              }
           }
       }
       
@@ -241,9 +271,8 @@ export class JarvisOrchestrator {
     }
   }
 
-  // Compatibilitate temporară (opțional, dar recomandat dacă sunt alte referințe)
-  async route(message: string): Promise<RouteResult> {
-      return this.routeMessage(message);
+  async route(message: string, memoryContext?: MemoryContext): Promise<RouteResult> {
+      return this.routeMessage(message, memoryContext);
   }
 }
 

@@ -444,7 +444,23 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       console.log(`[Brain] Intent complexity score: ${intent.complexityScore}, skill: ${intent.skill.id}`);
       
       if (intent.complexity !== 'simple') {
-          const result = await orchestrator.route(text);
+          // Colectăm memoria activă pentru orchestrator
+          const [reguli, sistem, importanta, mai_putin] = await Promise.all([
+              MemoryManager.getAllEntries('reguli'),
+              MemoryManager.getAllEntries('sistem'),
+              MemoryManager.getAllEntries('importanta'),
+              MemoryManager.getAllEntries('mai_putin')
+          ]);
+
+          const memoryContext = {
+              reguli: reguli || [],
+              sistem: [...(sistem || [])].sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0)).slice(0, 10),
+              importanta: [...(importanta || [])].sort((a, b) => (b.accessCount || 0) - (a.accessCount || 0)).slice(0, 15),
+              mai_putin: (mai_putin || []).slice(0, 5),
+              conversationHistory: [...messages, userMsg].slice(-20).map(m => ({ role: m.role, content: m.content }))
+          };
+
+          const result = await orchestrator.routeMessage(text, memoryContext);
           console.log(`[Brain] Orchestrator result success: ${result.success}, agent: ${result.agentUsed}, response length: ${result.response?.length}`);
           
           if (result.success && result.response && result.response.trim().length > 0) {
