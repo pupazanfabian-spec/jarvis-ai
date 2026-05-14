@@ -10,6 +10,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as MemoryManagerEngine from '@/engine/memoryManager';
@@ -38,11 +39,13 @@ const LOBE_CONFIG = [
 
 export default function MemoryManager({ visible, onClose }: MemoryManagerProps) {
   const [activeLobe, setActiveLobe] = useState<TabType | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<MemoryManagerEngine.MemoryEntry[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [cleaning, setCleaning] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<MemoryManagerEngine.MemoryEntry | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
   const [showStats, setShowStats] = useState(false);
 
   const loadStats = useCallback(async () => {
@@ -58,7 +61,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
     setLoading(true);
     try {
       const data = await MemoryManagerEngine.getAllEntries(category as any);
-      setEntries(data.sort((a: any, b: any) => b.createdAt - a.createdAt));
+      setEntries([...data].sort((a: any, b: any) => b.createdAt - a.createdAt));
     } catch (err) {
       console.error(err);
     } finally {
@@ -76,6 +79,8 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
   useEffect(() => {
     if (activeLobe) {
       loadEntries(activeLobe);
+    } else {
+      setEntries([]);
     }
   }, [activeLobe, loadEntries]);
 
@@ -89,6 +94,19 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
         setSelectedEntry(null);
       }}
     ]);
+  };
+
+  const handleUpdateEntry = async () => {
+    if (!selectedEntry || !editContent.trim()) return;
+    try {
+      await MemoryManagerEngine.updateEntry(selectedEntry.id, { content: editContent.trim() });
+      if (activeLobe) loadEntries(activeLobe);
+      setIsEditing(false);
+      setSelectedEntry({ ...selectedEntry, content: editContent.trim() });
+      Alert.alert('Succes', 'Memoria a fost actualizată.');
+    } catch (err) {
+      Alert.alert('Eroare', 'Nu s-a putut salva modificarea.');
+    }
   };
 
   const handleCompact = async () => {
@@ -110,7 +128,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
   })), [stats]);
 
   const topEntries = useMemo(() => {
-    return entries.slice(0, 10);
+    return entries.slice(0, 10).sort((a, b) => b.accessCount - a.accessCount);
   }, [entries]);
 
   return (
@@ -127,6 +145,9 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
               <Text style={styles.subtitle}>NEURAL NETWORK VISUALIZATION</Text>
             </View>
             <View style={styles.headerActions}>
+              <TouchableOpacity onPress={() => { loadStats(); if(activeLobe) loadEntries(activeLobe); }} style={styles.iconBtn}>
+                <Feather name="refresh-cw" size={18} color={colors.primary} />
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowStats(true)} style={styles.iconBtn}>
                 <Feather name="bar-chart-2" size={20} color={colors.primary} />
               </TouchableOpacity>
@@ -146,7 +167,11 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
               activeLobe={activeLobe}
               onLobePress={(id) => setActiveLobe(activeLobe === id ? null : id as TabType)}
               entries={entries}
-              onEntryPress={(entry) => setSelectedEntry(entry)}
+              onEntryPress={(entry) => {
+                setSelectedEntry(entry);
+                setEditContent(entry.content);
+                setIsEditing(false);
+              }}
             />
             
             {!activeLobe && (
@@ -178,36 +203,63 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
             
             <TouchableOpacity 
               style={[styles.actionBtn, styles.secondaryBtn]} 
-              onPress={async () => { await MemoryManagerEngine.migrateLifecycle(); loadStats(); }}
+              onPress={async () => { 
+                await MemoryManagerEngine.migrateLifecycle(); 
+                loadStats(); 
+                if(activeLobe) loadEntries(activeLobe);
+                Alert.alert('Migrare', 'Procesul de lifecycle a fost finalizat.');
+              }}
             >
-              <Feather name="refresh-cw" size={16} color={colors.primary} />
+              <Feather name="layers" size={16} color={colors.primary} />
               <Text style={[styles.actionText, { color: colors.primary }]}>MIGREAZĂ LIFECYCLE</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Entry Detail Modal */}
+        {/* Entry Detail Modal (View / Edit / Delete) */}
         {selectedEntry && (
-          <Modal transparent animationType="slide">
+          <Modal transparent animationType="slide" visible={!!selectedEntry}>
             <View style={styles.entryModalOverlay}>
-              <View style={[styles.entryDetailCard, { borderColor: LOBE_CONFIG.find(l => l.id === activeLobe)?.color || colors.primary }]}>
+              <View style={[styles.entryDetailCard, { borderColor: LOBE_CONFIG.find(l => l.id === selectedEntry.category)?.color || colors.primary }]}>
                  <View style={styles.detailHeader}>
-                    <Text style={styles.detailSource}>{selectedEntry.source.toUpperCase()}</Text>
+                    <Text style={styles.detailSource}>{selectedEntry.source.toUpperCase()} | {selectedEntry.category.toUpperCase()}</Text>
                     <TouchableOpacity onPress={() => setSelectedEntry(null)}>
-                       <Feather name="x" size={20} color={colors.text} />
+                       <Feather name="x" size={22} color={colors.text} />
                     </TouchableOpacity>
                  </View>
-                 <ScrollView style={styles.detailScroll}>
-                    <Text style={styles.detailContent}>{selectedEntry.content}</Text>
+                 
+                 <ScrollView style={styles.detailScroll} contentContainerStyle={{ paddingBottom: 20 }}>
+                    {isEditing ? (
+                      <TextInput
+                        style={styles.editInput}
+                        multiline
+                        value={editContent}
+                        onChangeText={setEditContent}
+                        autoFocus
+                      />
+                    ) : (
+                      <Text style={styles.detailContent}>{selectedEntry.content}</Text>
+                    )}
                  </ScrollView>
+
                  <View style={styles.detailFooter}>
                     <View>
                        <Text style={styles.detailStat}>Accesări: {selectedEntry.accessCount}</Text>
-                       <Text style={styles.detailStat}>Importanță: {selectedEntry.importance}</Text>
+                       <Text style={styles.detailStat}>Importanță: {selectedEntry.importance}/10</Text>
+                       <Text style={styles.detailStat}>Creat: {new Date(selectedEntry.createdAt).toLocaleDateString()}</Text>
                     </View>
                     <View style={styles.detailActions}>
-                       <TouchableOpacity onPress={() => handleDeleteEntry(selectedEntry.id)} style={styles.deleteBtn}>
-                          <Feather name="trash-2" size={18} color={colors.error} />
+                       {isEditing ? (
+                         <TouchableOpacity onPress={handleUpdateEntry} style={[styles.iconBtnDetail, { backgroundColor: colors.primary }]}>
+                            <Feather name="check" size={20} color="#000" />
+                         </TouchableOpacity>
+                       ) : (
+                         <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.iconBtnDetail}>
+                            <Feather name="edit-3" size={20} color={colors.primary} />
+                         </TouchableOpacity>
+                       )}
+                       <TouchableOpacity onPress={() => handleDeleteEntry(selectedEntry.id)} style={[styles.iconBtnDetail, { backgroundColor: 'rgba(255,0,0,0.1)' }]}>
+                          <Feather name="trash-2" size={20} color={colors.error} />
                        </TouchableOpacity>
                     </View>
                  </View>
@@ -218,7 +270,7 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
 
         {/* Stats Modal */}
         {showStats && (
-          <Modal transparent animationType="fade">
+          <Modal transparent animationType="fade" visible={showStats}>
             <View style={styles.entryModalOverlay}>
               <View style={styles.statsCard}>
                  <View style={styles.detailHeader}>
@@ -229,11 +281,11 @@ export default function MemoryManager({ visible, onClose }: MemoryManagerProps) 
                  </View>
                  <ScrollView style={{ flex: 1 }}>
                     {topEntries.map((item, i) => (
-                      <View key={item.id} style={styles.statItem}>
+                      <TouchableOpacity key={item.id} style={styles.statItem} onPress={() => { setSelectedEntry(item); setShowStats(false); }}>
                          <Text style={styles.statRank}>#{i+1}</Text>
                          <Text style={styles.statItemText} numberOfLines={1}>{item.content}</Text>
                          <Text style={styles.statCount}>{item.accessCount}</Text>
-                      </View>
+                      </TouchableOpacity>
                     ))}
                     {topEntries.length === 0 && (
                       <Text style={styles.emptyText}>Nu sunt date statistice disponibile.</Text>
@@ -276,12 +328,14 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 15,
+    gap: 12,
   },
   iconBtn: {
-    padding: 8,
+    padding: 10,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   title: {
     fontSize: 22,
@@ -310,6 +364,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginTop: 20,
     textAlign: 'center',
+    opacity: 0.6,
   },
   categoryTitleContainer: {
     alignItems: 'center',
@@ -319,6 +374,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
     letterSpacing: 4,
+    textShadowColor: 'rgba(255,255,255,0.3)',
+    textShadowRadius: 10,
   },
   backBtnText: {
     color: colors.textSecondary,
@@ -337,8 +394,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 10,
     gap: 8,
   },
   secondaryBtn: {
@@ -348,104 +405,127 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: '#000',
-    fontWeight: '800',
+    fontWeight: '900',
     fontSize: 11,
   },
+  // Modal Styles
   entryModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 30,
+    padding: 20,
   },
   entryDetailCard: {
     width: '100%',
-    maxHeight: '60%',
+    maxHeight: '70%',
     backgroundColor: '#050d14',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
+    borderWidth: 2,
+    borderRadius: 20,
+    padding: 24,
     shadowColor: colors.primary,
-    shadowRadius: 20,
-    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    shadowOpacity: 0.4,
+    elevation: 20,
   },
   detailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   detailSource: {
     color: colors.primary,
     fontWeight: '900',
-    fontSize: 12,
+    fontSize: 11,
+    letterSpacing: 1,
   },
   detailScroll: {
-    marginBottom: 15,
+    marginBottom: 20,
   },
   detailContent: {
     color: colors.text,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+  editInput: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   detailFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingTop: 10,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
   detailStat: {
     color: colors.textSecondary,
     fontSize: 10,
+    marginBottom: 2,
+    fontWeight: '600',
   },
   detailActions: {
     flexDirection: 'row',
-    gap: 15,
+    gap: 12,
   },
-  deleteBtn: {
-    padding: 8,
-    backgroundColor: 'rgba(255,0,0,0.1)',
-    borderRadius: 8,
+  iconBtnDetail: {
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   statsCard: {
     width: '100%',
-    height: '70%',
+    height: '75%',
     backgroundColor: '#050d14',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.primary,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   statRank: {
     color: colors.primary,
     fontWeight: '900',
-    width: 30,
+    width: 35,
+    fontSize: 12,
   },
   statItemText: {
     flex: 1,
     color: colors.text,
-    fontSize: 13,
+    fontSize: 14,
     marginRight: 10,
   },
   statCount: {
-    color: colors.textSecondary,
+    color: colors.primary,
     fontWeight: 'bold',
+    fontSize: 12,
   },
   emptyText: {
     textAlign: 'center',
     color: colors.textSecondary,
     marginTop: 50,
+    fontWeight: '600',
   },
 });

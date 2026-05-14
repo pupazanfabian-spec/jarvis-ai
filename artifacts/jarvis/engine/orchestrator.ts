@@ -13,6 +13,14 @@ export interface RouteResult {
   complexityScore: number; // 1-8
 }
 
+export interface MemoryContext {
+  reguli: any[];
+  sistem: any[];
+  importanta: any[];
+  mai_putin: any[];
+  conversationHistory: { role: string; content: string }[];
+}
+
 export class JarvisOrchestrator {
   
   async analyzeIntent(message: string): Promise<{
@@ -148,7 +156,7 @@ export class JarvisOrchestrator {
     return agent;
   }
 
-  async route(message: string): Promise<RouteResult> {
+  async routeMessage(message: string, memoryContext?: MemoryContext): Promise<RouteResult> {
     try {
       const intent = await this.analyzeIntent(message);
       
@@ -171,9 +179,34 @@ export class JarvisOrchestrator {
         agent = await this.autoCreateAgent(intent.skill);
         wasAutoCreated = true;
       }
+
+      // Formatare memorie pentru prompt
+      let systemContext = '';
+      if (memoryContext) {
+          const { reguli, sistem, importanta, mai_putin, conversationHistory } = memoryContext;
+          const formatEntry = (e: any) => `• ${e.content} (accesat: ${e.accessCount || 0} ori)`;
+          
+          const lines: string[] = ['MEMORIE ACTIVĂ JARVIS:'];
+          if (reguli && reguli.length > 0) { lines.push('[REGULI]'); reguli.forEach(e => lines.push(formatEntry(e))); }
+          if (importanta && importanta.length > 0) { lines.push('[FAPTE IMPORTANTE]'); importanta.forEach(e => lines.push(formatEntry(e))); }
+          if (sistem && sistem.length > 0) { lines.push('[SISTEM]'); sistem.forEach(e => lines.push(formatEntry(e))); }
+          if (mai_putin && mai_putin.length > 0) { lines.push('[DETALII]'); mai_putin.forEach(e => lines.push(formatEntry(e))); }
+          
+          lines.push('\nISTORIC RECENT:');
+          if (conversationHistory) {
+              conversationHistory.forEach(m => lines.push(`${m.role.toUpperCase()}: ${m.content}`));
+          }
+
+          systemContext = lines.join('\n');
+          
+          // Max 2000 tokens (aprox 8000 caractere)
+          if (systemContext.length > 8000) {
+              systemContext = systemContext.substring(0, 8000) + '\n... [Context trunchiat pentru economie de tokens]';
+          }
+      }
       
       console.log(`[Orchestrator] Routing to agent: ${agent.name}`);
-      const result = await callSubAgent(agent.id, message);
+      const result = await callSubAgent(agent.id, message, systemContext);
       
       if (!result.success || !result.response || result.response.trim().length === 0) {
         console.log('[Orchestrator] Agent failed or returned empty, fallback required');
@@ -196,7 +229,7 @@ export class JarvisOrchestrator {
         complexityScore: intent.complexityScore
       };
     } catch(e: any) {
-      console.error('[Orchestrator] route error:', e);
+      console.error('[Orchestrator] routeMessage error:', e);
       return {
         response: '',
         agentUsed: null,
@@ -206,6 +239,11 @@ export class JarvisOrchestrator {
         complexityScore: 3
       };
     }
+  }
+
+  // Compatibilitate temporară (opțional, dar recomandat dacă sunt alte referințe)
+  async route(message: string): Promise<RouteResult> {
+      return this.routeMessage(message);
   }
 }
 

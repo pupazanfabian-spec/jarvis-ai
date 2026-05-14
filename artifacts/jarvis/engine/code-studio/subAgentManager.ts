@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getKeyForProvider, getWorkingKey, markKeyFailed } from './keyManager';
 import { getSkillById } from './skills';
-import 'react-native-get-random-values';
-
 const SUB_AGENTS_STORAGE_KEY = '@jarvis_subagents_v2';
 const AGENT_LOGS_STORAGE_KEY = '@jarvis_agent_logs_v2';
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export interface SubAgent {
   id: string;
@@ -62,7 +61,7 @@ export async function getSubAgents(): Promise<SubAgent[]> {
 export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgent> {
   const agents = await getSubAgents();
   const newAgent: SubAgent = {
-    id: config.id || uuidv4(),
+    id: config.id || generateId(),
     name: config.name || 'New Sub-Agent',
     description: config.description || '',
     agentProvider: config.agentProvider || 'groq',
@@ -159,7 +158,7 @@ export async function clearAgentLogs(): Promise<void> {
 
 import { callGroq, callOpenRouter } from '../aiProviders';
 
-export async function callSubAgent(agentId: string, message: string): Promise<AgentResult> {
+export async function callSubAgent(agentId: string, message: string, systemContext?: string): Promise<AgentResult> {
   const startTime = Date.now();
   const agents = await getSubAgents();
   const agent = agents.find(a => a.id === agentId);
@@ -175,6 +174,7 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
     };
   }
 
+  // Construire prompt specializat: systemPrompt agent + skill prompts
   let specializedPrompt = agent.systemPrompt || 'Ești un asistent util.';
   let usedSkill = 'General';
   
@@ -186,6 +186,10 @@ export async function callSubAgent(agentId: string, message: string): Promise<Ag
       specializedPrompt = `${agent.systemPrompt}\n\n### SKILLS ACTIVATE:\n${prompts.join('\n\n')}`;
       usedSkill = activeSkills.map(s => s!.name).join(', ');
     }
+  }
+
+  if (systemContext) {
+      specializedPrompt = `${systemContext}\n\n${specializedPrompt}`;
   }
 
   const primaryProvider = agent.agentProvider;
