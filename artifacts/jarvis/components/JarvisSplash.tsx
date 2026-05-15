@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, Text, Animated, Dimensions, StyleSheet, Easing } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -28,7 +29,15 @@ const createTrajectory = (radius: number) => {
 const TRAJECTORY = createTrajectory(RADIUS_PARTICLE);
 const INPUT_RANGE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 
-export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
+interface JarvisSplashProps {
+  onFinish: () => void;
+  onPreload?: () => Promise<void>;
+}
+
+export default function JarvisSplash({ onFinish, onPreload }: JarvisSplashProps) {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [statusText, setStatusText] = useState('INITIALIZING...');
+
   // Animation Values
   const outerRotate = useRef(new Animated.Value(0)).current;
   const outerScale = useRef(new Animated.Value(1)).current;
@@ -78,22 +87,27 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
   }, []);
 
   useEffect(() => {
+    AsyncStorage.getItem('@jarvis_reduced_motion').then(val => {
+      if (val === 'true') setReducedMotion(true);
+    });
+  }, []);
+
+  useEffect(() => {
     const loop = (anim: Animated.Value, to: number, duration: number, easing = Easing.linear) => 
       Animated.loop(Animated.timing(anim, { toValue: to, duration, easing, useNativeDriver: true }));
 
-    const outerRotAnim = loop(outerRotate, 1, 8000);
-    const arcRotAnim = loop(arcRotate, 1, 6000);
-    const midRotAnim = loop(midRotate, 1, 4000); // Fixed direction
-    const mathRotAnim = loop(mathRotate, 1, 15000);
-    const holoRotAnim = loop(holoRotate, 1, 10000);
-    const hexRotAnim = loop(hexRotate, 1, 20000);
+    const animations: Animated.CompositeAnimation[] = [];
+
+    animations.push(loop(outerRotate, 1, 8000));
+    animations.push(loop(arcRotate, 1, 6000));
+    animations.push(loop(midRotate, 1, 4000));
     
-    const outerPulseAnim = Animated.loop(Animated.sequence([
+    animations.push(Animated.loop(Animated.sequence([
       Animated.timing(outerScale, { toValue: 1.03, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       Animated.timing(outerScale, { toValue: 0.97, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ]));
+    ])));
 
-    const breatheAnim = Animated.loop(Animated.sequence([
+    animations.push(Animated.loop(Animated.sequence([
       Animated.parallel([
         Animated.timing(breatheX, { toValue: 1.15, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(breatheY, { toValue: 0.85, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -102,82 +116,100 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         Animated.timing(breatheX, { toValue: 0.85, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(breatheY, { toValue: 1.15, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ]),
-    ]));
-
-    const corePulseAnim = Animated.loop(Animated.sequence([
-      Animated.timing(coreScale, { toValue: 1.1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(coreScale, { toValue: 0.9, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ]));
-
-    const textPulseAnim = Animated.loop(Animated.sequence([
-      Animated.timing(textOpacity, { toValue: 1, duration: 750, useNativeDriver: true }),
-      Animated.timing(textOpacity, { toValue: 0.7, duration: 750, useNativeDriver: true }),
-    ]));
-
-    const crosshairPulseAnim = loop(crosshairScale, 1.2, 800, Easing.inOut(Easing.ease));
-
-    const glitchCycle = Animated.loop(Animated.sequence([
-      Animated.delay(2500),
-      Animated.parallel([
-        Animated.timing(glitchFlash, { toValue: 0.3, duration: 40, useNativeDriver: true }),
-        Animated.timing(glitchTranslateX, { toValue: Math.random() > 0.5 ? 3 : -3, duration: 40, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(glitchFlash, { toValue: 0, duration: 40, useNativeDriver: true }),
-        Animated.timing(glitchTranslateX, { toValue: 0, duration: 40, useNativeDriver: true }),
-      ]),
-    ]));
-
-    const scanScroll = loop(scanTranslateY, 1, 2000);
-
-    const energyPulseAnim = Animated.loop(Animated.sequence([
-      Animated.parallel([
-        Animated.timing(energyPulseScale, { toValue: 1.3, duration: 5000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(energyPulseOpacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
-          Animated.timing(energyPulseOpacity, { toValue: 0, duration: 4500, useNativeDriver: true }),
-        ])
-      ]),
-      Animated.timing(energyPulseScale, { toValue: 0, duration: 0, useNativeDriver: true }),
-    ]));
-
-    const codeLoopAnims = codeAnims.map((anim, i) => Animated.loop(Animated.sequence([
-      Animated.delay(i * 1000),
-      Animated.parallel([
-        Animated.timing(anim.pos, { toValue: 1, duration: 2000, useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(anim.opacity, { toValue: 0.6, duration: 500, useNativeDriver: true }),
-          Animated.timing(anim.opacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
-        ])
-      ]),
-      Animated.timing(anim.pos, { toValue: 0, duration: 0, useNativeDriver: true }),
     ])));
 
-    const segAnims = segmentAnims.map((anim, i) => Animated.loop(Animated.sequence([
+    animations.push(Animated.loop(Animated.sequence([
+      Animated.timing(coreScale, { toValue: 1.1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(coreScale, { toValue: 0.9, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ])));
+
+    animations.push(Animated.loop(Animated.sequence([
+      Animated.timing(textOpacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+      Animated.timing(textOpacity, { toValue: 0.7, duration: 750, useNativeDriver: true }),
+    ])));
+
+    animations.push(loop(crosshairScale, 1.2, 800, Easing.inOut(Easing.ease)));
+
+    if (!reducedMotion) {
+      animations.push(loop(mathRotate, 1, 15000));
+      animations.push(loop(holoRotate, 1, 10000));
+      animations.push(loop(hexRotate, 1, 20000));
+
+      animations.push(Animated.loop(Animated.sequence([
+        Animated.delay(2500),
+        Animated.parallel([
+          Animated.timing(glitchFlash, { toValue: 0.3, duration: 40, useNativeDriver: true }),
+          Animated.timing(glitchTranslateX, { toValue: Math.random() > 0.5 ? 3 : -3, duration: 40, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(glitchFlash, { toValue: 0, duration: 40, useNativeDriver: true }),
+          Animated.timing(glitchTranslateX, { toValue: 0, duration: 40, useNativeDriver: true }),
+        ]),
+      ])));
+
+      animations.push(Animated.loop(Animated.sequence([
+        Animated.parallel([
+          Animated.timing(energyPulseScale, { toValue: 1.3, duration: 5000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          Animated.sequence([
+            Animated.timing(energyPulseOpacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
+            Animated.timing(energyPulseOpacity, { toValue: 0, duration: 4500, useNativeDriver: true }),
+          ])
+        ]),
+        Animated.timing(energyPulseScale, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])));
+
+      codeAnims.forEach((anim, i) => animations.push(Animated.loop(Animated.sequence([
+        Animated.delay(i * 1000),
+        Animated.parallel([
+          Animated.timing(anim.pos, { toValue: 1, duration: 2000, useNativeDriver: true }),
+          Animated.sequence([
+            Animated.timing(anim.opacity, { toValue: 0.6, duration: 500, useNativeDriver: true }),
+            Animated.timing(anim.opacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
+          ])
+        ]),
+        Animated.timing(anim.pos, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]))));
+
+      particleAnims.forEach((anim, i) => animations.push(loop(anim, 1, 1000 + i * 250)));
+    }
+
+    animations.push(loop(scanTranslateY, 1, 2000));
+
+    segmentAnims.forEach((anim, i) => animations.push(Animated.loop(Animated.sequence([
       Animated.delay(i * 100),
       Animated.timing(anim, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.timing(anim, { toValue: 0.1, duration: 200, useNativeDriver: true }),
-    ])));
-
-    const partAnims = particleAnims.map((anim, i) => loop(anim, 1, 1000 + i * 250));
+    ]))));
 
     // Entry
     Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }).start();
 
     // Start all loops
-    const allAnims = [outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim, crosshairPulseAnim, glitchCycle, scanScroll, energyPulseAnim, mathRotAnim, holoRotAnim, hexRotAnim, ...segAnims, ...partAnims, ...codeLoopAnims];
-    allAnims.forEach(a => a.start());
+    animations.forEach(a => a.start());
 
-    // Fade out and finish
-    const timer = setTimeout(() => {
+    // Preload Logic
+    const startPreload = async () => {
+      const minTimer = new Promise(resolve => setTimeout(resolve, 3500));
+      
+      const preloadSteps = async () => {
+        if (onPreload) {
+          setStatusText('LOADING MEMORY...');
+          await new Promise(resolve => setTimeout(resolve, 800));
+          setStatusText('LOADING AGENTS...');
+          await onPreload();
+        }
+        setStatusText('READY');
+      };
+
+      await Promise.race([minTimer, preloadSteps()]);
+      
       Animated.timing(fadeOut, { toValue: 0, duration: 600, easing: Easing.linear, useNativeDriver: true }).start(() => onFinish());
-    }, 3200);
-
-    return () => {
-      clearTimeout(timer);
-      allAnims.forEach(a => a.stop());
     };
-  }, [onFinish]);
+
+    startPreload();
+
+    return () => animations.forEach(a => a.stop());
+  }, [onFinish, onPreload, reducedMotion]);
 
   const hudColor = '#00d4ff';
   const spinOuter = outerRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
@@ -193,7 +225,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
     <Animated.View style={[styles.container, { opacity: fadeOut }]} pointerEvents="none">
       
       {/* v5 Glitch Flash */}
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: glitchFlash, zIndex: 10001 }]} />
+      {!reducedMotion && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: glitchFlash, zIndex: 10001 }]} />}
 
       {/* Background HUD Elements */}
       <View style={styles.hudBg}>
@@ -207,19 +239,19 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
       <Animated.View style={[styles.center, { transform: [{ scale: scaleAnim }, { translateX: glitchTranslateX }] }]}>
         
         {/* v5 Energy Ring Pulse */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           ringStyle(220, 4),
           { position: 'absolute', borderColor: hudColor, opacity: energyPulseOpacity, transform: [{ scale: energyPulseScale }] }
-        ]} />
+        ]} />}
 
         {/* v5 Hexagonal Ring */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           styles.hexagon,
           { borderColor: hudColor, opacity: 0.15, transform: [{ rotate: spinHex }] }
-        ]} />
+        ]} />}
 
         {/* v5 HUD Math Diagrams (320x320) */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           ringStyle(320, 1),
           { position: 'absolute', borderColor: 'transparent', transform: [{ rotate: spinMath }] }
         ]}>
@@ -228,10 +260,10 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
               <Text style={styles.mathText}>0010 1101 1011</Text>
             </View>
           ))}
-        </Animated.View>
+        </Animated.View>}
 
         {/* v5 Holograms */}
-        <Animated.View style={[styles.holoContainer, { transform: [{ rotate: spinHolo }] }]}>
+        {!reducedMotion && <Animated.View style={[styles.holoContainer, { transform: [{ rotate: spinHolo }] }]}>
           {[90, 110, 140, 170].map((r, i) => (
             <View key={`holo-${i}`} style={[
               styles.holoCircle, 
@@ -242,7 +274,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
               }
             ]} />
           ))}
-        </Animated.View>
+        </Animated.View>}
 
         {/* Ring 1 - Outer 300x300 */}
         <Animated.View style={[ringStyle(300, 8), {
@@ -268,7 +300,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
            <View style={styles.arcSegment} />
            {/* v5 Status Text */}
            <View style={styles.statusTextWrapper}>
-              <Text style={[styles.statusText, { color: hudColor }]}>INITIALIZING...</Text>
+              <Text style={[styles.statusText, { color: hudColor }]}>{statusText}</Text>
               <Text style={[styles.statusText, { color: hudColor }]}>POWER: 100%</Text>
            </View>
         </Animated.View>
@@ -288,7 +320,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         </Animated.View>
 
         {/* v5 Code Fragments */}
-        {codeAnims.map((anim, i) => (
+        {!reducedMotion && codeAnims.map((anim, i) => (
           <Animated.Text key={`code-${i}`} style={[
             styles.codeFragment, 
             { 
@@ -313,7 +345,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         }]} />
 
         {/* Layer 4 - Orbiting Particles */}
-        {particleAnims.map((anim, i) => {
+        {!reducedMotion && particleAnims.map((anim, i) => {
            const tx = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.cosTable });
            const ty = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.sinTable });
            return (
@@ -325,7 +357,7 @@ export default function JarvisSplash({ onFinish }: { onFinish: () => void }) {
         })}
 
         {/* v5 Path Particles */}
-        {[0, 60, 120, 180, 240, 300].map((angle, i) => (
+        {!reducedMotion && [0, 60, 120, 180, 240, 300].map((angle, i) => (
            <Animated.View key={`path-p-${i}`} style={[styles.pathParticleWrapper, { transform: [{ rotate: spinOuter }, { rotate: `${angle}deg` }, { translateY: -100 }] }]}>
               <View style={[styles.pathParticle, { backgroundColor: hudColor }]} />
            </Animated.View>
@@ -409,4 +441,3 @@ const styles = StyleSheet.create({
   statusTextWrapper: { position: 'absolute', bottom: 40, alignItems: 'center' },
   statusText: { fontSize: 7, fontWeight: 'bold', opacity: 0.6 },
 });
-

@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, Animated, StyleSheet, Easing, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface ThinkingIndicatorProps {
   visible: boolean;
   complexity: number;
+  mode?: 'auto' | 'manual';
+  provider?: 'groq' | 'openrouter' | 'agent' | 'memory';
+  accessingMemory?: boolean;
 }
 
 const COMPLEXITY_COLORS: Record<number, string> = {
@@ -33,7 +37,6 @@ const ringStyle = (size: number, bw: number, color: string) => ({
 });
 
 // Pre-calculate elliptical orbits
-const PARTICLE_COUNT = 24;
 const RX = 140;
 const RY = 90;
 const STEPS = 80;
@@ -50,8 +53,10 @@ const createEllipticalTrajectory = (rx: number, ry: number) => {
 const TRAJECTORY = createEllipticalTrajectory(RX, RY);
 const INPUT_RANGE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 
-export default function ThinkingIndicator({ visible, complexity }: ThinkingIndicatorProps) {
+export default function ThinkingIndicator({ visible, complexity, mode = 'auto', provider, accessingMemory }: ThinkingIndicatorProps) {
   const [shouldRender, setShouldRender] = useState(visible);
+  const [internalComplexity, setInternalComplexity] = useState(1);
+  const [reducedMotion, setReducedMotion] = useState(false);
   
   // Base Animation Values
   const outerRotate = useRef(new Animated.Value(0)).current;
@@ -83,6 +88,11 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   const energyPulseScale = useRef(new Animated.Value(0)).current;
   const energyPulseOpacity = useRef(new Animated.Value(0)).current;
 
+  // Memory Access Lines
+  const memLineAnims = useRef(Array.from({ length: 4 }, () => new Animated.Value(0))).current;
+  // Provider Pulse
+  const providerScale = useRef(new Animated.Value(1)).current;
+
   // HUD v4 Additions
   const rippleScale = useRef(new Animated.Value(0)).current;
   const rippleOpacity = useRef(new Animated.Value(0)).current;
@@ -110,27 +120,46 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   }, []);
 
   useEffect(() => {
+    AsyncStorage.getItem('@jarvis_reduced_motion').then(val => {
+      if (val === 'true') setReducedMotion(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    let interval: any;
+    if (visible) {
+      setInternalComplexity(1);
+      interval = setInterval(() => {
+        setInternalComplexity(prev => (prev < 8 ? prev + 1 : 8));
+      }, 1200);
+    } else {
+      setInternalComplexity(1);
+      if (interval) clearInterval(interval);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [visible]);
+
+  useEffect(() => {
     if (visible) {
       setShouldRender(true);
       
       const loop = (anim: Animated.Value, to: number, duration: number, easing = Easing.linear) => 
         Animated.loop(Animated.timing(anim, { toValue: to, duration, easing, useNativeDriver: true }));
 
+      const anims: Animated.CompositeAnimation[] = [];
+
       // Continuous Rotations
-      const outerRotAnim = loop(outerRotate, 1, 8000);
-      const arcRotAnim = loop(arcRotate, 1, 6000);
-      const midRotAnim = loop(midRotate, 1, 4000); // Fixed: Same direction as others
-      const mathRotAnim = loop(mathRotate, 1, 15000);
-      const holoRotAnim = loop(holoRotate, 1, 10000);
-      const hexRotAnim = loop(hexRotate, 1, 20000);
+      anims.push(loop(outerRotate, 1, 8000));
+      anims.push(loop(arcRotate, 1, 6000));
+      anims.push(loop(midRotate, 1, 4000));
       
       // Pulsing Effects
-      const outerPulseAnim = Animated.loop(Animated.sequence([
+      anims.push(Animated.loop(Animated.sequence([
         Animated.timing(outerScale, { toValue: 1.03, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(outerScale, { toValue: 0.97, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]));
+      ])));
 
-      const breatheAnim = Animated.loop(Animated.sequence([
+      anims.push(Animated.loop(Animated.sequence([
         Animated.parallel([
           Animated.timing(breatheX, { toValue: 1.15, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(breatheY, { toValue: 0.85, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -139,130 +168,120 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
           Animated.timing(breatheX, { toValue: 0.85, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(breatheY, { toValue: 1.15, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ]),
-      ]));
+      ])));
 
-      const corePulseAnim = Animated.loop(Animated.sequence([
+      anims.push(Animated.loop(Animated.sequence([
         Animated.timing(coreScale, { toValue: 1.1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(coreScale, { toValue: 0.9, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]));
+      ])));
 
-      const textPulseAnim = Animated.loop(Animated.sequence([
+      anims.push(Animated.loop(Animated.sequence([
         Animated.timing(textOpacity, { toValue: 1, duration: 750, useNativeDriver: true }),
         Animated.timing(textOpacity, { toValue: 0.7, duration: 750, useNativeDriver: true }),
-      ]));
-
-      const crosshairPulseAnim = loop(crosshairScale, 1.2, 800, Easing.inOut(Easing.ease));
-
-      // Energy Loading / Progressive Segments (8 segments, 3000ms loop)
-      const segAnims = segmentAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 375), // 3000ms / 8 = 375ms
-        Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.1, duration: 500, useNativeDriver: true }),
       ])));
 
-      // Particles Orbits & Individual Pulses
-      const partOrbits = particleAnims.map((anim, i) => loop(anim, 1, 2000 + i * 500));
-      const partScales = particleScaleAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 100),
-        Animated.timing(anim, { toValue: 1.2, duration: 200, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.8, duration: 200, useNativeDriver: true }),
-      ])));
-      const partOpacities = particleOpacityAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 150),
-        Animated.timing(anim, { toValue: 1, duration: 150, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.2, duration: 150, useNativeDriver: true }),
+      anims.push(loop(crosshairScale, 1.2, 800, Easing.inOut(Easing.ease)));
+
+      // Provider Pulse
+      anims.push(Animated.loop(Animated.sequence([
+        Animated.timing(providerScale, { toValue: 1.05, duration: 500, useNativeDriver: true }),
+        Animated.timing(providerScale, { toValue: 0.95, duration: 500, useNativeDriver: true }),
       ])));
 
-      // Periodic Effects (Ripple & Lightning)
-      const periodicEffects = Animated.loop(Animated.sequence([
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(rippleOpacity, { toValue: 0.6, duration: 100, useNativeDriver: true }),
-            Animated.timing(rippleOpacity, { toValue: 0, duration: 900, useNativeDriver: true }),
+      // Segments
+      segmentAnims.forEach((anim, i) => {
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(i * 375),
+          Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.1, duration: 500, useNativeDriver: true }),
+        ])));
+      });
+
+      if (!reducedMotion) {
+        anims.push(loop(mathRotate, 1, 15000));
+        anims.push(loop(holoRotate, 1, 10000));
+        anims.push(loop(hexRotate, 1, 20000));
+
+        // Periodic Effects (Ripple & Lightning)
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(rippleOpacity, { toValue: 0.6, duration: 100, useNativeDriver: true }),
+              Animated.timing(rippleOpacity, { toValue: 0, duration: 900, useNativeDriver: true }),
+            ]),
+            Animated.timing(rippleScale, { toValue: 3.5, duration: 1000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.sequence([
+              Animated.timing(lightningOpacity, { toValue: 0.15, duration: 60, useNativeDriver: true }),
+              Animated.timing(lightningOpacity, { toValue: 0, duration: 60, useNativeDriver: true }),
+            ]),
           ]),
-          Animated.timing(rippleScale, { toValue: 3.5, duration: 1000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-          Animated.sequence([
-            Animated.timing(lightningOpacity, { toValue: 0.15, duration: 60, useNativeDriver: true }),
-            Animated.timing(lightningOpacity, { toValue: 0, duration: 60, useNativeDriver: true }),
+          Animated.delay(3000),
+        ])));
+
+        // Glitch
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(2500),
+          Animated.parallel([
+            Animated.timing(glitchFlash, { toValue: 0.3, duration: 40, useNativeDriver: true }),
+            Animated.timing(glitchTranslateX, { toValue: Math.random() > 0.5 ? 3 : -3, duration: 40, useNativeDriver: true }),
           ]),
-        ]),
-        Animated.delay(3000), // Total cycle 4s
-      ]));
+          Animated.parallel([
+            Animated.timing(glitchFlash, { toValue: 0, duration: 40, useNativeDriver: true }),
+            Animated.timing(glitchTranslateX, { toValue: 0, duration: 40, useNativeDriver: true }),
+          ]),
+        ])));
 
-      // Glitch Cycle (Every 2.5s)
-      const glitchCycle = Animated.loop(Animated.sequence([
-        Animated.delay(2500),
-        Animated.parallel([
-          Animated.timing(glitchFlash, { toValue: 0.3, duration: 40, useNativeDriver: true }),
-          Animated.timing(glitchTranslateX, { toValue: Math.random() > 0.5 ? 3 : -3, duration: 40, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(glitchFlash, { toValue: 0, duration: 40, useNativeDriver: true }),
-          Animated.timing(glitchTranslateX, { toValue: 0, duration: 40, useNativeDriver: true }),
-        ]),
-      ]));
+        // Energy Ring Pulse
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.parallel([
+            Animated.timing(energyPulseScale, { toValue: 1.3, duration: 5000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.sequence([
+              Animated.timing(energyPulseOpacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
+              Animated.timing(energyPulseOpacity, { toValue: 0, duration: 4500, useNativeDriver: true }),
+            ])
+          ]),
+          Animated.timing(energyPulseScale, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ])));
 
-      // Scan Scroll
-      const scanScroll = loop(scanTranslateY, 1, 2000);
+        // Particles
+        particleAnims.forEach((anim, i) => anims.push(loop(anim, 1, 2000 + i * 500)));
+        particleScaleAnims.forEach((anim, i) => anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(i * 100),
+          Animated.timing(anim, { toValue: 1.2, duration: 200, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.8, duration: 200, useNativeDriver: true }),
+        ]))));
+      }
 
-      // Energy Ring Pulse (5s loop)
-      const energyPulseAnim = Animated.loop(Animated.sequence([
-        Animated.parallel([
-          Animated.timing(energyPulseScale, { toValue: 1.3, duration: 5000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-          Animated.sequence([
-            Animated.timing(energyPulseOpacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
-            Animated.timing(energyPulseOpacity, { toValue: 0, duration: 4500, useNativeDriver: true }),
-          ])
-        ]),
-        Animated.timing(energyPulseScale, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ]));
+      // Memory lines
+      memLineAnims.forEach((anim, i) => {
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(i * 300),
+          Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ])));
+      });
 
-      // Code Fragments
-      const codeLoopAnims = codeAnims.map((anim, i) => Animated.loop(Animated.sequence([
-        Animated.delay(i * 1000),
-        Animated.parallel([
-          Animated.timing(anim.pos, { toValue: 1, duration: 2000, useNativeDriver: true }),
-          Animated.sequence([
-            Animated.timing(anim.opacity, { toValue: 0.6, duration: 500, useNativeDriver: true }),
-            Animated.timing(anim.opacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
-          ])
-        ]),
-        Animated.timing(anim.pos, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])));
-
-      // Electric Flickers
-      const flickAnims = flickerAnims.map((anim) => Animated.loop(Animated.sequence([
-        Animated.delay(1500 + Math.random() * 1500),
-        Animated.timing(anim, { toValue: 1, duration: 40, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 40, useNativeDriver: true }),
-      ])));
+      anims.push(loop(scanTranslateY, 1, 2000));
 
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
-        outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim,
-        periodicEffects, glitchCycle, scanScroll, energyPulseAnim, crosshairPulseAnim,
-        mathRotAnim, holoRotAnim, hexRotAnim,
-        ...segAnims, ...partOrbits, ...partScales, ...partOpacities, ...flickAnims, ...codeLoopAnims
+        ...anims
       ]).start();
 
-      return () => {
-        [outerRotAnim, outerPulseAnim, arcRotAnim, midRotAnim, breatheAnim, corePulseAnim, textPulseAnim, periodicEffects, glitchCycle, scanScroll, energyPulseAnim, crosshairPulseAnim, mathRotAnim, holoRotAnim, hexRotAnim, ...segAnims, ...partOrbits, ...partScales, ...partOpacities, ...flickAnims, ...codeLoopAnims].forEach(a => a.stop());
-      };
+      return () => anims.forEach(a => a.stop());
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 0.5, duration: 300, useNativeDriver: true }),
-      ]).start(() => {
-        setShouldRender(false);
-        rippleScale.setValue(0);
-      });
+      ]).start(() => setShouldRender(false));
     }
-  }, [visible]);
+  }, [visible, reducedMotion]);
 
   if (!shouldRender) return null;
 
-  const hudColor = COMPLEXITY_COLORS[complexity] || '#00d4ff';
+  const currentComplexity = mode === 'auto' ? internalComplexity : complexity;
+  const hudColor = COMPLEXITY_COLORS[currentComplexity] || '#00d4ff';
   const spinOuter = outerRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const spinArc = arcRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const spinMid = midRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
@@ -272,14 +291,43 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
   
   const scanY = scanTranslateY.interpolate({ inputRange: [0, 1], outputRange: [-20, 20] });
 
+  // Provider Badge Config
+  const providerConfig = {
+    groq: { label: 'G', color: '#f59e0b' },
+    openrouter: { label: 'O', color: '#00d4ff' },
+    agent: { label: 'A', color: '#00ff88' },
+    memory: { label: 'M', color: '#ff5500' },
+  }[provider || 'groq'];
+
   return (
     <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="none">
       
-      {/* HUD v4 Lightning Flash Overlay */}
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: lightningOpacity, zIndex: 10000 }]} />
+      {/* Memory Access Visualization */}
+      {accessingMemory && memLineAnims.map((anim, i) => (
+        <Animated.View key={`mem-line-${i}`} style={[
+          styles.memoryLine,
+          {
+            backgroundColor: '#00ffff66',
+            transform: [
+              { rotate: `${i * 90}deg` },
+              { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-SCREEN_HEIGHT / 2, 0] }) }
+            ]
+          }
+        ]} />
+      ))}
+
+      {/* Provider Indicator Badge */}
+      {provider && (
+        <Animated.View style={[
+          styles.providerBadge,
+          { backgroundColor: providerConfig.color, transform: [{ scale: providerScale }] }
+        ]}>
+          <Text style={styles.providerLetter}>{providerConfig.label}</Text>
+        </Animated.View>
+      )}
       
-      {/* v5 Glitch Flash */}
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: glitchFlash, zIndex: 10001 }]} />
+      {!reducedMotion && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: lightningOpacity, zIndex: 10000 }]} />}
+      {!reducedMotion && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: glitchFlash, zIndex: 10001 }]} />}
 
       {/* Background HUD Elements */}
       <View style={styles.hudBg}>
@@ -292,26 +340,22 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
 
       <Animated.View style={[styles.center, { transform: [{ scale: scaleAnim }, { translateX: glitchTranslateX }] }]}>
         
-        {/* Ripple Shockwave */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           styles.ripple, 
           { borderColor: hudColor, transform: [{ scale: rippleScale }], opacity: rippleOpacity }
-        ]} />
+        ]} />}
 
-        {/* v5 Energy Ring Pulse */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           ringStyle(220, 4, hudColor),
           { position: 'absolute', opacity: energyPulseOpacity, transform: [{ scale: energyPulseScale }] }
-        ]} />
+        ]} />}
 
-        {/* v5 Hexagonal Ring */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           styles.hexagon,
           { borderColor: hudColor, opacity: 0.15, transform: [{ rotate: spinHex }] }
-        ]} />
+        ]} />}
 
-        {/* v5 HUD Math Diagrams (320x320) */}
-        <Animated.View style={[
+        {!reducedMotion && <Animated.View style={[
           ringStyle(320, 1, hudColor),
           { position: 'absolute', borderColor: 'transparent', transform: [{ rotate: spinMath }] }
         ]}>
@@ -320,23 +364,18 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
               <Text style={styles.mathText}>0010 1101 1011</Text>
             </View>
           ))}
-        </Animated.View>
+        </Animated.View>}
 
-        {/* v5 Holograms */}
-        <Animated.View style={[styles.holoContainer, { transform: [{ rotate: spinHolo }] }]}>
+        {!reducedMotion && <Animated.View style={[styles.holoContainer, { transform: [{ rotate: spinHolo }] }]}>
           {[90, 110, 140, 170].map((r, i) => (
             <View key={`holo-${i}`} style={[
               styles.holoCircle, 
-              { 
-                borderColor: hudColor, 
-                opacity: 0.3 * (i % 2 === 0 ? 1 : 0.5), 
-                transform: [{ translateY: -r }] 
-              }
+              { borderColor: hudColor, opacity: 0.3, transform: [{ translateY: -r }] }
             ]} />
           ))}
-        </Animated.View>
+        </Animated.View>}
 
-        {/* Ring 1 - Outer 300x300 (Fixed Graduation Markers inside) */}
+        {/* Ring 1 - Outer */}
         <Animated.View style={[
           ringStyle(300, 8, hudColor), 
           { position: 'absolute', transform: [{ rotate: spinOuter }, { scale: outerScale }] }
@@ -348,10 +387,7 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
                 position: 'absolute',
                 top: 150 - (m.isLarge ? 14 : 8) / 2,
                 left: 150 - 1.5,
-                transform: [
-                  { rotate: `${m.angle}deg` }, 
-                  { translateY: -145 }
-                ] 
+                transform: [{ rotate: `${m.angle}deg` }, { translateY: -145 }] 
               }
             ]}>
               {m.isLarge && <Text style={[styles.hudLabel, { transform: [{ rotate: `${-m.angle}deg` }] }]}>{m.angle}</Text>}
@@ -359,17 +395,16 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
           ))}
         </Animated.View>
 
-        {/* Orange Arc on Outer Ring */}
+        {/* Orange Arc */}
         <Animated.View style={[styles.orangeArc, { transform: [{ rotate: spinArc }] }]}>
            <View style={styles.arcSegment} />
-           {/* v5 Status Text under Arc */}
            <View style={styles.statusTextWrapper}>
-              <Text style={[styles.statusText, { color: hudColor }]}>COMPLEXITY: {complexity}</Text>
-              <Text style={[styles.statusText, { color: hudColor }]}>ENERGY: {80 + complexity * 2}%</Text>
+              <Text style={[styles.statusText, { color: hudColor }]}>COMPLEXITY: {currentComplexity}/8</Text>
+              <Text style={[styles.statusText, { color: hudColor }]}>ENERGY: {80 + currentComplexity * 2}%</Text>
            </View>
         </Animated.View>
 
-        {/* Ring 2 - 240x240 Mid (Energy Loading Segments) */}
+        {/* Ring 2 - Mid */}
         <Animated.View style={[
           ringStyle(240, 2, hudColor), 
           { position: 'absolute', transform: [{ rotate: spinMid }] }
@@ -382,78 +417,12 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
            ))}
         </Animated.View>
 
-        {/* v5 Code Fragments */}
-        {codeAnims.map((anim, i) => (
-          <Animated.Text key={`code-${i}`} style={[
-            styles.codeFragment, 
-            { 
-              color: hudColor, 
-              opacity: anim.opacity,
-              transform: [
-                { translateX: (i % 2 === 0 ? 1 : -1) * (60 + i * 20) },
-                { translateY: anim.pos.interpolate({ inputRange: [0, 1], outputRange: [40, -40] }) }
-              ]
-            }
-          ]}>
-            {['{', '}', ';', '/'][i]}
-          </Animated.Text>
-        ))}
-
-        {/* Electric Flickers */}
-        {flickerAnims.map((anim: Animated.Value, i: number) => (
-          <Animated.View key={`flick-${i}`} style={[
-            styles.flicker, 
-            { 
-              backgroundColor: hudColor, 
-              opacity: anim, 
-              transform: [
-                { rotate: `${i * 90 + Math.random() * 45}deg` }, 
-                { translateY: -105 }
-              ] 
-            }
-          ]} />
-        ))}
-
-        {/* Ring 3 - Breathing 180x180 */}
-        <Animated.View style={[
-          ringStyle(180, 1.5, hudColor), 
-          { position: 'absolute', opacity: 0.6, transform: [{ scaleX: breatheX }, { scaleY: breatheY }] }
-        ]} />
-
-        {/* Layer 4 - Orbiting Particles (Elliptical Trajectory + Scale/Opacity Pulse) */}
-        {particleAnims.map((anim, i) => {
-           const tx = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.xTable });
-           const ty = anim.interpolate({ inputRange: INPUT_RANGE, outputRange: TRAJECTORY.yTable });
-           return (
-             <Animated.View key={`p-${i}`} style={[
-               styles.particle, 
-               { 
-                 backgroundColor: hudColor, 
-                 opacity: particleOpacityAnims[i],
-                 transform: [
-                   { translateX: tx }, 
-                   { translateY: ty },
-                   { scale: particleScaleAnims[i] }
-                 ] 
-               }
-             ]} />
-           );
-        })}
-
-        {/* v5 Path Particles (Radius 100) */}
-        {[0, 60, 120, 180, 240, 300].map((angle, i) => (
-           <Animated.View key={`path-p-${i}`} style={[styles.pathParticleWrapper, { transform: [{ rotate: spinOuter }, { rotate: `${angle}deg` }, { translateY: -100 }] }]}>
-              <View style={[styles.pathParticle, { backgroundColor: hudColor }]} />
-           </Animated.View>
-        ))}
-
-        {/* Ring 5 - Core 70x70 */}
+        {/* Ring 3 - Core */}
         <Animated.View style={[
           styles.core, 
-          { borderColor: hudColor, shadowColor: hudColor, shadowRadius: 10, shadowOpacity: 0.8, transform: [{ scale: coreScale }] }
+          { borderColor: hudColor, transform: [{ scale: coreScale }] }
         ]}>
            <View style={styles.coreInner} />
-           {/* v5 Central Crosshair */}
            <Animated.View style={[styles.crosshair, { transform: [{ scale: crosshairScale }] }]}>
               <View style={[styles.chLine, { backgroundColor: hudColor, height: 10, width: 2 }]} />
               <View style={[styles.chLine, { backgroundColor: hudColor, height: 2, width: 10, position: 'absolute' }]} />
@@ -464,10 +433,9 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
         <View style={styles.textContainer}>
           <Animated.Text style={[styles.title, { color: hudColor, opacity: textOpacity }]}>J.A.R.V.I.S</Animated.Text>
           <Text style={[styles.subtext, { color: hudColor }]}>
-            {complexity <= 2 ? 'PROCESEZ...' : complexity <= 5 ? 'ANALIZEZ...' : 'CALCUL COMPLEX...'}
+            {currentComplexity <= 2 ? 'PROCESEZ...' : currentComplexity <= 5 ? 'ANALIZEZ...' : 'CALCUL COMPLEX...'}
           </Text>
           
-          {/* v5 Text Scanning HUD */}
           <View style={styles.scanWindow}>
              <Animated.View style={{ transform: [{ translateY: scanY }] }}>
                 <Text style={styles.scanText}>SCANNING...</Text>
@@ -476,11 +444,6 @@ export default function ThinkingIndicator({ visible, complexity }: ThinkingIndic
              </Animated.View>
           </View>
         </View>
-
-        {/* HUD Rays */}
-        {['0deg', '90deg', '180deg', '270deg'].map((rot, i) => (
-          <View key={`ray-${i}`} style={[styles.ray, { backgroundColor: hudColor, transform: [{ rotate: rot }, { translateY: -170 }] }]} />
-        ))}
 
       </Animated.View>
     </Animated.View>
@@ -494,44 +457,33 @@ const styles = StyleSheet.create({
   scanline: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#fff', opacity: 0.03 },
   circularBackdrop: { width: 280, height: 280, borderRadius: 140, backgroundColor: '#050d14', borderWidth: 1, borderColor: '#0a2a3a', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   bgRing: { position: 'absolute', borderWidth: 1, borderColor: '#fff', opacity: 0.08 },
-  
   markerSmall: { position: 'absolute', width: 2, height: 8, backgroundColor: '#fff', opacity: 0.4 },
   markerLarge: { position: 'absolute', width: 3, height: 14, backgroundColor: '#fff', opacity: 0.9, alignItems: 'center' },
   hudLabel: { position: 'absolute', top: 16, color: '#fff', fontSize: 8, opacity: 0.5 },
-  
   orangeArc: { position: 'absolute', width: 310, height: 310, justifyContent: 'center', alignItems: 'center' },
   arcSegment: { width: 310, height: 310, borderRadius: 155, borderWidth: 4, borderColor: '#f59e0b', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-30deg' }] },
-  
   midSegment: { position: 'absolute', width: 12, height: 3, borderRadius: 1 },
   particle: { position: 'absolute', width: 6, height: 6, borderRadius: 3 },
-  
   core: { width: 70, height: 70, borderRadius: 35, borderWidth: 2, backgroundColor: '#050d14', justifyContent: 'center', alignItems: 'center' },
   coreInner: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)' },
-  
   textContainer: { position: 'absolute', alignItems: 'center', width: 200 },
   title: { fontSize: 18, fontWeight: 'bold', letterSpacing: 4 },
   subtext: { fontSize: 10, letterSpacing: 2, opacity: 0.7, marginTop: 4 },
-  
   ray: { position: 'absolute', width: 2, height: 20, opacity: 0.5 },
-  
-  // v4 New Styles
   ripple: { position: 'absolute', width: 100, height: 100, borderRadius: 50, borderWidth: 2 },
-  flicker: { position: 'absolute', width: 1, height: 30 },
-
-  // v5 Cinematic Styles
   mathWrapper: { position: 'absolute', alignItems: 'center' },
   mathText: { color: '#00ffff', fontSize: 8, opacity: 0.4, fontWeight: 'bold' },
   holoContainer: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   holoCircle: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 1 },
-  hexagon: { position: 'absolute', width: 260, height: 260, borderWidth: 1, transform: [{ rotate: '30deg' }] }, // Simplified hex via border
-  codeFragment: { position: 'absolute', fontSize: 14, fontWeight: 'bold' },
-  pathParticleWrapper: { position: 'absolute', alignItems: 'center' },
-  pathParticle: { width: 4, height: 4, borderRadius: 2, opacity: 0.6 },
+  hexagon: { position: 'absolute', width: 260, height: 260, borderWidth: 1 },
   crosshair: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   chLine: { opacity: 0.6 },
   scanWindow: { height: 12, overflow: 'hidden', marginTop: 8 },
   scanText: { color: '#00ffff', fontSize: 7, opacity: 0.5, textAlign: 'center' },
   statusTextWrapper: { position: 'absolute', bottom: 40, alignItems: 'center' },
   statusText: { fontSize: 7, fontWeight: 'bold', opacity: 0.6 },
+  memoryLine: { position: 'absolute', width: 1, height: SCREEN_HEIGHT, zIndex: -1 },
+  providerBadge: { position: 'absolute', bottom: 40, left: 40, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', zIndex: 10002 },
+  providerLetter: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
 });
 
