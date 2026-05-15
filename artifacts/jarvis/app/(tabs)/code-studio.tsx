@@ -249,7 +249,7 @@ export default function CodeStudio() {
       let isActive = true;
       const reload = async () => {
         try {
-          await seedDefaultAgents(); // Seed before loading data
+          await seedDefaultAgents(); 
           const [sa, sk, saved] = await Promise.all([
             getSubAgents(),
             getAllSkills(),
@@ -257,63 +257,47 @@ export default function CodeStudio() {
           ]);
           if (!isActive) return;
           
-          // Deduplicate subAgents
           const uniqueSA = (() => {
               const seen = new Set();
               return (sa || []).filter(a => a && (seen.has(a.id) ? false : seen.add(a.id)));
           })();
           setSubAgents(uniqueSA);
           
-          // Deduplicate skills
           const uniqueSK = (() => {
               const seen = new Set();
               return (sk || []).filter(s => s && (seen.has(s.id) ? false : seen.add(s.id)));
           })();
           setAllSkills(uniqueSK);
           
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            const savedNodes = parsed.nodes || [];
-            const savedConns = parsed.connections || [];
-            
-            const existingNodeIds = new Set(savedNodes.map((n: Node) => n.id || (n.config?.agentId)));
-            const missingAgentNodes = (uniqueSA || [])
-              .filter(agent => !existingNodeIds.has(agent.id))
-              .map((agent, i) => ({
-                id: agent.id,
-                type: 'Agent' as NodeType,
-                title: agent.name,
-                x: 100 + ((savedNodes.length + i) % 3) * 220,
-                y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
-                config: { agentId: agent.id }
-              }));
-            
-            const allNodes = [...savedNodes, ...missingAgentNodes];
-            // Final dedup on nodes
-            const finalNodes = (() => {
-                const seen = new Set();
-                return allNodes.filter(n => n && (seen.has(n.id) ? false : seen.add(n.id)));
-            })();
-            setNodes(finalNodes);
-            setConnections(savedConns);
-            
-            if (missingAgentNodes.length > 0) {
-              await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: finalNodes, connections: savedConns }));
-            }
-          } else if (uniqueSA && uniqueSA.length > 0) {
-            // Prima deschidere - pune agentii pe canvas
-            const autoNodes = uniqueSA.map((agent, i) => ({
-              id: agent.id, type: 'Agent' as NodeType, title: agent.name,
-              x: 100 + (i % 3) * 220, y: 150 + Math.floor(i / 3) * 180, config: { agentId: agent.id }
+          const parsed = saved ? JSON.parse(saved) : { nodes: [], connections: [] };
+          const savedNodes = parsed.nodes || [];
+          const savedConns = parsed.connections || [];
+          
+          const existingNodeIds = new Set(savedNodes.map((n: Node) => n.id || (n.config?.agentId)));
+          const missingAgentNodes = (uniqueSA || [])
+            .filter(agent => !existingNodeIds.has(agent.id))
+            .map((agent, i) => ({
+              id: agent.id,
+              type: 'Agent' as NodeType,
+              title: agent.name,
+              x: 100 + ((savedNodes.length + i) % 3) * 220,
+              y: 150 + Math.floor((savedNodes.length + i) / 3) * 180,
+              config: { agentId: agent.id }
             }));
-            setNodes(autoNodes);
-            await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify({ nodes: autoNodes, connections: [] }));
-          }
+          
+          const allNodes = [...savedNodes, ...missingAgentNodes];
+          const finalNodes = (() => {
+              const seen = new Set();
+              return allNodes.filter(n => n && (seen.has(n.id) ? false : seen.add(n.id)));
+          })();
+          
+          setNodes(finalNodes);
+          setConnections(savedConns);
         } catch(e) { console.error('[Studio] Reload error:', e); }
       };
       reload();
       return () => { isActive = false; };
-    }, [settings])
+    }, [])
   );
 
   const canvasPanResponder = useRef(PanResponder.create({
