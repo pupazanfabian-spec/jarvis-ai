@@ -15,8 +15,16 @@ export interface MemoryEntry {
   accessCount: number;
   importance: number;     // 1-10
   source: 'user_explicit' | 'jarvis_inferred' | 'conversation' | 'web';
-  relatedTo?: string[];
+  relatedTo: string[];
   expiresAt?: number;
+  is_core?: boolean;
+}
+
+function calculateWeightedScore(query: string, entry: MemoryEntry): number {
+  const similarity = semanticSimilarity(query, entry.content);
+  const age_factor = (Date.now() - entry.lastAccess) / (1000 * 60 * 60 * 24 * 30) || 0.1;
+  // Scorul combină similitudinea semantică, importanța, vechimea și frecvența de acces
+  return similarity * entry.importance * (1 / age_factor) * Math.log(entry.accessCount + 2);
 }
 
 const CATEGORY_CAPS = {
@@ -52,7 +60,13 @@ async function _loadAll() {
     try {
       const data = await AsyncStorage.getItem(key);
       if (data) {
-        _memoryCache[cat] = JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // Normalizare pentru compatibilitate: asigurăm că toate câmpurile noi există
+        _memoryCache[cat] = parsed.map((e: any) => ({
+          ...e,
+          relatedTo: e.relatedTo || [],
+          is_core: e.is_core || false
+        }));
       }
     } catch (e) {
       console.error(`[MemoryManager] Failed to load ${cat}:`, e);
@@ -171,11 +185,90 @@ export async function addEntry(
     source,
     relatedTo: hints?.relatedTo || [],
     expiresAt: hints?.expiresAt,
+    is_core: false,
   };
 
   _memoryCache[category].push(entry);
   await _saveCategory(category);
+
+  // Cross-linking automat
+  await autoLink(entry);
+
   return entry;
+}
+
+export async function autoLink(newEntry: MemoryEntry): Promise<void> {
+  const allEntries: MemoryEntry[] = [];
+  for (const cat of Object.keys(_memoryCache)) {
+    allEntries.push(..._memoryCache[cat]);
+  }
+  
+  // Analizează ultimele 20 de intrări pentru corelare semantică
+  const recentEntries = allEntries
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 20);
+
+  let updatedAny = false;
+  for (const existing of recentEntries) {
+    if (existing.id === newEntry.id) continue;
+    const similarity = semanticSimilarity(newEntry.content, existing.content);
+    if (similarity > 0.7) {
+      if (!newEntry.relatedTo.includes(existing.id)) {
+        newEntry.relatedTo.push(existing.id);
+        updatedAny = true;
+      }
+      if (!existing.relatedTo.includes(newEntry.id)) {
+        existing.relatedTo.push(newEntry.id);
+        await _saveCategory(existing.category);
+      }
+    }
+  }
+  if (updatedAny) {
+    await _saveCategory(newEntry.category);
+  }
+}
+
+import { createInferenceEngine, addFact, chainReason } from './inference';
+
+export async function activeInference(query: string, recentMessages: string[] = []): Promise<string[]> {
+  await _loadAll();
+  const ctxQuery = query + " " + recentMessages.join(" ");
+  
+  const allEntries: MemoryEntry[] = [];
+  for (const cat of Object.keys(_memoryCache)) {
+    allEntries.push(..._memoryCache[cat]);
+  }
+
+  // Folosim recall ponderat pentru a selecta cele mai relevante 20 de fapte pentru inferență
+  const top20Candidates = allEntries
+    .map(e => ({ e, score: calculateWeightedScore(ctxQuery, e) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(x => x.e);
+
+  const engine = createInferenceEngine();
+  for (const entry of top20Candidates) {
+    addFact(engine, entry.content, 'deduced');
+  }
+
+  return chainReason(engine, query);
+}
+
+export async function markCore(): Promise<void> {
+  await _loadAll();
+  let updatedCategories = new Set<string>();
+  for (const cat of Object.keys(_memoryCache)) {
+    for (const entry of _memoryCache[cat]) {
+      // Un entry devine "core" dacă a fost accesat de mai mult de 10 ori
+      if (!entry.is_core && entry.accessCount > 10) {
+        entry.is_core = true;
+        updatedCategories.add(cat);
+      }
+    }
+  }
+  for (const cat of updatedCategories) {
+    await _saveCategory(cat as any);
+  }
 }
 
 export async function updateEntry(id: string, updates: Partial<MemoryEntry>): Promise<void> {
@@ -215,42 +308,48 @@ export async function recallContext(query: string, recentMessages: string[] = []
   
   const ctxQuery = query + " " + recentMessages.join(" ");
   
-  // TOATE din reguli (max 500)
+  // 1. TOATE din reguli (max 500)
   const reguli = _memoryCache.reguli.map(e => `- [REGULĂ] ${e.content}`);
   
-  // TOP 5 sistem
+  // 2. TOP 5 sistem (recall ponderat)
   const sistem = _memoryCache.sistem
-    .sort((a, b) => b.importance - a.importance)
+    .map(e => ({ e, score: calculateWeightedScore(ctxQuery, e) }))
+    .sort((a, b) => b.score - a.score)
     .slice(0, 5)
-    .map(e => `- [SISTEM] ${e.content}`);
+    .map(x => `- [SISTEM] ${x.e.content}`);
     
-  // TOP 10 importanta (semanticSimilarity)
+  // 3. TOP 10 importanta (recall ponderat)
   const importanta = _memoryCache.importanta
-    .map(e => ({ e, score: semanticSimilarity(ctxQuery, e.content) }))
+    .map(e => ({ e, score: calculateWeightedScore(ctxQuery, e) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 10)
     .map(x => `- [FAPT] ${x.e.content}`);
     
-  // TOP 5 mai_putin
+  // 4. TOP 5 mai_putin (recall ponderat)
   const mai_putin = _memoryCache.mai_putin
-    .map(e => ({ e, score: semanticSimilarity(ctxQuery, e.content) }))
+    .map(e => ({ e, score: calculateWeightedScore(ctxQuery, e) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
     .map(x => `- [DETALIU] ${x.e.content}`);
     
-  // TOP 3 irelevanta
+  // 5. TOP 3 irelevanta (recall ponderat)
   const irelevanta = _memoryCache.irelevanta
-    .map(e => ({ e, score: semanticSimilarity(ctxQuery, e.content) }))
+    .map(e => ({ e, score: calculateWeightedScore(ctxQuery, e) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
     .map(x => `- [OBSERVAȚIE] ${x.e.content}`);
+
+  // 6. Active Inference — Deducem fapte noi pe baza memoriilor accesate
+  const deducedFacts = await activeInference(query, recentMessages);
+  const inferenceLines = deducedFacts.map(f => `- [DEDUCȚIE] ${f}`);
 
   const lines = [
     ...reguli,
     ...sistem,
     ...importanta,
     ...mai_putin,
-    ...irelevanta
+    ...irelevanta,
+    ...(inferenceLines.length > 0 ? ["", "### FAPTE DEDUSE:", ...inferenceLines] : [])
   ];
   
   if (lines.length === 0) return "";
@@ -259,6 +358,7 @@ export async function recallContext(query: string, recentMessages: string[] = []
 }
 
 export async function migrateLifecycle(): Promise<void> {
+  await markCore(); // Protecție core memory înainte de migrare
   await _loadAll();
   const now = Date.now();
   const sixtyDays = 60 * 24 * 3600 * 1000;
@@ -272,6 +372,7 @@ export async function migrateLifecycle(): Promise<void> {
 
   // 1. importanta nefolosit 60+ zile → mai_putin
   _memoryCache.importanta = _memoryCache.importanta.filter(e => {
+    if (e.is_core) return true; // Niciodată nu migrează core entries
     if (now - e.lastAccess > sixtyDays) {
       toMoveToMaiPutin.push({ ...e, category: 'mai_putin' });
       return false;
@@ -281,6 +382,7 @@ export async function migrateLifecycle(): Promise<void> {
 
   // 2. mai_putin nefolosit 90+ zile → irelevanta
   _memoryCache.mai_putin = _memoryCache.mai_putin.filter(e => {
+    if (e.is_core) return true;
     if (now - e.lastAccess > ninetyDays) {
       toMoveToIrelevanta.push({ ...e, category: 'irelevanta' });
       return false;
@@ -290,6 +392,7 @@ export async function migrateLifecycle(): Promise<void> {
 
   // 3. irelevanta nefolosit 180+ zile → DELETE (arhivă pe disk)
   _memoryCache.irelevanta = _memoryCache.irelevanta.filter(e => {
+    if (e.is_core) return true;
     if (now - e.lastAccess > halfYear) {
       toDelete.push(e.id);
       return false;
