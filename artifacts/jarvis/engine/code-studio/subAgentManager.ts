@@ -58,6 +58,26 @@ export async function getSubAgents(): Promise<SubAgent[]> {
   }
 }
 
+export async function syncToCanvas(agent: SubAgent): Promise<void> {
+  const workspaceRaw = await AsyncStorage.getItem('@code_studio_workspace');
+  const workspace = workspaceRaw ? JSON.parse(workspaceRaw) : { nodes: [], connections: [] };
+
+  // Verifică dacă nodul există deja pentru a evita duplicarea
+  if (workspace.nodes.find((n: any) => n.id === agent.id)) return;
+
+  const newNode = {
+      id: agent.id,
+      type: 'Agent',
+      title: agent.name,
+      x: 100 + Math.random() * 400,
+      y: 100 + Math.random() * 400,
+      config: { agentId: agent.id }
+  };
+
+  workspace.nodes.push(newNode);
+  await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify(workspace));
+}
+
 export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgent> {
   const agents = await getSubAgents();
   const newAgent: SubAgent = {
@@ -79,20 +99,7 @@ export async function createSubAgent(config: Partial<SubAgent>): Promise<SubAgen
   const updated = [...agents.filter(a => a.id !== newAgent.id), newAgent];
   await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updated));
 
-  const workspaceRaw = await AsyncStorage.getItem('@code_studio_workspace');
-  const workspace = workspaceRaw ? JSON.parse(workspaceRaw) : { nodes: [], connections: [] };
-  
-  const newNode = {
-      id: newAgent.id,
-      type: 'Agent',
-      title: newAgent.name,
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
-      config: { agentId: newAgent.id }
-  };
-
-  workspace.nodes.push(newNode);
-  await AsyncStorage.setItem('@code_studio_workspace', JSON.stringify(workspace));
+  await syncToCanvas(newAgent);
 
   return newAgent;
 }
