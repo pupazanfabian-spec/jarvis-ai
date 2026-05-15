@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import ThemeSelector from './ThemeSelector';
 import Colors from '@/constants/colors';
 import { useAIProvider, providerLabel } from '@/context/AIProviderContext';
 import type { AIProvider } from '@/engine/aiProviders';
@@ -136,6 +137,7 @@ export default function AIProviderModal({ visible, onClose }: Props) {
   const [successMsg, setSuccessMsg] = useState('');
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [localError, setLocalError] = useState('');
+  const [showThemeModal, setShowThemeModal] = useState(false);
 
   useEffect(() => {
     if (visible) {
