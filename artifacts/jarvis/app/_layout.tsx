@@ -19,6 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
+import OnboardingScreen from "@/components/OnboardingScreen";
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
@@ -34,6 +36,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashChecked, setSplashLoaded] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -43,7 +46,13 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // Always show splash screen on app mount
+    async function checkOnboarding() {
+      const onboarded = await AsyncStorage.getItem('@jarvis_onboarded');
+      if (onboarded !== 'true') {
+        setNeedsOnboarding(true);
+      }
+    }
+    checkOnboarding();
     setShowSplash(true);
     setSplashLoaded(true);
   }, []);
@@ -67,7 +76,11 @@ export default function RootLayout() {
                   <DevModeProvider>
                     <PinProvider>
                       <BrainProvider>
-                        <RootLayoutNav />
+                        {needsOnboarding ? (
+                          <OnboardingScreen onComplete={() => setNeedsOnboarding(false)} />
+                        ) : (
+                          <RootLayoutNav />
+                        )}
                         <JarvisSplash onFinish={() => setShowSplash(false)} />
                       </BrainProvider>
                     </PinProvider>

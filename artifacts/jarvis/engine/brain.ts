@@ -39,6 +39,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   confidence?: number;
+  metadata?: Record<string, any>;
   proposalData?: {
     name: string;
     skills: string[];

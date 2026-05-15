@@ -937,3 +937,51 @@ export async function testOpenRouterKey(apiKey: string): Promise<boolean> {
   const { ok } = await testOpenRouterKeyDetailed(apiKey);
   return ok;
 }
+
+// ─── Whisper (Speech-to-Text via Groq) ──────────────────────────────────────
+
+export async function callWhisper(audioUri: string, apiKey: string): Promise<string> {
+  if (!apiKey || !audioUri) return '';
+
+  const formData = new FormData();
+  // @ts-ignore - React Native FormData handling
+  formData.append('file', {
+    uri: audioUri,
+    type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
+    name: 'audio.m4a',
+  });
+  formData.append('model', 'whisper-large-v3');
+  formData.append('language', 'ro');
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000); // 20s timeout
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: formData,
+      signal: ctrl.signal,
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 429) {
+        await markKeyFailed('groq', apiKey);
+        const nextKey = await getWorkingKey('groq');
+        if (nextKey) return await callWhisper(audioUri, nextKey);
+      }
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(`${resp.status}::Whisper Error: ${JSON.stringify(errData)}`);
+    }
+
+    const data = await resp.json() as { text: string };
+    return data.text || '';
+  } catch (err: any) {
+    if (err.name === 'AbortError') throw new Error('408::Whisper timeout (20s)');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}

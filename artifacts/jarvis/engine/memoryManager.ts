@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { semanticSimilarity } from './semantic';
 import { detectContradiction } from './inference';
 import { writeMemoryEntry } from './memoryFolder';
+import { Message } from './brain';
+import { loadProviderSettings, callGroq, callGemini, callOpenRouter } from './aiProviders';
 
 export interface MemoryEntry {
   id: string;
@@ -371,4 +373,42 @@ export async function getStats() {
 export async function getAllEntries(category: keyof typeof STORAGE_KEYS) {
   await _loadAll();
   return _memoryCache[category];
+}
+
+export async function summarizeAndSave(messages: Message[], sessionId: string): Promise<void> {
+  if (messages.length === 0) return;
+  
+  const settings = await loadProviderSettings();
+  const apiKey = settings.groqKey || settings.geminiKey || settings.openrouterKey;
+  if (!apiKey) return;
+
+  const prompt = `Rezumă această conversație în 3-5 propoziții. Extrage fapte importante despre user, decizii luate, probleme nerezolvate. Format: REZUMAT: <text>\n\nConversație:\n${messages.map(m => `${m.role}: ${m.content}`).join('\n')}`;
+
+  let summary: string | null = null;
+  try {
+    if (settings.groqKey) {
+      summary = await callGroq(prompt, settings.groqKey);
+    } else if (settings.geminiKey) {
+      summary = await callGemini(prompt, settings.geminiKey);
+    } else if (settings.openrouterKey) {
+      summary = await callOpenRouter(prompt, settings.openrouterKey);
+    }
+  } catch (e) {
+    console.error('[MemoryManager] Summarization failed:', e);
+    return;
+  }
+
+  if (summary && summary.includes('REZUMAT:')) {
+    const text = summary.split('REZUMAT:')[1].trim();
+    await addEntry(text, 'conversation', {
+      category: 'mai_putin',
+      tags: ['session_summary', sessionId]
+    });
+
+    // Extracție fapte: regex "utilizatorul a spus că X"
+    const facts = text.match(/(?:utilizatorul|user|user-ul|utilizator a spus că) (.*?)(?:\.|$)/gi) || [];
+    for (const fact of facts) {
+       await addEntry(fact.trim(), 'conversation', { category: 'importanta' });
+    }
+  }
 }

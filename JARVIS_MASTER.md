@@ -123,6 +123,22 @@ Actualizat: Sesiunea 6 — după FIX Memory Core UI & TASK P3 (UI & Lang)
 - Android nav bar auto-hide (necesită aprobarea expo-navigation-bar)
 - Migrare drag de la PanResponder la Gesture API + Reanimated worklets
 
+## 📌 WISHLIST USER (lucruri pe care user le-a cerut în plus, în curs de rafinare)
+- Jarvis "de 1000 de ori mai inteligent" — folosește memoria activ și consistent
+- Sub-agenți creați de Jarvis să apară în Canvas + să fie real funcționali
+- UI inbunatatit pentru splash + thinking animation
+- Smart recall ponderat (similarity × importance × age × accessCount) — IN PROGRESS WAVE A
+- Cross-entry linking automat (relatedTo populat la save) — IN PROGRESS WAVE A
+- Active inference la fiecare răspuns — IN PROGRESS WAVE A
+- Anti-forgetting core entries (accessCount > 10) — IN PROGRESS WAVE A
+- Dynamic complexity escalation în ThinkingIndicator (1s→c1, 10s→c8) — IN PROGRESS WAVE A
+- Memory access visualization (linii pulsând spre centru) — IN PROGRESS WAVE A
+- Provider indicator micro-icon în Thinking — IN PROGRESS WAVE A
+- Reduced motion toggle pentru accessibility — IN PROGRESS WAVE A
+- Bubble preview "Vezi în Studio" după create agent — WAVE B
+- Auto-delegare proactivă pe skill match — WAVE B
+- Comenzi management agent (redenumește/log/test) — WAVE B
+
 ## 🔑 ASYNCSTORAGE KEYS
 - @code_studio_workspace
 - @jarvis_subagents_v2
@@ -263,6 +279,15 @@ gemini --model gemini-3-flash-preview
 - NU npm / NU `&&` în git
 - NU prompturi exagerat de lungi (împart pe task-uri)
 - NU master update fără să primesc toate rezultatele Gemini
+
+## 🌊 STIL DE LUCRU — WAVE BATCHING
+- Când există MAI MULTE task-uri în ciclu → trimit TOATE prompturile ODATĂ, organizate pe WAVES
+- Format: "WAVE A — Task 1 / Task 2 / Task 3 / Task 4" apoi "WAVE B — Task 1 / Task 2"
+- Wave A = task-uri paralel fără conflicte de fișiere (max 4 simultane)
+- Wave B = task-uri care depind de Wave A (atinge fișiere comune) — rulate DUPĂ ce A termină
+- User rulează Wave A, trimite rezultate, apoi Wave B
+- La FIECARE rezultat trimis de user → ACTUALIZEZ master MD automat (mut item din WISHLIST în IMPLEMENTAT)
+- Linie separată "WISHLIST USER" în master MD pentru ce user cere extra, încă neimplementat
 
 ---
 

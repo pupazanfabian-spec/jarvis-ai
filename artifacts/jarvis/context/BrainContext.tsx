@@ -123,6 +123,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const { generate: llmGenerate, status: llmStatus, skipped: llmSkipped } = useLLM();
   const aiProvider = useAIProvider();
   const { isDevMode, toggleDevMode, activeProject, refreshProject } = useDevMode();
+  const [currentSessionId] = useState(() => Date.now().toString());
 
   useEffect(() => {
     if (loaded.current) return;
@@ -195,6 +196,15 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     // Recall from MemoryManager
     const memCtx = await MemoryManager.recallContext(query || '', messages.slice(-5).map(m => m.content));
 
+    // Extended Recall: Session Summaries (semantic match)
+    const allSummaries = await MemoryManager.getAllEntries('mai_putin');
+    const sessionSummaries = allSummaries.filter(e => e.tags?.includes('session_summary'))
+        .map(e => ({ e, score: semanticSimilarity(query || '', e.content) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+        .map(x => `- [SUMMARY] ${x.e.content}`)
+        .join('\n');
+
     // Detect language
     const detectLanguage = (text: string): 'ro' | 'en' | 'auto' => {
       if (!text) return 'auto';
@@ -214,7 +224,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       userName: state.userName || undefined,
       learnedFacts: state.selfKnowledge.learnedFacts.slice(-10),
       recentTopics: state.lastTopics.slice(-5),
-      customContext: memoryContext + "\n" + memCtx,
+      customContext: memoryContext + "\n" + memCtx + (sessionSummaries ? "\n\n### REZUMATE SESIUNI ANTERIOARE:\n" + sessionSummaries : ""),
       subAgents: subAgentsCtx,
       language: detectLanguage(query || ''),
     });
@@ -264,14 +274,53 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     if (!text.trim() || isProcessing.current) return;
     Keyboard.dismiss();
     isProcessing.current = true; setIsThinking(true);
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text.trim(), timestamp: new Date() };
-    setMessages(prev => [...prev, userMsg]);
+
+    // AUTO-SUMMARIZE: Dacă sunt > 20 mesaje, rezumăm primele 10 și le tăiem
+    if (messages.length > 20) {
+      const those10 = messages.slice(0, 10);
+      MemoryManager.summarizeAndSave(those10, currentSessionId).catch(() => {});
+      setMessages(prev => prev.slice(10));
+    }
+
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+    const isClarificationResponse = lastAssistantMsg?.metadata?.isClarification;
+
+    const userMsg: Message = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      content: text.trim(), 
+      timestamp: new Date(),
+      metadata: isClarificationResponse ? { type: 'clarification_response' } : undefined
+    };
 
     try {
       await new Promise(r => setTimeout(r, 50));
       let response = '';
       const lowerText = text.toLowerCase();
       const normalizedText = lowerText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+      // AMBIGUITY DETECTION
+      const ambiguityPatterns = ["ajută-mă", "fă-l să meargă", "nu știu", "ce să fac", "spune-mi ceva", "explică"];
+      const words = text.trim().split(/\s+/);
+      const isShort = words.length < 4;
+      const hasAmbiguityPattern = ambiguityPatterns.some(p => normalizedText.includes(p));
+      
+      if (isShort && hasAmbiguityPattern && !isClarificationResponse) {
+          const clarification = "Pentru a te ajuta corect, am nevoie de detalii. Despre ce mai exact? [Sugestii: cod / informație / o problemă tehnică / altceva]";
+          const m: Message = { 
+            id: Date.now().toString(), 
+            role: 'assistant', 
+            content: clarification, 
+            timestamp: new Date(),
+            metadata: { isClarification: true } 
+          };
+          const nextMsgs = [...messages, userMsg, m];
+          setMessages(nextMsgs);
+          persist(nextMsgs, brainRef.current);
+          setIsThinking(false); isProcessing.current = false; return;
+      }
+
+      setMessages(prev => [...prev, userMsg]);
 
       // 1. Comenzi Sub-Agenți (listeaza, creeaza, sterge, activeaza/dezactiveaza)
       const cleanText = normalizedText.trim();
@@ -525,7 +574,8 @@ ${content}`;
 
       // 3. Normal Flow (Groq/OpenRouter fallback)
       setThinkingComplexity(2);
-      const currentHistory = [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }));
+      const historyLimit = userMsg.metadata?.type === 'clarification_response' ? 20 : 10;
+      const currentHistory = [...messages, userMsg].slice(-historyLimit).map(m => ({ role: m.role, content: m.content }));
       
       // AI Classifier for Memory
       const memoryClassifier = async (t: string) => {

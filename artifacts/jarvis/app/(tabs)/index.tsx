@@ -31,12 +31,16 @@ import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
 import NeuralBackground from '@/components/NeuralBackground';
+import VoiceController, { playTTS } from '@/components/VoiceController';
 import { useBrain } from '@/context/BrainContext';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
 import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';
 import { useDevMode } from '@/context/DevModeContext';
 import { Message } from '@/engine/brain';
+import { callWhisper } from '@/engine/aiProviders';
+import { getWorkingKey } from '@/engine/code-studio/keyManager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/constants/colors';
 
 const { colors } = Colors;
@@ -306,6 +310,54 @@ export default function ChatScreen() {
     await removePin();
     setPinMode(null);
   }, [removePin]);
+
+  const [isWhisperProcessing, setIsWhisperProcessing] = useState(false);
+
+  const handleAudioReady = useCallback(async (uri: string) => {
+    try {
+      if (isThinking || webSearching) return;
+      setIsWhisperProcessing(true);
+      
+      const apiKey = await getWorkingKey('groq');
+      
+      if (!apiKey) {
+        Alert.alert('Configurare necesară', 'Te rugăm să adaugi o cheie API Groq pentru a folosi comenzile vocale.');
+        return;
+      }
+
+      const text = await callWhisper(uri, apiKey);
+      
+      if (text && text.trim().length > 0) {
+        setInputText(text);
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        }
+      }
+    } catch (err: any) {
+      console.error('[ChatScreen] Whisper error:', err);
+      // Nu afișăm alertă pe timeout pentru a nu întrerupe fluxul user-ului
+      if (!err.message?.includes('408')) {
+        Alert.alert('Eroare Voce', 'Nu s-a putut procesa înregistrarea audio.');
+      }
+    } finally {
+      setIsWhisperProcessing(false);
+    }
+  }, [isThinking, webSearching]);
+
+  const prevThinking = useRef(isThinking);
+  useEffect(() => {
+    if (prevThinking.current === true && isThinking === false) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'assistant') {
+        AsyncStorage.getItem('@jarvis_voice_mode').then(val => {
+          if (val === 'true') {
+            playTTS(lastMessage.content);
+          }
+        });
+      }
+    }
+    prevThinking.current = isThinking;
+  }, [isThinking, messages]);
 
   if (!pinLoaded) return null;
 
@@ -606,6 +658,11 @@ export default function ChatScreen() {
               onFocus={() => scrollToBottom()}
             />
           </View>
+
+          <VoiceController 
+            onAudioReady={handleAudioReady} 
+            isProcessing={isWhisperProcessing} 
+          />
 
           <TouchableOpacity
             style={[styles.sendBtn, (!inputText.trim() || isThinking || webSearching) && styles.sendBtnDisabled]}
