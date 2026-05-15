@@ -10,8 +10,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Switch,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import ThemeSelector from './ThemeSelector';
 import Colors from '@/constants/colors';
 import { useAIProvider, providerLabel } from '@/context/AIProviderContext';
@@ -138,24 +140,41 @@ export default function AIProviderModal({ visible, onClose }: Props) {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [localError, setLocalError] = useState('');
   const [showThemeModal, setShowThemeModal] = useState(false);
+  
+  // Setări noi
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [thinkingTrace, setThinkingTrace] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setGeminiInput(settings.geminiKey);
       setOpenaiInput(settings.openaiKey);
       
-      const loadMultiKeys = async () => {
+      const loadSettings = async () => {
+          const rm = await AsyncStorage.getItem('@jarvis_reduced_motion');
+          const tt = await AsyncStorage.getItem('@jarvis_thinking_trace');
+          const vm = await AsyncStorage.getItem('@jarvis_voice_mode');
+          setReducedMotion(rm === 'true');
+          setThinkingTrace(tt === 'true');
+          setVoiceMode(vm === 'true');
+          
           const g = await getKeysForProvider('groq');
           const o = await getKeysForProvider('openrouter');
           setGroqKeys([...g.map(k => k.key), '', '', ''].slice(0, 3));
           setOpenrouterKeys([...o.map(k => k.key), '', '', ''].slice(0, 3));
       };
-      loadMultiKeys();
+      loadSettings();
 
       setSuccessMsg('');
       setLocalError('');
     }
   }, [visible, settings.geminiKey, settings.openaiKey]);
+
+  const toggleSetting = async (key: string, value: boolean, setter: (v: boolean) => void) => {
+      setter(value);
+      await AsyncStorage.setItem(key, value ? 'true' : 'false');
+  };
 
   const handleSelectProvider = async (provider: AIProvider) => {
     if (provider === 'auto') {
@@ -388,6 +407,27 @@ export default function AIProviderModal({ visible, onClose }: Props) {
               ))}
           </View>
 
+          <Text style={styles.sectionTitle}>⚙️ Setări</Text>
+          <View style={styles.card}>
+              <View style={styles.settingRow}>
+                  <View style={styles.settingRowLeft}><Ionicons name="speedometer-outline" size={20} color={colors.textSecondary} /><Text style={styles.settingText}>Reduced Motion</Text></View>
+                  <Switch value={reducedMotion} onValueChange={v => toggleSetting('@jarvis_reduced_motion', v, setReducedMotion)} trackColor={{true: colors.primary}} />
+              </View>
+              <Text style={styles.settingHint}>Dezactivează animațiile complexe (glitch, particule, holograme)</Text>
+              
+              <View style={[styles.settingRow, {marginTop: 16}]}>
+                  <View style={styles.settingRowLeft}><Ionicons name="eye-outline" size={20} color={colors.textSecondary} /><Text style={styles.settingText}>Thinking Trace</Text></View>
+                  <Switch value={thinkingTrace} onValueChange={v => toggleSetting('@jarvis_thinking_trace', v, setThinkingTrace)} trackColor={{true: colors.primary}} />
+              </View>
+              <Text style={styles.settingHint}>Jarvis va menționa ce amintiri folosește în răspuns</Text>
+
+              <View style={[styles.settingRow, {marginTop: 16}]}>
+                  <View style={styles.settingRowLeft}><Ionicons name="mic-outline" size={20} color={colors.textSecondary} /><Text style={styles.settingText}>Voice Mode</Text></View>
+                  <Switch value={voiceMode} onValueChange={v => toggleSetting('@jarvis_voice_mode', v, setVoiceMode)} trackColor={{true: colors.primary}} />
+              </View>
+              <Text style={styles.settingHint}>Jarvis vorbește răspunsurile automat</Text>
+          </View>
+
           {displayError ? (
             <View style={styles.errorBox}>
               <Feather name="alert-circle" size={14} color={colors.error} />
@@ -511,4 +551,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   infoText: { fontSize: 12, color: colors.textMuted, fontFamily: 'Inter_400Regular', flex: 1, lineHeight: 18 },
+  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  settingRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  settingText: { fontSize: 14, color: colors.text, fontFamily: 'Inter_500Medium' },
+  settingHint: { fontSize: 12, color: colors.textMuted, fontFamily: 'Inter_400Regular', marginTop: 4, marginLeft: 30 },
 });
