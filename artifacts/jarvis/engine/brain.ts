@@ -35,7 +35,7 @@ import {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'survey' | 'survey_permission' | 'agent_proposal';
+  role: 'user' | 'assistant' | 'survey' | 'survey_permission' | 'agent_proposal' | 'agent_created';
   content: string;
   timestamp: Date;
   confidence?: number;

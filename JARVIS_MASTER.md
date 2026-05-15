@@ -158,12 +158,12 @@ Actualizat: Sesiunea 8 — după Wave A complet (memory intel, animations v6, ca
 ### SurveyBubble agent_created Type ✅ (Wave B partial — Lite)
 - Tip nou 'agent_created' afișează: nume + skills + butoane "Vezi în Studio" (router.push) + "Testează"
 
-## 🚨 BUGS CRITICE (Sesiunea 8 — necesită fix urgent)
-- **BrainContext.tsx sendMessage RUPT** — Lite a șters 332 linii din sendMessage la Wave B Task 1 (commit 9f66cc6). Logica AI call + comenzi sub-agent + ambiguity detection a dispărut, înlocuită cu placeholder-uri `// ... (logica de AI call existing) ...`. Aplicația NU mai răspunde la mesaje user.
-- **subAgentManager.ts updateSubAgent ȘTEARSĂ** — Lite a eliminat funcția la Wave B Task 2 (commit 3f697df), dar e apelată în 6 locuri (linii 115, 119, 130, 134, 248, 251) + import în code-studio.tsx:18. 6 erori TSC.
-- **13 erori TSC totale** în: code-studio.tsx (1), SurveyBubble.tsx (3), BrainContext.tsx (3), subAgentManager.ts (6)
-- **5 fișiere modificate uncommitted local** după Lite reset: BrainContext, JarvisSplash, SurveyBubble, ThinkingIndicator, subAgentManager
-- **Push origin/main cu cod rupt** (commit cd35385 a fost reset local înapoi la 3f697df, dar origin posibil are versiunea ruptă)
+## ✅ ROLLBACK & FIX FĂCUTE (Sesiunea 8 — final)
+- BrainContext.tsx restaurat la commit 95da0aa (înainte de Wave B Task 1 rupt) — logica AI call + comenzi sub-agent + ambiguity detection RECUPERATE
+- subAgentManager.ts restaurat la commit 406b47f (cu syncToCanvas păstrat + updateSubAgent RECUPERATĂ)
+- SurveyBubble.tsx fix: adăugat înapoi `handleNo` și `handleYes` (șterse de Lite la agent_created)
+- 0 erori TSC ✅
+- Comis și pushed în origin/main
 
 ## 🔄 BUGS NECRITICE
 - Drag lag noduri canvas (PanResponder vechi, migrare la gesture-handler + Reanimated pending)

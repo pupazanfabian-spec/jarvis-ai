@@ -47,7 +47,7 @@ import { useDevMode } from '@/context/DevModeContext';
 import * as studioManager from '@/engine/code-studio/studioManager';
 import { useLLM } from '@/context/LLMContext';
 
-import { getSubAgents, callSubAgent, SubAgent, deleteSubAgent, toggleSubAgent, createSubAgent } from '@/engine/code-studio/subAgentManager';
+import { getSubAgents, callSubAgent, SubAgent, deleteSubAgent, toggleSubAgent, createSubAgent, updateSubAgent, getAgentLogs } from '@/engine/code-studio/subAgentManager';
 import { getAllSkills, detectSkill } from '@/engine/code-studio/skills';
 import { orchestrator } from '@/engine/orchestrator';
 import { useAIProvider } from '@/context/AIProviderContext';
@@ -58,6 +58,7 @@ interface BrainContextType {
   messages: Message[];
   isThinking: boolean;
   webSearching: boolean;
+  isAccessingMemory: boolean; // ADĂUGAT
   thinkingComplexity: number;
   wantsOnline: boolean;
   brainState: BrainState;
@@ -111,6 +112,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [isThinking, setIsThinking] = useState(false);
   const [webSearching, setWebSearching] = useState(false);
+  const [isAccessingMemory, setIsAccessingMemory] = useState(false); // ADĂUGAT
   const [thinkingComplexity, setThinkingComplexity] = useState(3);
   const [wantsOnline, setWantsOnline] = useState(false);
   const [dbReady, setDbReady] = useState(false);
@@ -188,13 +190,13 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [dbReady]);
 
-  const buildCloudCtx = useCallback(async (query?: string): Promise<string> => {
+  const buildCloudCtx = useCallback(async (query?: string, memoryContextOverride?: string): Promise<string> => {
     const state = brainRef.current;
     const relevantMemories = getRelevantMemories(memoryRef.current, query || '', 15);
-    const memoryContext = formatMemoriesForPrompt(relevantMemories);
+    const memoryContext = memoryContextOverride || formatMemoriesForPrompt(relevantMemories);
 
     // Recall from MemoryManager
-    const memCtx = await MemoryManager.recallContext(query || '', messages.slice(-5).map(m => m.content));
+    const memCtx = !memoryContextOverride ? await MemoryManager.recallContext(query || '', messages.slice(-5).map(m => m.content)) : '';
 
     // Extended Recall: Session Summaries (semantic match)
     const allSummaries = await MemoryManager.getAllEntries('mai_putin');
@@ -229,6 +231,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       language: detectLanguage(query || ''),
     });
   }, [messages]);
+
   useEffect(() => {
     // Lifecycle migration every 24h
     const interval = setInterval(() => {
@@ -273,7 +276,10 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isProcessing.current) return;
     Keyboard.dismiss();
-    isProcessing.current = true; setIsThinking(true);
+    isProcessing.current = true; setIsThinking(true); setIsAccessingMemory(true); // ADĂUGAT
+
+    // Thinking trace config
+    const thinkingTraceEnabled = (await AsyncStorage.getItem('@jarvis_thinking_trace')) === 'true'; // ADĂUGAT
 
     // AUTO-SUMMARIZE: Dacă sunt > 20 mesaje, rezumăm primele 10 și le tăiem
     if (messages.length > 20) {
@@ -304,7 +310,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       const words = text.trim().split(/\s+/);
       const isShort = words.length < 4;
       const hasAmbiguityPattern = ambiguityPatterns.some(p => normalizedText.includes(p));
-      
+
       if (isShort && hasAmbiguityPattern && !isClarificationResponse) {
           const clarification = "Pentru a te ajuta corect, am nevoie de detalii. Despre ce mai exact? [Sugestii: cod / informație / o problemă tehnică / altceva]";
           const m: Message = { 
@@ -317,15 +323,88 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           const nextMsgs = [...messages, userMsg, m];
           setMessages(nextMsgs);
           persist(nextMsgs, brainRef.current);
-          setIsThinking(false); isProcessing.current = false; return;
+          setIsThinking(false); setIsAccessingMemory(false); isProcessing.current = false; return;
       }
 
       setMessages(prev => [...prev, userMsg]);
 
-      // 1. Comenzi Sub-Agenți (listeaza, creeaza, sterge, activeaza/dezactiveaza)
-      const cleanText = normalizedText.trim();
-      
-      if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
+      // 0. Weighted Recall + Active Inference (ADĂUGAT)
+      let weightedMemories: any[] = [];
+      let deducedFacts: any[] = [];
+      let memoryContextString = '';
+
+      try {
+        const recentCtx = messages.slice(-5).map(m => m.content);
+        weightedMemories = await (MemoryManager as any).recallWeighted?.(text.trim(), recentCtx).catch(() => []);
+        deducedFacts = await (MemoryManager as any).activeInference?.(text.trim(), recentCtx).catch(() => []);
+
+        if (weightedMemories.length > 0 || deducedFacts.length > 0) {
+          memoryContextString = "";
+          if (weightedMemories.length > 0) {
+            memoryContextString += "### [REGULI ȘI CONTEXT RELEVANT]\n" + 
+              weightedMemories.slice(0, 10).map((m: any) => `- ${m.content}`).join('\n') + "\n\n";
+          }
+          if (deducedFacts.length > 0) {
+            memoryContextString += "### [FAPTE DEDUSE DIN CONTEXT]\n" + 
+              deducedFacts.map((f: any) => `- ${f.content}`).join('\n') + "\n\n";
+          }
+        }
+      } catch (e) {
+        console.warn('[Brain] Weighted recall/inference failed:', e);
+      }
+
+      const cleanText = text.trim().toLowerCase();
+
+      // E) COMENZI MANAGEMENT AGENT (parser nou înainte de flow normal)
+      const renameMatch = text.match(/redenume[șs]te agentul (.+?) la (.+?)$/i);
+      const skillModMatch = text.match(/modific[ăa] skill agentului (.+?) la (.+?)$/i);
+      const logMatch = text.match(/log agent (.+?)$/i);
+      const testMatch = text.match(/test agent (.+?) cu ['"](.+?)['"]$/i);
+
+      if (renameMatch) {
+          setThinkingComplexity(1);
+          const oldName = renameMatch[1].trim();
+          const newName = renameMatch[2].trim();
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === oldName.toLowerCase());
+          if (agent) {
+              await updateSubAgent(agent.id, { name: newName });
+              response = `✓ Agent redenumit din **${oldName}** în **${newName}**.`;
+          } else response = `❌ Nu am găsit agentul **${oldName}**.`;
+      } else if (skillModMatch) {
+          setThinkingComplexity(1);
+          const name = skillModMatch[1].trim();
+          const skillsRaw = skillModMatch[2].trim().replace(/[\[\]]/g, '');
+          const skillIds = skillsRaw.split(/,\s*/).map(s => s.trim());
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              await updateSubAgent(agent.id, { skills: skillIds });
+              response = `✓ Skills actualizate pentru **${agent.name}**: ${skillIds.join(', ')}.`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (logMatch) {
+          setThinkingComplexity(1);
+          const name = logMatch[1].trim();
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              const logs = await getAgentLogs(agent.id);
+              const last5 = logs.slice(-5).map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] Input: ${l.input.slice(0, 30)}... | Output: ${l.output.slice(0, 30)}...`).join('\n');
+              response = `📋 **Log-uri pentru ${agent.name}:**\n\n${last5 || 'Niciun log găsit.'}`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (testMatch) {
+          setThinkingComplexity(1);
+          const name = testMatch[1].trim();
+          const msg = testMatch[2].trim();
+          const agents = await getSubAgents();
+          const agent = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+          if (agent) {
+              const start = Date.now();
+              const result = await callSubAgent(agent.id, msg);
+              const duration = Date.now() - start;
+              response = `Răspuns (${duration}ms): ${result.response}`;
+          } else response = `❌ Nu am găsit agentul **${name}**.`;
+      } else if (cleanText === 'listeaza agenti' || cleanText === 'ce agenti ai') {
           setThinkingComplexity(1);
           const agents = await getSubAgents();
           if (agents.length === 0) {
@@ -363,7 +442,24 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
                   // Sync with Studio workspace
                   await studioManager.addNode('Agent', agent.name, { agentId: agent.id, provider: agent.agentProvider });
                   
-                  response = `✓ Am creat agentul **${agent.name}** cu skill-urile: **${resolvedSkills.map(s => s.name).join(', ')}**. Îl găsești în Studio.`;
+                  const agentMsg: Message = {
+                      id: Date.now().toString(),
+                      role: 'agent_created',
+                      content: `✓ Am creat agentul **${agent.name}**.`,
+                      timestamp: new Date(),
+                      proposalData: {
+                          name: agent.name,
+                          skills: resolvedSkills.map(s => s.name),
+                          reason: 'Creat la cerere explicită',
+                          complexity: 1,
+                          agentId: agent.id
+                      } as any
+                  };
+                  const nextMsgs = [...messages, userMsg, agentMsg];
+                  setMessages(nextMsgs);
+                  persist(nextMsgs, brainRef.current);
+                  setIsThinking(false); setIsAccessingMemory(false); isProcessing.current = false;
+                  return;
               } catch (e: any) { response = `❌ Eroare la crearea agentului: ${e.message}`; }
           }
       } else if (cleanText.startsWith('sterge agent ')) {
@@ -479,23 +575,27 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
           const activeAgent = agents.find(a => a.isActive && a.skills.includes(matchedSkill.id));
           
           if (activeAgent) {
-              // Analyze intent for complexity score even here
+              // Analyze intent for complexity score
               const localIntent = await orchestrator.analyzeIntent(text);
-              setThinkingComplexity(localIntent.complexityScore || 5);
+              const complexity = localIntent.complexityScore || 5;
+              setThinkingComplexity(complexity);
 
-              const result = await callSubAgent(activeAgent.id, text);
-              if (result.success) {
-                  const finalMsg: Message = { 
-                      id: Date.now().toString(), 
-                      role: 'assistant', 
-                      content: `[Agent: ${activeAgent.name}] ${result.response}`, 
-                      timestamp: new Date() 
-                  };
-                  const nextMsgs = [...messages, userMsg, finalMsg];
-                  setMessages(nextMsgs); 
-                  persist(nextMsgs, brainRef.current);
-                  setLastProvider(activeAgent.name);
-                  setIsThinking(false); isProcessing.current = false; return;
+              if (complexity > 4) { // ADĂUGAT: condiție complexitate
+                  const result = await callSubAgent(activeAgent.id, text.trim());
+                  if (result.success) {
+                      const finalMsg: Message = { 
+                          id: Date.now().toString(), 
+                          role: 'assistant', 
+                          content: `[Agent: ${activeAgent.name}] ${result.response}`, 
+                          timestamp: new Date() 
+                      };
+                      const nextMsgs = [...messages, userMsg, finalMsg];
+                      setMessages(nextMsgs); 
+                      persist(nextMsgs, brainRef.current);
+                      setLastProvider(activeAgent.name);
+                      setIsThinking(false); setIsAccessingMemory(false); isProcessing.current = false; 
+                      return;
+                  }
               }
           }
       }
@@ -597,7 +697,7 @@ Răspunde DOAR cu 'reguli', 'importanta' sau 'null'.`;
       }
 
       if (aiProvider.settings.activeProvider !== 'none') {
-          const cloudCtx = await buildCloudCtx(text);
+          const cloudCtx = await buildCloudCtx(text, memoryContextString);
           const assistantId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
           let fullAIContent = '';
@@ -610,11 +710,23 @@ Răspunde DOAR cu 'reguli', 'importanta' sau 'null'.`;
               autoLearnFromWeb(aiResult.text, aiResult.provider, text);
               setLastProvider(aiResult.provider.toUpperCase());
               
+              // Thinking trace
+              if (thinkingTraceEnabled && weightedMemories.length > 0) {
+                  const trace = '\n\n_(memorii: ' + weightedMemories.slice(0,3).map((m: any) => m.content.slice(0,30)+'…').join(' | ') + ')_';
+                  setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: m.content + trace } : m));
+              }
+
               // Final persist for streaming
               setMessages(prev => { persist(prev, brainRef.current); return prev; });
           }
       } else {
           response = await _handleOfflineFallback(text, currentHistory as any, 'general');
+          
+          // Thinking trace
+          if (thinkingTraceEnabled && weightedMemories.length > 0) {
+              response += '\n\n_(memorii: ' + weightedMemories.slice(0,3).map((m: any) => m.content.slice(0,30)+'…').join(' | ') + ')_';
+          }
+
           const m: Message = { id: Date.now().toString(), role: 'assistant', content: response, timestamp: new Date() };
           const nextMsgs = [...messages, userMsg, m];
           setMessages(nextMsgs);
@@ -632,14 +744,14 @@ Răspunde DOAR cu 'reguli', 'importanta' sau 'null'.`;
       setMessages(prev => [...prev, fallbackMsg]);
       persist([...messages, userMsg, fallbackMsg], brainRef.current);
     } finally {
-      setIsThinking(false); isProcessing.current = false;
+      setIsThinking(false); setIsAccessingMemory(false); isProcessing.current = false;
       setThinkingComplexity(3);
     }
   }, [messages, aiProvider, buildCloudCtx, autoLearnFromWeb, _handleOfflineFallback, persist, persistEntities, setMessages, setIsThinking, isProcessing, setLastProvider, setBrainState, setThinkingComplexity]);
 
   return (
     <BrainContext.Provider value={{
-      messages, isThinking, webSearching, thinkingComplexity, wantsOnline, brainState, dbReady, lastProvider,
+      messages, isThinking, webSearching, isAccessingMemory, thinkingComplexity, wantsOnline, brainState, dbReady, lastProvider,
       sendMessage, clearConversation, addDocument, removeDocument, setWantsOnline, studio: studioManager
     }}>
       {children}
