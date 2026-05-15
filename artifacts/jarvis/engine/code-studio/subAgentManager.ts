@@ -109,16 +109,16 @@ export async function refreshWorkspace(): Promise<{nodes: any[], connections: an
     return ws ? JSON.parse(ws) : { nodes: [], connections: [] };
 }
 
-export async function updateSubAgent(id: string, updates: Partial<SubAgent>): Promise<SubAgent> {
-    const agents = await getSubAgents();
-    const agent = agents.find(a => a.id === id);
-    if (!agent) throw new Error('Agent not found');
-    
-    const updatedAgent = { ...agent, ...updates };
-    const updatedList = agents.map(a => a.id === id ? updatedAgent : a);
-    await AsyncStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(updatedList));
-    return updatedAgent;
+// ─── MANAGEMENT COMMANDS ──────────────────────────────────────────────────
+
+export async function renameSubAgent(id: string, newName: string): Promise<void> {
+    await updateSubAgent(id, { name: newName });
 }
+
+export async function updateSubAgentSkills(id: string, skillIds: string[]): Promise<void> {
+    await updateSubAgent(id, { skills: skillIds });
+}
+
 
 export async function deleteSubAgent(id: string): Promise<void> {
   const agents = await getSubAgents();

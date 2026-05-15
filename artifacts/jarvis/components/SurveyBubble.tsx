@@ -19,17 +19,22 @@ const OPTIONS: SurveyOption[] = [
   { label: 'Altceva', icon: 'help-circle', color: colors.textSecondary, message: 'Vreau să te întreb altceva mai specific' },
 ];
 
+import { useRouter } from 'expo-router';
+// ... existing imports
+
 interface Props {
   onSelect: (message: string) => void;
   isPermissionOnly?: boolean;
-  type?: 'survey' | 'agent_proposal';
+  type?: 'survey' | 'agent_proposal' | 'agent_created';
   proposalData?: {
     name: string;
     skills: string[];
     reason: string;
     complexity: number;
+    agentId?: string;
   };
   onConfirmProposal?: () => void;
+  onTestAgent?: (agentId: string) => void;
 }
 
 export default function SurveyBubble({ 
@@ -37,25 +42,37 @@ export default function SurveyBubble({
   isPermissionOnly = true, 
   type = 'survey',
   proposalData,
-  onConfirmProposal
+  onConfirmProposal,
+  onTestAgent
 }: Props) {
+  const router = useRouter();
   const [showOptions, setShowOptions] = useState(!isPermissionOnly);
   const [dismissed, setDismissed] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   if (dismissed) return null;
 
-  const handleNo = () => {
-    setDismissed(true);
-  };
-
-  const handleYes = () => {
-    setShowOptions(true);
-  };
+  // ─── AGENT CREATED UI ────────────────────────────────────────────────────
+  if (type === 'agent_created' && proposalData) {
+      return (
+          <View style={styles.container}>
+              <View style={styles.header}>
+                  <Feather name="check-circle" size={18} color={colors.success} />
+                  <Text style={styles.title}>Agent Creat: {proposalData.name}</Text>
+              </View>
+              <Text style={styles.proposalText}>Skills: {proposalData.skills.join(', ')}</Text>
+              <View style={styles.actions}>
+                  <TouchableOpacity style={[styles.actionBtn, styles.yesBtn]} onPress={() => router.push('/(tabs)/code-studio')}><Text style={styles.yesBtnText}>Vezi în Studio</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.detailsBtn]} onPress={() => proposalData.agentId && onTestAgent?.(proposalData.agentId)}><Text style={styles.detailsBtnText}>Testează</Text></TouchableOpacity>
+              </View>
+          </View>
+      );
+  }
 
   // ─── AGENT PROPOSAL UI ───────────────────────────────────────────────────
 
   if (type === 'agent_proposal' && proposalData) {
+    // ... existing proposal logic ...
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -106,6 +123,7 @@ export default function SurveyBubble({
       </View>
     );
   }
+
 
   // ─── STANDARD SURVEY UI ──────────────────────────────────────────────────
   if (!showOptions) {

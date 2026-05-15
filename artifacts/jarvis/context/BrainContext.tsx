@@ -329,7 +329,7 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
       setIsThinking(false); isProcessing.current = false; setIsAccessingMemory(false);
       setThinkingComplexity(3);
     }
-  }, [messages, persist, ...]);
+  }, [messages, persist, llmGenerate, llmStatus, aiProvider, brainState]);
 
   return (
     <BrainContext.Provider value={{
