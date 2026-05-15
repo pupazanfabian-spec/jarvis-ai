@@ -50,6 +50,9 @@ export default function SurveyBubble({
   const [dismissed, setDismissed] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
+  const handleNo = () => setDismissed(true);
+  const handleYes = () => setShowOptions(true);
+
   if (dismissed) return null;
 
   // ─── AGENT CREATED UI ────────────────────────────────────────────────────

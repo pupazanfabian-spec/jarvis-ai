@@ -1,5 +1,5 @@
 # 🤖 JARVIS MASTER - STATUS + CLAUDE RULES + GEMINI GHID
-Actualizat: Sesiunea 6 — după FIX Memory Core UI & TASK P3 (UI & Lang)
+Actualizat: Sesiunea 8 — după Wave A complet (memory intel, animations v6, canvas sync, settings, theme, onboarding) + Wave B partial RUPT (BrainContext + subAgentManager necesită rollback)
 
 ---
 
@@ -116,28 +116,69 @@ Actualizat: Sesiunea 6 — după FIX Memory Core UI & TASK P3 (UI & Lang)
 - Conexiuni SVG bezier, zoom
 - Wizard creare agent, Skill editor modal
 
-## 🔄 BUGS ACTIVE
+## ✅ NOI IMPLEMENTĂRI (Sesiunea 8 — Wave A + Wave B partial)
+
+### Memory Intelligence Engine ✅ (Wave A Task 1 — Flash 3)
+- `recallWeighted(query, recentCtx)`: score = similarity × importance × (1/age) × log(accessCount+2)
+- `autoLink(newEntry)`: scan ultimele 20 entries → populare bidirecțională relatedTo dacă similarity > 0.7
+- `activeInference(query, recentCtx)`: încarcă top 20 entries în inference engine + chainReason → fapte deduse
+- `markCore()`: entries cu accessCount > 10 → is_core=true (protected lifecycle)
+- Top-N per categorie ponderat (reguli all, sistem 5, importanta 10, mai_putin 5, irelevanta 3)
+
+### ThinkingIndicator v6 + JarvisSplash v6 ✅ (Wave A Task 2)
+- Dynamic complexity escalation: interval 1.2s → internalComplexity++ (cap 8) când isThinking
+- Memory access visualization: 4 linii pulsând de la margine spre centru când accessingMemory=true
+- Provider indicator badge 24x24 (G/O/A/M) colorat per provider
+- Reduced motion: citire `@jarvis_reduced_motion` → dezactivează glitch/particule/holograme
+- Splash preload hook: `onPreload?: () => Promise<void>` cu status text dinamic (INITIALIZING / LOADING MEMORY / LOADING AGENTS / READY)
+
+### Sub-Agent Canvas Sync ✅ (Wave A Task 3 — Lite)
+- `syncToCanvas(agent)`: persistă nod în @code_studio_workspace la creare
+- code-studio.tsx useFocusEffect: reload complet workspace + agents + skills la fiecare focus
+- createSubAgent apelează syncToCanvas automat
+
+### Settings Entry în AIProviderModal ✅ (Wave A Task 4 — Lite)
+- Toggle "Reduced Motion" → @jarvis_reduced_motion
+- Toggle "Thinking Trace" → @jarvis_thinking_trace
+- Toggle "Voice Mode" → @jarvis_voice_mode
+- Ionicons + Switch + AsyncStorage persistat
+
+### Theme Selector ✅ (Lite)
+- 4 teme: cyan (default), amber Iron Man, matrix verde, mark42 roșu
+- ThemeSelector.tsx modal cu preview cards + chips
+- `loadTheme`/`saveTheme`/`useTheme` în colors.ts
+- AsyncStorage @jarvis_theme
+- Buton "🎨 Tema" în AIProviderModal
+
+### Onboarding 5-Step HUD ✅ (Lite)
+- OnboardingScreen.tsx fullscreen modal cu 5 slide-uri (Welcome / Groq / OpenRouter / Features / Gata)
+- @jarvis_onboarded flag în AsyncStorage
+- _layout.tsx verifică flag la mount → afișează OnboardingScreen înainte de tabs
+
+### SurveyBubble agent_created Type ✅ (Wave B partial — Lite)
+- Tip nou 'agent_created' afișează: nume + skills + butoane "Vezi în Studio" (router.push) + "Testează"
+
+## 🚨 BUGS CRITICE (Sesiunea 8 — necesită fix urgent)
+- **BrainContext.tsx sendMessage RUPT** — Lite a șters 332 linii din sendMessage la Wave B Task 1 (commit 9f66cc6). Logica AI call + comenzi sub-agent + ambiguity detection a dispărut, înlocuită cu placeholder-uri `// ... (logica de AI call existing) ...`. Aplicația NU mai răspunde la mesaje user.
+- **subAgentManager.ts updateSubAgent ȘTEARSĂ** — Lite a eliminat funcția la Wave B Task 2 (commit 3f697df), dar e apelată în 6 locuri (linii 115, 119, 130, 134, 248, 251) + import în code-studio.tsx:18. 6 erori TSC.
+- **13 erori TSC totale** în: code-studio.tsx (1), SurveyBubble.tsx (3), BrainContext.tsx (3), subAgentManager.ts (6)
+- **5 fișiere modificate uncommitted local** după Lite reset: BrainContext, JarvisSplash, SurveyBubble, ThinkingIndicator, subAgentManager
+- **Push origin/main cu cod rupt** (commit cd35385 a fost reset local înapoi la 3f697df, dar origin posibil are versiunea ruptă)
+
+## 🔄 BUGS NECRITICE
 - Drag lag noduri canvas (PanResponder vechi, migrare la gesture-handler + Reanimated pending)
 
 ## ⏳ PLANIFICAT
 - Android nav bar auto-hide (necesită aprobarea expo-navigation-bar)
 - Migrare drag de la PanResponder la Gesture API + Reanimated worklets
+- Voice IO complet (Whisper STT + expo-speech TTS) — pachete necesare
+- Multi-modal images (Groq vision)
 
-## 📌 WISHLIST USER (lucruri pe care user le-a cerut în plus, în curs de rafinare)
-- Jarvis "de 1000 de ori mai inteligent" — folosește memoria activ și consistent
-- Sub-agenți creați de Jarvis să apară în Canvas + să fie real funcționali
-- UI inbunatatit pentru splash + thinking animation
-- Smart recall ponderat (similarity × importance × age × accessCount) — IN PROGRESS WAVE A
-- Cross-entry linking automat (relatedTo populat la save) — IN PROGRESS WAVE A
-- Active inference la fiecare răspuns — IN PROGRESS WAVE A
-- Anti-forgetting core entries (accessCount > 10) — IN PROGRESS WAVE A
-- Dynamic complexity escalation în ThinkingIndicator (1s→c1, 10s→c8) — IN PROGRESS WAVE A
-- Memory access visualization (linii pulsând spre centru) — IN PROGRESS WAVE A
-- Provider indicator micro-icon în Thinking — IN PROGRESS WAVE A
-- Reduced motion toggle pentru accessibility — IN PROGRESS WAVE A
-- Bubble preview "Vezi în Studio" după create agent — WAVE B
-- Auto-delegare proactivă pe skill match — WAVE B
-- Comenzi management agent (redenumește/log/test) — WAVE B
+## 📌 WISHLIST USER (în curs de rafinare după rollback)
+- ⚠️ **REFACERE Wave B Task 1**: BrainContext integrare cu recallWeighted + activeInference + thinking trace — TREBUIE Flash 3 cu instrucțiuni "PĂSTREAZĂ tot codul existent, doar ADAUGĂ"
+- ⚠️ **REFACERE Wave B Task 2**: auto-delegare proactivă + comenzi management agent în BrainContext (renumește/log/test) — TREBUIE Flash 3
+- Theme apply runtime fără restart (acum cere restart aplicație)
+- Test funcțional end-to-end după rollback (chat răspunde, sub-agent creează în canvas, memorie folosită activ)
 
 ## 🔑 ASYNCSTORAGE KEYS
 - @code_studio_workspace
@@ -155,6 +196,12 @@ Actualizat: Sesiunea 6 — după FIX Memory Core UI & TASK P3 (UI & Lang)
 - @jarvis_memory_importanta (NEW)
 - @jarvis_memory_mai_putin (NEW)
 - @jarvis_memory_irelevanta (NEW)
+- @jarvis_reduced_motion (NEW)
+- @jarvis_thinking_trace (NEW)
+- @jarvis_voice_mode (NEW)
+- @jarvis_theme (NEW)
+- @jarvis_onboarded (NEW)
+- @jarvis_category_cache (NEW)
 
 ## 📁 FIȘIERE PRINCIPALE
 ```
