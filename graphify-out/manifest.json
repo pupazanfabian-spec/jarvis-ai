@@ -3,6 +3,26 @@
     "mtime": 1778564567.438769,
     "hash": "79b37b00835b13a2d39f7640d4e38c1d"
   },
+  "C:\\Users\\AUREL\\jarvis-ai\\fix_active_ram.py": {
+    "mtime": 1779040471.2596164,
+    "hash": "b164e55010fc1fabebb3af9412ba536b"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\fix_context.py": {
+    "mtime": 1779040437.3277116,
+    "hash": "560d357e3147d0eb64e6a5d9c587f549"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\fix_reasoning.py": {
+    "mtime": 1779040403.605602,
+    "hash": "0ab8a406f83e8846ca20870b96d05e11"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\fix_tasks.py": {
+    "mtime": 1779040417.6638722,
+    "hash": "f424357f4473c8c118cdd91fff391c75"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\update_context.ps1": {
+    "mtime": 1779039771.8291452,
+    "hash": "af1d0d6ec93754c300b3e24fb3e04353"
+  },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\api-server\\build.mjs": {
     "mtime": 1777491416.1468077,
     "hash": "dba8bc233a21b28f8ffb568aadb3b43d"
@@ -52,12 +72,12 @@
     "hash": "1036585c9619051f97336f18aec59c2e"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\app\\(tabs)\\index.tsx": {
-    "mtime": 1778848096.8368285,
-    "hash": "b94a08e14e9ce8995556c4827296b39e"
+    "mtime": 1778929051.6525056,
+    "hash": "878ec061b1bedb0e69fd8c27e2afa768"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\app\\(tabs)\\_layout.tsx": {
-    "mtime": 1778756858.1010838,
-    "hash": "7f6b70a275930a292435b3a9dc78363b"
+    "mtime": 1778923923.7946985,
+    "hash": "9d492085d09b74ebc8cb58379525448a"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\AIProviderModal.tsx": {
     "mtime": 1778849776.407307,
@@ -68,8 +88,8 @@
     "hash": "d9fe56b90c533f5502261363d24ebd00"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\ChatBubble.tsx": {
-    "mtime": 1778510417.9979913,
-    "hash": "7b4282ca7ef242bfbf9ba5898b95b152"
+    "mtime": 1778929329.5035214,
+    "hash": "466c756d99a7b8e85d91957267faed4d"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\CodeSandboxScreen.tsx": {
     "mtime": 1778113634.275028,
@@ -120,8 +140,8 @@
     "hash": "c8e6ba73b1bc0e9c0431761f8708bf87"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\NeuralBackground.tsx": {
-    "mtime": 1778754720.256758,
-    "hash": "bd959ce86982abd3e2941d77e3c133ba"
+    "mtime": 1778928988.1017559,
+    "hash": "f25e2e6315c68fdd441ba9983706766b"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\OnboardingScreen.tsx": {
     "mtime": 1778847971.7602537,
@@ -148,12 +168,8 @@
     "hash": "d08d2df6db70673507f3fd2ebef1f2bf"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\ThinkingIndicator.tsx": {
-    "mtime": 1778850018.0152152,
-    "hash": "fa984b849e5f29835194adeef2e91603"
-  },
-  "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\components\\VoiceController.tsx": {
-    "mtime": 1778847976.089085,
-    "hash": "6277371c614e7c8c18f7e0d70c800c0f"
+    "mtime": 1779041203.2720292,
+    "hash": "d01a4c0a38e9111925b3804bc3391946"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\constants\\colors.ts": {
     "mtime": 1778848285.4690812,
@@ -164,8 +180,8 @@
     "hash": "69c9a1f109e6a3c058e14f7e718eec7f"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\context\\BrainContext.tsx": {
-    "mtime": 1778910186.0586698,
-    "hash": "f91a9a44c89c1553ed7bf07a35dd3d6f"
+    "mtime": 1778924525.721082,
+    "hash": "3e713491e7669d19ed0f486ea1b2eae8"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\context\\DevModeContext.tsx": {
     "mtime": 1777491416.1837478,
@@ -188,8 +204,8 @@
     "hash": "09ea8e9b1c56c837c491a0b0d074fc94"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\brain.ts": {
-    "mtime": 1778852697.3802392,
-    "hash": "2c162e4fb77e501f1a94a72ed76cabe3"
+    "mtime": 1779041244.130797,
+    "hash": "7d9c35fa1ce6d365be1cd35f8c74fc55"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\codeExecution.ts": {
     "mtime": 1777491416.1877358,
@@ -220,8 +236,8 @@
     "hash": "24e998c9dc7c4c161f92c9f56f2393bf"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\inference.ts": {
-    "mtime": 1777491416.195634,
-    "hash": "b413bca23573b975dcc7b1868e20a245"
+    "mtime": 1778927140.4429233,
+    "hash": "b7adb3beeeadec5580b022dc91ea6272"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\intentDetector.ts": {
     "mtime": 1777493485.880562,
@@ -252,16 +268,16 @@
     "hash": "a6ffe22d5f471ef79a99738da01570a3"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\memoryManager.ts": {
-    "mtime": 1778849012.1369457,
-    "hash": "e52bcd00d6eb333bb33f6a1ef89df515"
+    "mtime": 1779041274.9987183,
+    "hash": "5c520ef0a5cea427c605ad6851618bb9"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\mind.ts": {
     "mtime": 1777491416.1995325,
     "hash": "ef6f525274252a346b6f8a8de9fbd05f"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\orchestrator.ts": {
-    "mtime": 1778757381.608263,
-    "hash": "bdf1198c39855f769dc2f3b3b28f2d76"
+    "mtime": 1778924625.232296,
+    "hash": "873610f15022df09502c447bbf6a64e9"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\engine\\projectMemory.ts": {
     "mtime": 1778507765.5357952,
@@ -619,17 +635,37 @@
     "mtime": 1777491416.272108,
     "hash": "a045ab34bbce125dcb6ffb9e407ab862"
   },
+  "C:\\Users\\AUREL\\jarvis-ai\\scripts\\gemini_rotator.py": {
+    "mtime": 1779032032.6592793,
+    "hash": "24c43b3cff62ad4e3810cfda2b908d6d"
+  },
   "C:\\Users\\AUREL\\jarvis-ai\\scripts\\src\\hello.ts": {
     "mtime": 1777491416.280073,
     "hash": "ffa4b8d03decbe11dde70abc10183dea"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\BUGS.md": {
+    "mtime": 1778915745.9571478,
+    "hash": "fecf997f1a741c250d41c6bfc96a260f"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\CLAUDE.md": {
     "mtime": 1778914327.3083525,
     "hash": "609e9c9cb9956b8ac870e023fadfe0e3"
   },
+  "C:\\Users\\AUREL\\jarvis-ai\\DECISIONS.md": {
+    "mtime": 1778915771.2128005,
+    "hash": "efbdebb0735cee9af56b587658cf5759"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\HOT.md": {
+    "mtime": 1778915697.3061895,
+    "hash": "f78dfce1a97e5dde673fe4786ef9cebf"
+  },
   "C:\\Users\\AUREL\\jarvis-ai\\JARVIS_MASTER.md": {
     "mtime": 1778850927.404227,
     "hash": "ed3e148a0349aa3cbe2bdbb5da668e7f"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\KNOWLEDGE.md": {
+    "mtime": 1778915727.5398471,
+    "hash": "665c23647ee07137447f31f505ca87df"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\pnpm-workspace.yaml": {
     "mtime": 1777491416.2778907,
@@ -638,6 +674,10 @@
   "C:\\Users\\AUREL\\jarvis-ai\\replit.md": {
     "mtime": 1777491416.2778907,
     "hash": "0634c65e9066cf7bc5997b3195aff390"
+  },
+  "C:\\Users\\AUREL\\jarvis-ai\\TASKS.md": {
+    "mtime": 1778915789.7430604,
+    "hash": "08543d1a29d09edfb33f8f64e5a6055d"
   },
   "C:\\Users\\AUREL\\jarvis-ai\\artifacts\\jarvis\\README.md": {
     "mtime": 1778679964.8646014,

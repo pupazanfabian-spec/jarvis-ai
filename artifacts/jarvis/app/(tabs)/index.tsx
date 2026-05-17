@@ -106,8 +106,13 @@ export default function ChatScreen() {
   } = useBrain();
 
   const [isFocused, setIsFocused] = useState(false);
-  const glowAnim = useRef(new Animated.Value(0)).current;
-  const rippleScale = useRef(new Animated.Value(1)).current;
+  const glowAnimRef = useRef<Animated.Value | null>(null);
+  if (!glowAnimRef.current) glowAnimRef.current = new Animated.Value(0);
+  const glowAnim = glowAnimRef.current;
+
+  const rippleScaleRef = useRef<Animated.Value | null>(null);
+  if (!rippleScaleRef.current) rippleScaleRef.current = new Animated.Value(1);
+  const rippleScale = rippleScaleRef.current;
 
   useEffect(() => {
     Animated.timing(glowAnim, {
