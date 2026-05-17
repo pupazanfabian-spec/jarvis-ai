@@ -44,9 +44,8 @@ const { colors } = Colors;
 type PinMode = 'unlock' | 'set' | 'confirm' | 'verify_old' | null;
 
 function EmptyState() {
-  const colorAnim = useRef(new Animated.Value(0));
   const glowAnim = useRef(new Animated.Value(0.15)).current;
-  const colorAnim = useRef(new Animated.Value(0));
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
