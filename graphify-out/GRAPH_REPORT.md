@@ -1,16 +1,16 @@
 # Graph Report - jarvis-ai  (2026-05-17)
 
 ## Corpus Check
-- 171 files · ~262,972 words
+- 172 files · ~263,089 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1147 nodes · 2328 edges · 75 communities (72 shown, 3 thin omitted)
+- 1148 nodes · 2328 edges · 76 communities (73 shown, 3 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 7 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fd620a4b`
+- Built from commit: `7c77fea8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -93,18 +93,18 @@
 10. `processMessage()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `ChatScreen()` --calls--> `useBrain()`  [EXTRACTED]
-  index.tsx → artifacts/jarvis/context/BrainContext.tsx
-- `ChatScreen()` --calls--> `usePin()`  [EXTRACTED]
-  index.tsx → artifacts/jarvis/context/PinContext.tsx
-- `ChatScreen()` --calls--> `useLLM()`  [EXTRACTED]
-  index.tsx → artifacts/jarvis/context/LLMContext.tsx
-- `ChatScreen()` --calls--> `useAIProvider()`  [EXTRACTED]
-  index.tsx → artifacts/jarvis/context/AIProviderContext.tsx
-- `ChatScreen()` --calls--> `useDevMode()`  [EXTRACTED]
-  index.tsx → artifacts/jarvis/context/DevModeContext.tsx
+- `Toaster()` --calls--> `useTheme()`  [INFERRED]
+  artifacts/mockup-sandbox/src/components/ui/sonner.tsx → artifacts/jarvis/constants/colors.ts
+- `createProject()` --calls--> `getDB()`  [EXTRACTED]
+  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
+- `addProjectStep()` --calls--> `getDB()`  [EXTRACTED]
+  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
+- `updateStepStatus()` --calls--> `getDB()`  [EXTRACTED]
+  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
+- `saveProjectFile()` --calls--> `getDB()`  [EXTRACTED]
+  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
 
-## Communities (75 total, 3 thin omitted)
+## Communities (76 total, 3 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.07
@@ -359,11 +359,11 @@ Nodes (3): Badge(), BadgeProps, badgeVariants
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `THEMES` connect `Community 14` to `Community 35`?**
-  _High betweenness centrality (0.308) - this node is a cross-community bridge._
+  _High betweenness centrality (0.295) - this node is a cross-community bridge._
 - **Why does `cn()` connect `Community 6` to `Community 10`, `Community 12`, `Community 13`, `Community 18`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 32`, `Community 33`, `Community 35`, `Community 36`, `Community 38`, `Community 39`, `Community 41`, `Community 42`, `Community 44`, `Community 45`, `Community 47`, `Community 49`, `Community 50`, `Community 62`, `Community 71`?**
-  _High betweenness centrality (0.235) - this node is a cross-community bridge._
+  _High betweenness centrality (0.225) - this node is a cross-community bridge._
 - **Why does `BrainContext` connect `Community 8` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 7`, `Community 9`, `Community 11`, `Community 14`, `Community 15`, `Community 16`, `Community 17`, `Community 19`, `Community 22`, `Community 26`, `Community 27`, `Community 29`, `Community 30`, `Community 31`, `Community 37`, `Community 51`, `Community 61`?**
-  _High betweenness centrality (0.205) - this node is a cross-community bridge._
+  _High betweenness centrality (0.224) - this node is a cross-community bridge._
 - **What connects `BUG-001: Drag lag noduri canvas`, `BUG-002: Wave B Task 1 — BrainContext integrare ruptă`, `BUG-003: Wave B Task 2 — auto-delegare proactivă neimplementată` to the rest of the system?**
   _321 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**

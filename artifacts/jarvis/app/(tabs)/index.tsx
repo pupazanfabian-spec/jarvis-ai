@@ -44,9 +44,9 @@ const { colors } = Colors;
 type PinMode = 'unlock' | 'set' | 'confirm' | 'verify_old' | null;
 
 function EmptyState() {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const colorAnim = useRef(new Animated.Value(0));
   const glowAnim = useRef(new Animated.Value(0.15)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const colorAnim = useRef(new Animated.Value(0));
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -145,17 +145,19 @@ export default function ChatScreen() {
   const colorAnim = colorAnimRef.current;
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(colorAnim, {
+    const anim = Animated.loop(
+      Animated.timing(colorAnim.current, {
         toValue: 2,
         duration: 8000,
         easing: Easing.linear,
         useNativeDriver: false,
       })
-    ).start();
+    );
+    anim.start();
+    return () => anim.stop();
   }, []);
 
-  const headerTitleColor = colorAnim.interpolate({
+  const headerTitleColor = colorAnim.current.interpolate({
     inputRange: [0, 1, 2],
     outputRange: [colors.primary, colors.accent, colors.primary],
   });

@@ -6,16 +6,16 @@
     {
       "label": "index.tsx",
       "file_type": "code",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L1",
-      "id": "index_tsx",
+      "id": "artifacts_jarvis_app_tabs_index_tsx",
       "community": 16,
       "norm_label": "index.tsx"
     },
     {
       "label": "PinMode",
       "file_type": "code",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L44",
       "id": "tabs_index_pinmode",
       "community": 16,
@@ -24,7 +24,7 @@
     {
       "label": "EmptyState()",
       "file_type": "code",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L46",
       "id": "tabs_index_emptystate",
       "community": 16,
@@ -33,7 +33,7 @@
     {
       "label": "ChatScreen()",
       "file_type": "code",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L102",
       "id": "tabs_index_chatscreen",
       "community": 16,
@@ -42,8 +42,8 @@
     {
       "label": "emptyStyles",
       "file_type": "code",
-      "source_file": "index.tsx",
-      "source_location": "L720",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L722",
       "id": "tabs_index_emptystyles",
       "community": 16,
       "norm_label": "emptystyles"
@@ -51,11 +51,29 @@
     {
       "label": "styles",
       "file_type": "code",
-      "source_file": "index.tsx",
-      "source_location": "L781",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L783",
       "id": "tabs_index_styles",
       "community": 14,
       "norm_label": "styles"
+    },
+    {
+      "label": "update_context_vault.py",
+      "file_type": "code",
+      "source_file": "update_context_vault.py",
+      "source_location": "L1",
+      "id": "update_context_vault_py",
+      "community": 65,
+      "norm_label": "update_context_vault.py"
+    },
+    {
+      "label": "index.tsx",
+      "file_type": "code",
+      "source_file": "index.tsx",
+      "source_location": "L1",
+      "community": 16,
+      "norm_label": "index.tsx",
+      "id": "index_tsx"
     },
     {
       "label": "BUGS.md",
@@ -641,15 +659,6 @@
       "community": 22,
       "norm_label": "tablayout()",
       "id": "tabs_layout_tablayout"
-    },
-    {
-      "label": "index.tsx",
-      "file_type": "code",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L1",
-      "community": 16,
-      "norm_label": "index.tsx",
-      "id": "artifacts_jarvis_app_tabs_index_tsx"
     },
     {
       "label": "ChatBubble.tsx",
@@ -10332,161 +10341,111 @@
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L16",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "engine_projectmemory_getallprojects",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "engine_projectmemory_getallprojects"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L16",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "engine_projectmemory_project",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "engine_projectmemory_project"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L34",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_braincontext_usebrain",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_braincontext_usebrain"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L35",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_llmcontext_usellm",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_llmcontext_usellm"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L36",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_pincontext_usepin",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_pincontext_usepin"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L37",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_aiprovidercontext_useaiprovider",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_aiprovidercontext_useaiprovider"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L37",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_aiprovidercontext_providericon",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_aiprovidercontext_providericon"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L37",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_aiprovidercontext_providerlabel",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_aiprovidercontext_providerlabel"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L38",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "context_devmodecontext_usedevmode",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "context_devmodecontext_usedevmode"
     },
     {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
       "source_location": "L39",
       "weight": 1.0,
-      "source": "index_tsx",
-      "target": "engine_brain_message",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
-      "source_location": "L44",
-      "weight": 1.0,
-      "source": "index_tsx",
-      "target": "tabs_index_pinmode",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
-      "source_location": "L46",
-      "weight": 1.0,
-      "source": "index_tsx",
-      "target": "tabs_index_emptystate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
-      "source_location": "L102",
-      "weight": 1.0,
-      "source": "index_tsx",
-      "target": "tabs_index_chatscreen",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
-      "source_location": "L720",
-      "weight": 1.0,
-      "source": "index_tsx",
-      "target": "tabs_index_emptystyles",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "index.tsx",
-      "source_location": "L781",
-      "weight": 1.0,
-      "source": "index_tsx",
-      "target": "tabs_index_styles",
-      "confidence_score": 1.0
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "engine_brain_message"
     },
     {
       "relation": "contains",
@@ -10496,6 +10455,111 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "tabs_index_pinmode"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L46",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "tabs_index_emptystate"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L102",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "tabs_index_chatscreen"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L715",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "tabs_index_emptystyles"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L776",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "tabs_index_styles"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "artifacts_jarvis_components_chatbubble_tsx"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "artifacts_jarvis_components_thinkingindicator_tsx"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L33",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "artifacts_jarvis_components_neuralbackground_tsx"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L34",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "artifacts_jarvis_context_braincontext_tsx"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_location": "L39",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "target": "artifacts_jarvis_engine_brain_ts"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
       "target": "tabs_index_pinmode"
     },
     {
@@ -10511,11 +10575,11 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_file": "index.tsx",
       "source_location": "L46",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "source": "index_tsx",
       "target": "tabs_index_emptystate"
     },
     {
@@ -10531,11 +10595,11 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
+      "source_file": "index.tsx",
       "source_location": "L102",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "source": "index_tsx",
       "target": "tabs_index_chatscreen"
     },
     {
@@ -10628,11 +10692,11 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L715",
+      "source_file": "index.tsx",
+      "source_location": "L720",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "source": "index_tsx",
       "target": "tabs_index_emptystyles"
     },
     {
@@ -10648,11 +10712,11 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L776",
+      "source_file": "index.tsx",
+      "source_location": "L781",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
+      "source": "index_tsx",
       "target": "tabs_index_styles"
     },
     {
@@ -10904,6 +10968,116 @@
       "confidence_score": 1.0,
       "source": "components_voicecontroller_voicecontroller",
       "target": "tabs_index_styles"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L16",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "engine_projectmemory_getallprojects"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L16",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "engine_projectmemory_project"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L34",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_braincontext_usebrain"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L35",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_llmcontext_usellm"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L36",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_pincontext_usepin"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L37",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_aiprovidercontext_useaiprovider"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L37",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_aiprovidercontext_providericon"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L37",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_aiprovidercontext_providerlabel"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L38",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "context_devmodecontext_usedevmode"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "index.tsx",
+      "source_location": "L39",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "index_tsx",
+      "target": "engine_brain_message"
     },
     {
       "relation": "contains",
@@ -11494,171 +11668,6 @@
       "confidence_score": 1.0,
       "source": "artifacts_jarvis_app_layout_tsx",
       "target": "tabs_layout_tablayout"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L16",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "engine_projectmemory_getallprojects"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L16",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "engine_projectmemory_project"
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L21",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "artifacts_jarvis_components_chatbubble_tsx"
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L23",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "artifacts_jarvis_components_thinkingindicator_tsx"
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L33",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "artifacts_jarvis_components_neuralbackground_tsx"
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L34",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "artifacts_jarvis_context_braincontext_tsx"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L34",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_braincontext_usebrain"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L35",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_llmcontext_usellm"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L36",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_pincontext_usepin"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L37",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_aiprovidercontext_useaiprovider"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L37",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_aiprovidercontext_providericon"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L37",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_aiprovidercontext_providerlabel"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L38",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "context_devmodecontext_usedevmode"
-    },
-    {
-      "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L39",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "artifacts_jarvis_engine_brain_ts"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "artifacts/jarvis/app/(tabs)/index.tsx",
-      "source_location": "L39",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "artifacts_jarvis_app_tabs_index_tsx",
-      "target": "engine_brain_message"
     },
     {
       "relation": "imports_from",
@@ -34807,5 +34816,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "fd620a4bfce38a8bdf9d4bf41874bd008b8f2efb"
+  "built_at_commit": "7c77fea88e22e4a689b7c3bc669ad3bce4003707"
 }
