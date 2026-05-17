@@ -235,8 +235,8 @@ importers:
         specifier: ~14.0.8
         version: 14.0.8(expo@54.0.34)
       expo-speech:
-        specifier: ^55.0.14
-        version: 55.0.14(expo@54.0.34)
+        specifier: ^14.0.8
+        version: 14.0.8(expo@54.0.34)
       expo-sqlite:
         specifier: ~16.0.10
         version: 16.0.10(expo@54.0.34)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -3515,8 +3515,8 @@ packages:
     peerDependencies:
       expo: '*'
 
-  expo-speech@55.0.14:
-    resolution: {integrity: sha512-135FKZt1KZ9uCZdKjXQBbXyU5RHssYv+4Xxxy1wkENBHvgmnNTMOKRj+drXPmkCqsJWIVNTY6PmksUwjw2PcSQ==}
+  expo-speech@14.0.8:
+    resolution: {integrity: sha512-UjBFCFv58nutlLw92L7kUS0ZjbOOfaTdiEv/HbjvMrT6BfldoOLLBZbaEcEhDdZK36NY/kass0Kzxk+co6vxSQ==}
     peerDependencies:
       expo: '*'
 
@@ -9682,7 +9682,7 @@ snapshots:
     dependencies:
       expo: 54.0.34(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
 
-  expo-speech@55.0.14(expo@54.0.34):
+  expo-speech@14.0.8(expo@54.0.34):
     dependencies:
       expo: 54.0.34(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
 

@@ -61,7 +61,7 @@
     "expo-file-system": "19.0.22",
     "expo-secure-store": "~15.0.8",
     "expo-sharing": "~14.0.8",
-    "expo-speech": "^55.0.14",
+    "expo-speech": "^14.0.8",
     "expo-sqlite": "~16.0.10"
   },
   "optionalDependencies": {

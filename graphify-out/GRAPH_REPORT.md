@@ -1,16 +1,16 @@
 # Graph Report - jarvis-ai  (2026-05-17)
 
 ## Corpus Check
-- 171 files · ~262,950 words
+- 171 files · ~262,972 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1146 nodes · 2313 edges · 77 communities (74 shown, 3 thin omitted)
+- 1147 nodes · 2328 edges · 75 communities (72 shown, 3 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 7 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b409e207`
+- Built from commit: `fd620a4b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -74,10 +74,8 @@
 - [[_COMMUNITY_Community 62|Community 62]]
 - [[_COMMUNITY_Community 63|Community 63]]
 - [[_COMMUNITY_Community 64|Community 64]]
-- [[_COMMUNITY_Community 65|Community 65]]
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 67|Community 67]]
-- [[_COMMUNITY_Community 68|Community 68]]
 - [[_COMMUNITY_Community 69|Community 69]]
 - [[_COMMUNITY_Community 70|Community 70]]
 - [[_COMMUNITY_Community 71|Community 71]]
@@ -89,28 +87,28 @@
 4. `getDB()` - 38 edges
 5. `ChatBubble` - 31 edges
 6. `customFetch()` - 30 edges
-7. `styles` - 26 edges
+7. `styles` - 27 edges
 8. `AIProviderContext` - 22 edges
 9. `orchestrator` - 19 edges
 10. `processMessage()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Toaster()` --calls--> `useTheme()`  [INFERRED]
-  artifacts/mockup-sandbox/src/components/ui/sonner.tsx → artifacts/jarvis/constants/colors.ts
-- `createProject()` --calls--> `getDB()`  [EXTRACTED]
-  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
-- `addProjectStep()` --calls--> `getDB()`  [EXTRACTED]
-  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
-- `updateStepStatus()` --calls--> `getDB()`  [EXTRACTED]
-  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
-- `saveProjectFile()` --calls--> `getDB()`  [EXTRACTED]
-  artifacts/jarvis/engine/projectMemory.ts → artifacts/jarvis/engine/database.ts
+- `ChatScreen()` --calls--> `useBrain()`  [EXTRACTED]
+  index.tsx → artifacts/jarvis/context/BrainContext.tsx
+- `ChatScreen()` --calls--> `usePin()`  [EXTRACTED]
+  index.tsx → artifacts/jarvis/context/PinContext.tsx
+- `ChatScreen()` --calls--> `useLLM()`  [EXTRACTED]
+  index.tsx → artifacts/jarvis/context/LLMContext.tsx
+- `ChatScreen()` --calls--> `useAIProvider()`  [EXTRACTED]
+  index.tsx → artifacts/jarvis/context/AIProviderContext.tsx
+- `ChatScreen()` --calls--> `useDevMode()`  [EXTRACTED]
+  index.tsx → artifacts/jarvis/context/DevModeContext.tsx
 
-## Communities (77 total, 3 thin omitted)
+## Communities (75 total, 3 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.09
-Nodes (41): analyzeDatabaseHealth(), autoPruneKnowledge(), bumpKnowledgeAccess(), CachedWebResult, clearCacheDB(), compactKnowledgeBase(), DBDynamicConcept, deleteKnowledgeEntry() (+33 more)
+Cohesion: 0.07
+Nodes (47): DBStats, DEFAULT_SOURCE_META, FilterMode, KnowledgeScreen(), SOURCE_LABELS, analyzeDatabaseHealth(), autoPruneKnowledge(), bumpKnowledgeAccess() (+39 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.07
@@ -126,7 +124,7 @@ Nodes (36): DiscoveredComponent, checkMetroHealth(), clearMetroCache(), download
 
 ### Community 4 - "Community 4"
 Cohesion: 0.08
-Nodes (42): BrainSphereProps, LobeInfo, { width: SCREEN_WIDTH }, ChatBubble, CodeBlock, codeStyles, CSS_PROPERTIES, FeedbackToast() (+34 more)
+Nodes (41): BrainSphereProps, LobeInfo, { width: SCREEN_WIDTH }, ChatBubble, CodeBlock, codeStyles, CSS_PROPERTIES, FeedbackToast() (+33 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.08
@@ -134,71 +132,71 @@ Nodes (37): Awaited, AwaitedInput, getHealthCheckQueryOptions(), getHealthCheckU
 
 ### Community 6 - "Community 6"
 Cohesion: 0.08
-Nodes (43): useIsMobile(), cn(), Kbd(), KbdGroup(), ResizableHandle(), ResizablePanelGroup(), SheetContent, SheetContentProps (+35 more)
+Nodes (42): useIsMobile(), cn(), Kbd(), KbdGroup(), ResizableHandle(), ResizablePanelGroup(), SheetContent, SheetContentProps (+34 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.18
-Nodes (15): clearAllMemory(), deleteMemoryByKeyword(), deleteMemoryEntry(), deleteOldConversations(), ensureDirs(), initMemoryFolder(), listConversations(), loadIndexFromDisk() (+7 more)
+Cohesion: 0.13
+Nodes (17): clearAllMemory(), deleteMemoryByKeyword(), deleteMemoryEntry(), deleteOldConversations(), ensureDirs(), getMemoryStats(), initMemoryFolder(), listAllMemories() (+9 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.1
-Nodes (45): BrainContext, BrainContextType, migrateParsedState(), _syncEntitiesFromDB(), WELCOME, buildRichSystemPrompt(), JarvisContext, archiveCurrentSession() (+37 more)
+Cohesion: 0.15
+Nodes (31): BrainContext, BrainContextType, migrateParsedState(), _syncEntitiesFromDB(), WELCOME, buildRichSystemPrompt(), JarvisContext, archiveCurrentSession() (+23 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.13
-Nodes (20): COMMAND_INTENTS, handleDateTime(), handleMath(), handleMemory(), Intent, INTENT_PATTERNS, IntentPattern, IntentResult (+12 more)
+Cohesion: 0.09
+Nodes (29): autoDetectFacts(), COMMAND_INTENTS, detectIntentWithConfidence(), handleDateTime(), handleMath(), handleMemory(), Intent, INTENT_PATTERNS (+21 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.05
-Nodes (29): Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Checkbox, HoverCardContent (+21 more)
+Cohesion: 0.06
+Nodes (22): AccordionContent, AccordionItem, AccordionTrigger, Avatar, AvatarFallback, AvatarImage, Checkbox, HoverCardContent (+14 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.21
-Nodes (26): MemoryManager(), MemoryManagerProps, TabType, createInferenceEngine(), MemoryEntry, activeInference(), addEntry(), autoCategorize() (+18 more)
+Cohesion: 0.13
+Nodes (41): DashboardScreen(), LOBE_CONFIG, MemoryManager(), MemoryManagerProps, TabType, addFact(), chainReason(), createInferenceEngine() (+33 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.12
 Nodes (23): Action, ActionType, addToRemoveQueue(), dispatch(), genId(), listeners, memoryState, reducer() (+15 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.15
-Nodes (13): Field(), FieldContent(), FieldDescription(), FieldError(), FieldGroup(), FieldLabel(), FieldLegend(), FieldSeparator() (+5 more)
+Cohesion: 0.14
+Nodes (15): ButtonGroup(), ButtonGroupSeparator(), buttonGroupVariants, Field(), FieldContent(), FieldDescription(), FieldError(), FieldGroup() (+7 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.18
-Nodes (9): FileUploadModal(), KEYS, ThemeSelector(), baseColors, saveTheme(), ThemeName, useTheme(), LearnedDocument (+1 more)
+Cohesion: 0.1
+Nodes (19): FileUploadModal(), KEYS, Props, DEV_QUICK_ACTIONS, QuickActions(), OPTIONS, SurveyBubble(), SurveyOption (+11 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.16
-Nodes (17): buildAICodePrompt(), buildDebugPrompt(), buildExpertSystemPrompt(), CODE_PATTERNS, CodeGenResult, DEBUG_PATTERNS, EXPLAIN_PATTERNS, GeneratedCode (+9 more)
+Cohesion: 0.13
+Nodes (20): buildAICodePrompt(), buildDebugPrompt(), buildExpertSystemPrompt(), CODE_PATTERNS, CodeGenResult, DEBUG_PATTERNS, detectDevIntent(), EXPLAIN_PATTERNS (+12 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.19
-Nodes (19): ModelSetupScreen(), playTTS(), VoiceController(), providerIcon(), providerLabel(), useAIProvider(), BrainProvider(), useBrain() (+11 more)
+Cohesion: 0.28
+Nodes (17): providerIcon(), providerLabel(), useAIProvider(), BrainProvider(), useBrain(), useDevMode(), useLLM(), usePin() (+9 more)
 
 ### Community 17 - "Community 17"
 Cohesion: 0.17
-Nodes (18): LLMContext, LLMContextType, LLMProvider(), LLMStatus, buildSystemPrompt(), downloadModel(), generateLLMResponse(), getModelPath() (+10 more)
+Nodes (18): ModelSetupScreen(), LLMContext, LLMContextType, LLMStatus, buildSystemPrompt(), downloadModel(), generateLLMResponse(), getModelPath() (+10 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.12
 Nodes (19): AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay, AlertDialogTitle (+11 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.13
-Nodes (16): addDynamicConcept(), Concept, DOMAIN_CONNECTIONS, DYNAMIC_CONCEPTS, findRelevantConcept(), findRelevantConceptExtended(), generateProactiveThought(), JARVIS_INTERESTS (+8 more)
+Cohesion: 0.14
+Nodes (15): addDynamicConcept(), Concept, DOMAIN_CONNECTIONS, DYNAMIC_CONCEPTS, findRelevantConcept(), findRelevantConceptExtended(), generateProactiveThought(), JARVIS_INTERESTS (+7 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.14
-Nodes (16): ButtonGroup(), ButtonGroupSeparator(), buttonGroupVariants, Item(), ItemActions(), ItemContent(), ItemDescription(), ItemFooter() (+8 more)
+Cohesion: 0.18
+Nodes (12): Item(), ItemActions(), ItemContent(), ItemDescription(), ItemFooter(), ItemGroup(), ItemHeader(), ItemMedia() (+4 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.13
-Nodes (11): queryClient, ErrorBoundary, ErrorBoundaryState, ErrorFallback(), ErrorFallbackProps, DevModeProvider(), PinContext, PinContextType (+3 more)
+Cohesion: 0.25
+Nodes (5): ErrorBoundary, ErrorBoundaryState, ErrorFallback(), ErrorFallbackProps, useColors()
 
 ### Community 22 - "Community 22"
-Cohesion: 0.15
-Nodes (6): DashboardScreen(), linear(), LOBE_CONFIG, DEV_QUICK_ACTIONS, QuickActions(), styles
+Cohesion: 0.16
+Nodes (7): queryClient, linear(), LLMProvider(), PinContext, PinContextType, PinProvider(), TabLayout()
 
 ### Community 23 - "Community 23"
 Cohesion: 0.2
@@ -213,28 +211,28 @@ Cohesion: 0.13
 Nodes (14): Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut() (+6 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.27
-Nodes (14): _cacheResult(), extractSearchQuery(), extractTopSentences(), fetchWithTimeout(), ONLINE_TRIGGERS, OnlineResult, scrapeUrl(), searchDuckDuckGo() (+6 more)
+Cohesion: 0.24
+Nodes (15): _cacheResult(), extractSearchQuery(), extractTopSentences(), fetchWithTimeout(), isOnlineIntent(), ONLINE_TRIGGERS, OnlineResult, scrapeUrl() (+7 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.3
-Nodes (11): pick(), buildFollowUp(), buildIllustration(), buildIntro(), evaluateResponseQuality(), generateSmartUnknown(), QuestionType, reformatRaw() (+3 more)
+Cohesion: 0.24
+Nodes (14): pick(), buildFollowUp(), buildIllustration(), buildIntro(), detectQuestionType(), detectTopicCategory(), evaluateResponseQuality(), generateSmartUnknown() (+6 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.29
 Nodes (6): app, Gallery(), getBasePath(), getPreviewExamplePath(), getPreviewPath(), ModuleMap
 
 ### Community 29 - "Community 29"
-Cohesion: 0.28
-Nodes (13): DICTIONAR, findDictEntryByKeywords(), searchDictionary(), searchDocuments(), calculateWeightedScore(), extractKeywords(), fuzzyContains(), norm() (+5 more)
+Cohesion: 0.3
+Nodes (12): DICTIONAR, findDictEntryByKeywords(), searchDictionary(), searchDocuments(), extractKeywords(), fuzzyContains(), norm(), relevanceScore() (+4 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.23
-Nodes (11): Entity, EntityTracker, extractEntities(), getEntitySummary(), normTxt(), NUMBER_PATTERNS, PLACE_PATTERNS, queryEntity() (+3 more)
+Cohesion: 0.21
+Nodes (12): Entity, EntityTracker, EntityType, extractEntities(), getEntitySummary(), normTxt(), NUMBER_PATTERNS, PLACE_PATTERNS (+4 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.2
-Nodes (12): checkCreatorAccess(), checkMessage(), CONSTITUTION_TEXT, ConstitutionCheck, ConstitutionState, generateIntegrityHash(), getSecurityReport(), MANIPULATION_PATTERNS (+4 more)
+Cohesion: 0.22
+Nodes (11): checkCreatorAccess(), CONSTITUTION_TEXT, ConstitutionCheck, ConstitutionState, generateIntegrityHash(), getSecurityReport(), MANIPULATION_PATTERNS, requiresCreator() (+3 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.17
@@ -242,7 +240,7 @@ Nodes (11): Carousel, CarouselContent, CarouselContext, CarouselContextProps, Ca
 
 ### Community 33 - "Community 33"
 Cohesion: 0.29
-Nodes (11): addFact(), chainReason(), deepReason(), detectContradiction(), extractRulesFromFact(), getInferenceReport(), inferAnswer(), InferenceEngine (+3 more)
+Nodes (6): Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle
 
 ### Community 34 - "Community 34"
 Cohesion: 0.17
@@ -281,8 +279,8 @@ Cohesion: 0.25
 Nodes (7): SelectContent, SelectItem, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectTrigger
 
 ### Community 43 - "Community 43"
-Cohesion: 0.17
-Nodes (14): connections, dist, NeuralBackground(), NodePulse(), nodes, Props, styles, { width, height } (+6 more)
+Cohesion: 0.25
+Nodes (10): connections, dist, NeuralBackground(), NodePulse(), nodes, Props, styles, { width, height } (+2 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.29
@@ -305,16 +303,16 @@ Cohesion: 0.13
 Nodes (14): ✅ Completate recent (Sesiunile 7-8), [P1] Integrare ChatBubble + TypingIndicator + ChatHeader în ChatScreen, 🔴 P1 — Urgent / Blocat, [P1] Wave B Task 1 — BrainContext + recallWeighted + activeInference, 🟡 P2 — Important, [P2] Test end-to-end în Expo Go, [P2] Wave B Task 2 — Auto-delegare proactivă + comenzi agent, [P3] expo-navigation-bar Android nav bar auto-hide (+6 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.5
-Nodes (3): AccordionContent, AccordionItem, AccordionTrigger
+Cohesion: 0.4
+Nodes (4): InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot
 
 ### Community 50 - "Community 50"
 Cohesion: 0.5
-Nodes (3): Avatar, AvatarFallback, AvatarImage
+Nodes (4): NavigationMenu, NavigationMenuContent, NavigationMenuIndicator, NavigationMenuViewport
 
 ### Community 51 - "Community 51"
-Cohesion: 0.18
-Nodes (10): DevModeContext, DevModeContextType, addProjectStep(), createProject(), getActiveProject(), initProjectTables(), ProjectFile, ProjectStep (+2 more)
+Cohesion: 0.16
+Nodes (11): DevModeContext, DevModeContextType, DevModeProvider(), addProjectStep(), createProject(), getActiveProject(), initProjectTables(), ProjectFile (+3 more)
 
 ### Community 60 - "Community 60"
 Cohesion: 0.15
@@ -325,8 +323,8 @@ Cohesion: 0.29
 Nodes (11): categorizeContent(), ExternalFolder, extractUsefulSentences(), getExternalFolders(), loadFolders(), removeExternalFolder(), requestFolderAccess(), saveFolders() (+3 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.18
-Nodes (8): FormControl, FormDescription, FormFieldContext, FormFieldContextValue, FormItem, FormItemContext, FormLabel, FormMessage
+Cohesion: 0.15
+Nodes (10): FormControl, FormDescription, FormFieldContext, FormFieldContextValue, FormItem, FormItemContext, FormLabel, FormMessage (+2 more)
 
 ### Community 63 - "Community 63"
 Cohesion: 0.2
@@ -336,10 +334,6 @@ Nodes (9): Git, graphify, JARVIS AI — Context Proiect, Modele Gemini, Pachete 
 Cohesion: 0.2
 Nodes (9): 🎨 Animații React Native, 🏗️ Arhitectură & Patternuri, 🔑 AsyncStorage Keys (complete), 🧠 BrainContext / Memory, 🤖 Gemini CLI, 🔧 Git & Comenzi, 📚 KNOWLEDGE.md — Lecții acumulate, 📦 Pachete & Dependențe (+1 more)
 
-### Community 65 - "Community 65"
-Cohesion: 0.25
-Nodes (6): DBStats, DEFAULT_SOURCE_META, FilterMode, KnowledgeScreen(), SOURCE_LABELS, KnowledgeEntry
-
 ### Community 66 - "Community 66"
 Cohesion: 0.25
 Nodes (7): 📁 Fișiere active (atenție la modificare), 🎯 Focus curent, 🔥 HOT.md — Context instant sesiune curentă, 📋 Next Actions (ordine prioritate), ⚠️ Reguli critice de reținut, 🚨 Stare critică, 🔄 Ultimele operații (Sesiunea 8)
@@ -347,10 +341,6 @@ Nodes (7): 📁 Fișiere active (atenție la modificare), 🎯 Focus curent, �
 ### Community 67 - "Community 67"
 Cohesion: 0.29
 Nodes (6): AI & Providers, Arhitectură, 🏛️ DECISIONS.md — Decizii arhitecturale, Dev Workflow, Memorie, UI / Animations
-
-### Community 68 - "Community 68"
-Cohesion: 0.47
-Nodes (5): extractAndUpdateUserModel(), loadUserModel(), MemoryCategory, saveUserModel(), UserModel
 
 ### Community 69 - "Community 69"
 Cohesion: 0.47
@@ -369,15 +359,15 @@ Nodes (3): Badge(), BadgeProps, badgeVariants
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `THEMES` connect `Community 14` to `Community 35`?**
-  _High betweenness centrality (0.303) - this node is a cross-community bridge._
-- **Why does `cn()` connect `Community 6` to `Community 10`, `Community 12`, `Community 13`, `Community 18`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 32`, `Community 35`, `Community 36`, `Community 38`, `Community 39`, `Community 41`, `Community 42`, `Community 44`, `Community 45`, `Community 47`, `Community 49`, `Community 50`, `Community 62`, `Community 71`?**
-  _High betweenness centrality (0.241) - this node is a cross-community bridge._
-- **Why does `BrainContext` connect `Community 8` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 7`, `Community 9`, `Community 11`, `Community 15`, `Community 16`, `Community 17`, `Community 19`, `Community 21`, `Community 26`, `Community 27`, `Community 29`, `Community 30`, `Community 31`, `Community 33`, `Community 37`, `Community 51`, `Community 61`, `Community 68`?**
-  _High betweenness centrality (0.201) - this node is a cross-community bridge._
+  _High betweenness centrality (0.308) - this node is a cross-community bridge._
+- **Why does `cn()` connect `Community 6` to `Community 10`, `Community 12`, `Community 13`, `Community 18`, `Community 20`, `Community 23`, `Community 24`, `Community 25`, `Community 32`, `Community 33`, `Community 35`, `Community 36`, `Community 38`, `Community 39`, `Community 41`, `Community 42`, `Community 44`, `Community 45`, `Community 47`, `Community 49`, `Community 50`, `Community 62`, `Community 71`?**
+  _High betweenness centrality (0.235) - this node is a cross-community bridge._
+- **Why does `BrainContext` connect `Community 8` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 7`, `Community 9`, `Community 11`, `Community 14`, `Community 15`, `Community 16`, `Community 17`, `Community 19`, `Community 22`, `Community 26`, `Community 27`, `Community 29`, `Community 30`, `Community 31`, `Community 37`, `Community 51`, `Community 61`?**
+  _High betweenness centrality (0.205) - this node is a cross-community bridge._
 - **What connects `BUG-001: Drag lag noduri canvas`, `BUG-002: Wave B Task 1 — BrainContext integrare ruptă`, `BUG-003: Wave B Task 2 — auto-delegare proactivă neimplementată` to the rest of the system?**
   _321 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.09 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.07 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**

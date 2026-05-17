@@ -140,7 +140,9 @@ export default function ChatScreen() {
   const { settings: aiProviderSettings } = useAIProvider();
   const { isDevMode, toggleDevMode, activeProject, refreshProject } = useDevMode();
 
-  const colorAnim = useRef(new Animated.Value(0)).current;
+  const colorAnimRef = useRef<Animated.Value | null>(null);
+  if (!colorAnimRef.current) colorAnimRef.current = new Animated.Value(0);
+  const colorAnim = colorAnimRef.current;
 
   useEffect(() => {
     Animated.loop(
