@@ -31,16 +31,12 @@ import AIProviderModal from '@/components/AIProviderModal';
 import KnowledgeScreen from '@/components/KnowledgeScreen';
 import CodeSandboxScreen from '@/components/CodeSandboxScreen';
 import NeuralBackground from '@/components/NeuralBackground';
-import VoiceController, { playTTS } from '@/components/VoiceController';
 import { useBrain } from '@/context/BrainContext';
 import { useLLM } from '@/context/LLMContext';
 import { usePin } from '@/context/PinContext';
 import { useAIProvider, providerIcon, providerLabel } from '@/context/AIProviderContext';
 import { useDevMode } from '@/context/DevModeContext';
 import { Message } from '@/engine/brain';
-import { callWhisper } from '@/engine/aiProviders';
-import { getWorkingKey } from '@/engine/code-studio/keyManager';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/constants/colors';
 
 const { colors } = Colors;
@@ -108,6 +104,31 @@ export default function ChatScreen() {
     messages, isThinking, webSearching, thinkingComplexity, brainState, lastProvider,
     sendMessage, clearConversation, addDocument, removeDocument,
   } = useBrain();
+
+  const [isFocused, setIsFocused] = useState(false);
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const rippleScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.timing(glowAnim, {
+      toValue: isFocused ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isFocused]);
+
+  const borderColor = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border, colors.primary],
+  });
+
+  const handleSendPress = () => {
+    Animated.sequence([
+      Animated.timing(rippleScale, { toValue: 1.3, duration: 75, useNativeDriver: true }),
+      Animated.timing(rippleScale, { toValue: 1, duration: 75, useNativeDriver: true }),
+    ]).start();
+    handleSend();
+  };
 
   const { isLocked, hasPin, pinLoaded, unlock, setPin, removePin, lock } = usePin();
   const { status: llmStatus, skipped: llmSkipped } = useLLM();
@@ -311,53 +332,10 @@ export default function ChatScreen() {
     setPinMode(null);
   }, [removePin]);
 
-  const [isWhisperProcessing, setIsWhisperProcessing] = useState(false);
-
-  const handleAudioReady = useCallback(async (uri: string) => {
-    try {
-      if (isThinking || webSearching) return;
-      setIsWhisperProcessing(true);
-      
-      const apiKey = await getWorkingKey('groq');
-      
-      if (!apiKey) {
-        Alert.alert('Configurare necesară', 'Te rugăm să adaugi o cheie API Groq pentru a folosi comenzile vocale.');
-        return;
-      }
-
-      const text = await callWhisper(uri, apiKey);
-      
-      if (text && text.trim().length > 0) {
-        setInputText(text);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-        }
-      }
-    } catch (err: any) {
-      console.error('[ChatScreen] Whisper error:', err);
-      // Nu afișăm alertă pe timeout pentru a nu întrerupe fluxul user-ului
-      if (!err.message?.includes('408')) {
-        Alert.alert('Eroare Voce', 'Nu s-a putut procesa înregistrarea audio.');
-      }
-    } finally {
-      setIsWhisperProcessing(false);
-    }
-  }, [isThinking, webSearching]);
-
   const prevThinking = useRef(isThinking);
   useEffect(() => {
-    if (prevThinking.current === true && isThinking === false) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage && lastMessage.role === 'assistant') {
-        AsyncStorage.getItem('@jarvis_voice_mode').then(val => {
-          if (val === 'true') {
-            playTTS(lastMessage.content);
-          }
-        });
-      }
-    }
     prevThinking.current = isThinking;
-  }, [isThinking, messages]);
+  }, [isThinking]);
 
   if (!pinLoaded) return null;
 
@@ -645,35 +623,34 @@ export default function ChatScreen() {
 
           <View style={styles.inputWrapper}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { borderColor: borderColor as any }]}
               value={inputText}
               onChangeText={setInputText}
               placeholder="Scrie un mesaj..."
               placeholderTextColor={colors.textMuted}
               multiline
               maxLength={2000}
-              onSubmitEditing={handleSend}
+              onSubmitEditing={handleSendPress}
               returnKeyType="send"
               blurOnSubmit={false}
-              onFocus={() => scrollToBottom()}
+              onFocus={() => { setIsFocused(true); scrollToBottom(); }}
+              onBlur={() => setIsFocused(false)}
             />
           </View>
 
-          <VoiceController 
-            onAudioReady={handleAudioReady} 
-            isProcessing={isWhisperProcessing} 
-          />
-
           <TouchableOpacity
             style={[styles.sendBtn, (!inputText.trim() || isThinking || webSearching) && styles.sendBtnDisabled]}
-            onPress={handleSend}
+            onPress={handleSendPress}
             disabled={!inputText.trim() || isThinking || webSearching}
             activeOpacity={0.8}
           >
-            <View
+            <Animated.View
               style={[
                 styles.sendBtnGradient,
-                { backgroundColor: inputText.trim() && !isThinking && !webSearching ? colors.primary : colors.surfaceHigh }
+                { 
+                  backgroundColor: inputText.trim() && !isThinking && !webSearching ? colors.primary : colors.surfaceHigh,
+                  transform: [{ scale: rippleScale }]
+                }
               ]}
             >
               <Feather
@@ -681,7 +658,7 @@ export default function ChatScreen() {
                 size={20}
                 color={inputText.trim() && !isThinking && !webSearching ? '#fff' : colors.textMuted}
               />
-            </View>
+            </Animated.View>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

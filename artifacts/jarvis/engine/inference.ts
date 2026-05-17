@@ -126,65 +126,62 @@ export function detectContradiction(engine: InferenceEngine, newFact: string): s
   return null;
 }
 
-// ─── Raționament în lanț ──────────────────────────────────────────────────────
+// ─── Raționament în lanț recursiv (Deep Reason) ──────────────────────────────
 
-export function chainReason(engine: InferenceEngine, subject: string): string[] {
+export function deepReason(engine: InferenceEngine, subject: string, depth = 0, visited = new Set<string>()): string[] {
+  if (depth > 4 || visited.has(subject)) return [];
+  visited.add(subject);
+
   const n = normInfer(subject);
   const chain: string[] = [];
 
-  // Reguli directe
   const direct = engine.rules
     .filter(r => r.subject === n || r.subject.includes(n) || n.includes(r.subject))
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 3);
+    .sort((a, b) => b.confidence - a.confidence);
 
   for (const rule of direct) {
     chain.push(`${rule.subject} → ${rule.predicate}`);
-
-    // Raționament de ord. 2: predicatul regulii = subiect al altei reguli?
-    const predicateKeyword = rule.predicate.replace(/^(?:este|are|poate)\s+/, '').split(/\s+/)[0];
-    if (predicateKeyword.length > 4) {
-      const secondOrder = engine.rules.find(r =>
-        r.subject.includes(predicateKeyword) && r !== rule
-      );
-      if (secondOrder) {
-        chain.push(`${secondOrder.subject} → ${secondOrder.predicate} (deducție)`);
-      }
+    
+    // Extragem cuvântul cheie din predicat pentru a continua lanțul
+    const nextSubject = rule.predicate.replace(/^(?:este|are|poate|funcționează prin)\s+/, '').trim();
+    if (nextSubject.length > 3) {
+      const subChain = deepReason(engine, nextSubject, depth + 1, visited);
+      subChain.forEach(c => chain.push(c));
     }
   }
 
-  return chain;
+  return [...new Set(chain)];
 }
 
-// ─── Răspuns bazat pe inferență ───────────────────────────────────────────────
+// ─── Răspuns bazat pe inferență profundă ─────────────────────────────────────
 
 export function inferAnswer(engine: InferenceEngine, question: string): string | null {
   if (engine.rules.length === 0) return null;
   const n = normInfer(question);
 
-  // Extrage subiectul întrebării
   const subjectMatch = n.match(/(?:ce este|ce e|ce face|cum e|cum este|ce reprezinta|ce inseamna|spune-mi despre)\s+(.+?)[\?]?$/);
   if (!subjectMatch) return null;
 
   const subject = subjectMatch[1].trim();
-  const chain = chainReason(engine, subject);
+  const chain = deepReason(engine, subject);
   if (chain.length === 0) return null;
 
   const topRule = engine.rules.find(r =>
     r.subject === subject || r.subject.includes(subject)
   );
   const confidence = topRule?.confidence ?? 0.7;
-  const certainty = confidence > 0.85 ? 'Conform celor reținute' : 'Pe baza a ce am dedus';
+  const certainty = confidence > 0.85 ? 'Conform arhitecturii mele cognitive' : 'Pe baza asociațiilor neuronale deduse';
 
   const lines = [`${certainty}:`];
-  chain.slice(0, 2).forEach(c => lines.push(`• ${c}`));
+  chain.slice(0, 5).forEach(c => lines.push(`• ${c}`));
 
   if (confidence < 0.8) {
-    lines.push(`\n*(Certitudine: ${Math.round(confidence * 100)}% — poți corecta dacă e greșit)*`);
+    lines.push(`\n*(Nivel de certitudine: ${Math.round(confidence * 100)}% — raționament în curs de rafinare)*`);
   }
 
   return lines.join('\n');
 }
+
 
 // ─── Raport motor de inferență ────────────────────────────────────────────────
 

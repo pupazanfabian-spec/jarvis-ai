@@ -554,11 +554,17 @@ function FeedbackToast({ visible, icon, label, color }: { visible: boolean; icon
 }
 
 const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
-  // 1. Hooks first (Always called in the same order)
   const isUser = message?.role === 'user';
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
   const [menuVisible, setMenuVisible] = useState(false);
   const [copied, setCopiedMsg] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
@@ -586,18 +592,8 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
     );
   }, [isUser, hasCode]);
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, tension: 100, friction: 10, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 100, friction: 10, useNativeDriver: true }),
-    ]).start();
-  }, [fadeAnim, slideAnim, scaleAnim]);
-
-  // 2. Early return AFTER all hooks
   if (!message || !message.content) return null;
 
-  // 3. Derived variables and helper functions
   const timestamp = message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp || Date.now());
   const timeStr = timestamp.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
 
@@ -645,10 +641,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
           isUser ? styles.userContainer : styles.aiContainer,
           { 
             opacity: fadeAnim, 
-            transform: [
-              { translateY: slideAnim },
-              { scale: scaleAnim }
-            ] 
+            transform: [{ translateY: slideAnim }]
           },
         ]}
       >
@@ -680,6 +673,7 @@ const ChatBubble = memo(function ChatBubble({ message, index }: Props) {
     </>
   );
 });
+
 
 export default ChatBubble;
 

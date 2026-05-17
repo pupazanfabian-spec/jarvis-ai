@@ -55,7 +55,6 @@ const INPUT_RANGE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 
 export default function ThinkingIndicator({ visible, complexity, mode = 'auto', provider, accessingMemory }: ThinkingIndicatorProps) {
   const [shouldRender, setShouldRender] = useState(visible);
-  const [internalComplexity, setInternalComplexity] = useState(1);
   const [reducedMotion, setReducedMotion] = useState(false);
   
   // Base Animation Values
@@ -125,19 +124,15 @@ export default function ThinkingIndicator({ visible, complexity, mode = 'auto', 
     });
   }, []);
 
+  const colorAnim = useRef(new Animated.Value(complexity)).current;
   useEffect(() => {
-    let interval: any;
-    if (visible) {
-      setInternalComplexity(1);
-      interval = setInterval(() => {
-        setInternalComplexity(prev => (prev < 8 ? prev + 1 : 8));
-      }, 1200);
-    } else {
-      setInternalComplexity(1);
-      if (interval) clearInterval(interval);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [visible]);
+    Animated.timing(colorAnim, { toValue: complexity, duration: 500, useNativeDriver: false }).start();
+  }, [complexity]);
+
+  const hudColor = colorAnim.interpolate({
+    inputRange: Object.keys(COMPLEXITY_COLORS).map(Number),
+    outputRange: Object.values(COMPLEXITY_COLORS),
+  }) as any;
 
   useEffect(() => {
     if (visible) {
@@ -280,9 +275,10 @@ export default function ThinkingIndicator({ visible, complexity, mode = 'auto', 
 
   if (!shouldRender) return null;
 
-  const currentComplexity = mode === 'auto' ? internalComplexity : complexity;
-  const hudColor = COMPLEXITY_COLORS[currentComplexity] || '#00d4ff';
-  const spinOuter = outerRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+    const currentComplexity = Math.max(1, Math.min(8, complexity || 1));
+
+    const spinOuter = outerRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const spinArc = arcRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const spinMid = midRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const spinMath = mathRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });

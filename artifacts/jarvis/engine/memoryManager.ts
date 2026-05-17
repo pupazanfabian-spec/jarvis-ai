@@ -228,7 +228,7 @@ export async function autoLink(newEntry: MemoryEntry): Promise<void> {
   }
 }
 
-import { createInferenceEngine, addFact, chainReason } from './inference';
+import { createInferenceEngine, addFact, deepReason } from './inference';
 
 export async function activeInference(query: string, recentMessages: string[] = []): Promise<string[]> {
   await _loadAll();
@@ -251,7 +251,7 @@ export async function activeInference(query: string, recentMessages: string[] = 
     addFact(engine, entry.content, 'deduced');
   }
 
-  return chainReason(engine, query);
+  return deepReason(engine, query);
 }
 
 export async function markCore(): Promise<void> {

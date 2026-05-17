@@ -20,7 +20,7 @@ import {
 } from './entities';
 import {
   InferenceEngine, createInferenceEngine, addFact as addInferenceFact,
-  inferAnswer, detectContradiction, getInferenceReport, chainReason,
+  inferAnswer, detectContradiction, getInferenceReport, deepReason,
 } from './inference';
 import {
   TemporalMemory, createTemporalMemory, queryTemporalMemory,

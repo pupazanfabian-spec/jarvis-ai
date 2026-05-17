@@ -32,15 +32,22 @@ for (let i = 0; i < NODES_COUNT; i++) {
 const NodePulse = ({ x, y, intensity }: { x: number, y: number, intensity: Props['intensity'] }) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(0.4);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
 
   React.useEffect(() => {
-    const duration = intensity === 'thinking' ? 1000 : 4000;
-    scale.value = withRepeat(withTiming(1.05, { duration, easing: Easing.inOut(Easing.ease) }), -1, true);
-    opacity.value = withRepeat(withTiming(0.6, { duration, easing: Easing.inOut(Easing.ease) }), -1, true);
+    const duration = intensity === 'thinking' ? 4000 : 8000;
+    const moveX = (Math.random() - 0.5) * 50;
+    const moveY = (Math.random() - 0.5) * 50;
+    
+    scale.value = withRepeat(withTiming(1.05, { duration: duration / 4, easing: Easing.inOut(Easing.ease) }), -1, true);
+    opacity.value = withRepeat(withTiming(0.6, { duration: duration / 4, easing: Easing.inOut(Easing.ease) }), -1, true);
+    translateX.value = withRepeat(withTiming(moveX, { duration, easing: Easing.linear }), -1, true);
+    translateY.value = withRepeat(withTiming(moveY, { duration, easing: Easing.linear }), -1, true);
   }, [intensity]);
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: scale.value }, { translateX: translateX.value }, { translateY: translateY.value }],
     opacity: opacity.value,
   }));
 
@@ -54,10 +61,17 @@ const NodePulse = ({ x, y, intensity }: { x: number, y: number, intensity: Props
 };
 
 export default function NeuralBackground({ intensity }: Props) {
-  const totalOpacity = intensity === 'thinking' ? 0.25 : 0.15;
+  const opacity = useSharedValue(0.15);
+  React.useEffect(() => {
+    opacity.value = withTiming(intensity === 'thinking' ? 0.6 : 0.2, { duration: 500 });
+  }, [intensity]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
   return (
-    <View style={[StyleSheet.absoluteFill, { opacity: totalOpacity }]} pointerEvents="none">
+    <Animated.View style={[StyleSheet.absoluteFill, containerStyle]} pointerEvents="none">
       <Svg style={StyleSheet.absoluteFill}>
         <Defs>
             <RadialGradient id="pulse">
@@ -81,7 +95,7 @@ export default function NeuralBackground({ intensity }: Props) {
       {nodes.map((n, i) => (
         <NodePulse key={i} x={n.x} y={n.y} intensity={intensity} />
       ))}
-    </View>
+    </Animated.View>
   );
 }
 

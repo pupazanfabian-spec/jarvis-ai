@@ -328,26 +328,27 @@ export function BrainProvider({ children }: { children: React.ReactNode }) {
 
       setMessages(prev => [...prev, userMsg]);
 
-      // 0. Weighted Recall + Active Inference (ADĂUGAT)
+      // 0. Weighted Recall + Active Inference
       let weightedMemories: any[] = [];
       let deducedFacts: any[] = [];
       let memoryContextString = '';
 
       try {
-        const recentCtx = messages.slice(-5).map(m => m.content);
-        weightedMemories = await (MemoryManager as any).recallWeighted?.(text.trim(), recentCtx).catch(() => []);
-        deducedFacts = await (MemoryManager as any).activeInference?.(text.trim(), recentCtx).catch(() => []);
+        const recentCtx = [...messages, userMsg].slice(-5).map(m => m.content);
+        
+        // NULL GUARD FIX: recallWeighted/activeInference pot returna null
+        // .catch(() => []) prinde erori, ?? [] prinde null/undefined
+        const recallResult = await (MemoryManager as any).recallWeighted?.(text.trim(), recentCtx).catch(() => []);
+        weightedMemories = Array.isArray(recallResult) ? recallResult : (recallResult ?? []);
+
+        const inferenceResult = await (MemoryManager as any).activeInference?.(text.trim(), recentCtx).catch(() => []);
+        deducedFacts = Array.isArray(inferenceResult) ? inferenceResult : (inferenceResult ?? []);
 
         if (weightedMemories.length > 0 || deducedFacts.length > 0) {
-          memoryContextString = "";
-          if (weightedMemories.length > 0) {
-            memoryContextString += "### [REGULI ȘI CONTEXT RELEVANT]\n" + 
-              weightedMemories.slice(0, 10).map((m: any) => `- ${m.content}`).join('\n') + "\n\n";
-          }
-          if (deducedFacts.length > 0) {
-            memoryContextString += "### [FAPTE DEDUSE DIN CONTEXT]\n" + 
-              deducedFacts.map((f: any) => `- ${f.content}`).join('\n') + "\n\n";
-          }
+          memoryContextString = "### [REGULI ȘI CONTEXT RELEVANT]\n" + 
+            weightedMemories.slice(0, 10).map((m: any) => `- ${m.content}`).join('\n') + "\n\n" +
+            "### [FAPTE DEDUSE DIN CONTEXT]\n" + 
+            deducedFacts.map((f: any) => `- ${f.content}`).join('\n') + "\n\n";
         }
       } catch (e) {
         console.warn('[Brain] Weighted recall/inference failed:', e);
@@ -768,8 +769,11 @@ export function useBrain() {
 async function _syncEntitiesFromDB(state: BrainState): Promise<void> {
   try {
     const rows = await loadAllEntities();
-    if (rows.length === 0) return;
-    const existing = new Set((state.entityTracker.entities || []).map(e => e.normalized));
+    if (!rows || rows.length === 0) return;
+    // NULL GUARD FIX: entityTracker.entities poate fi null/undefined dacă state e corupt
+    if (!state.entityTracker) state.entityTracker = createEntityTracker();
+    if (!Array.isArray(state.entityTracker.entities)) state.entityTracker.entities = [];
+    const existing = new Set(state.entityTracker.entities.map(e => e.normalized));
     rows.forEach(row => {
       if (!existing.has(row.name)) {
         state.entityTracker.entities.push({ id: row.name, type: 'concept', value: row.data.value, context: row.data.context || '', normalized: row.name, firstSeen: Date.now(), occurrences: 1 });

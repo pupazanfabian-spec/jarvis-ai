@@ -28,15 +28,6 @@ export default function TabLayout() {
         }} 
       />
       <Tabs.Screen 
-        name="dashboard" 
-        options={{ 
-          title: "Stats",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
-          ),
-        }} 
-      />
-      <Tabs.Screen 
         name="code-studio" 
         options={{ 
           title: "Studio",

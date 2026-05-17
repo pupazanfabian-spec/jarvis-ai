@@ -93,7 +93,7 @@ export class JarvisOrchestrator {
     reason: string;
     complexity: number;
   } | null> {
-    if (complexityScore < 6) return null;
+    if (complexityScore < 5) return null;
 
     const allSkills = await getAllSkills();
     const skill = detectSkill(message, allSkills);
@@ -107,7 +107,7 @@ export class JarvisOrchestrator {
     return {
       name: `Expert ${skill.name}`,
       skills: [skill.id],
-      reason: `Sarcina are o complexitate de ${complexityScore}/8 și necesită cunoștințe specializate în ${skill.name}.`,
+      reason: `Task-ul curent (complexitate ${complexityScore}/8) necesită un specialist în ${skill.name} pentru o execuție optimă.`,
       complexity: complexityScore
     };
   }

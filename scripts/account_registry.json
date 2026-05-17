@@ -1,0 +1,45 @@
+{
+  "accounts": [
+    {
+      "email": "pupazanfabian@gmail.com",
+      "alias": "cont1",
+      "models": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "quota_exhausted_models": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview"
+      ]
+    },
+    {
+      "email": "pupazanjarvis@gmail.com",
+      "alias": "cont2",
+      "models": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "quota_exhausted_models": []
+    },
+    {
+      "email": "pupazanjarvis1@gmail.com",
+      "alias": "cont3",
+      "models": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "quota_exhausted_models": []
+    },
+    {
+      "email": "sabrinaanghel1@gmail.com",
+      "alias": "cont4",
+      "models": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "quota_exhausted_models": []
+    }
+  ],
+  "current_account": 1,
+  "current_model": 0
+}
