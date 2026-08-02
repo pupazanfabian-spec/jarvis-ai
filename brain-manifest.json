@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "cipher": "AES-256-GCM",
+  "compression": "gzip",
+  "embeddingModel": "nvidia/nemotron-3-embed-1b:free",
+  "dimensions": 2048,
+  "documents": 444,
+  "chunks": 1030,
+  "sourceUpdatedAt": "2026-08-01T21:40:06.964Z",
+  "packedAt": "2026-08-02T16:24:03.981Z",
+  "metaFile": "brain-meta.enc",
+  "vectorsFile": "brain-vectors.enc",
+  "integrity": {
+    "brain-meta.enc": "cf1866015adc91cde24db04ed7ccac51bcedbc226f70d3db0e03279d41677352",
+    "brain-vectors.enc": "06caa2c1a49e87a8c7b67f33dd675f5fe0d00ca352675a5886be744b9641c07a"
+  },
+  "source": "brain-index.json"
+}

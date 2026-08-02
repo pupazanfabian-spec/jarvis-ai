@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070b10" />
+    <meta
+      name="description"
+      content="JARVIS Web Brain — memorie semantică personală, criptată în browser."
+    />
+    <title>JARVIS — Web Brain</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="JARVIS Web Brain">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span>
+          </span>
+          <span>
+            <strong>JARVIS</strong>
+            <small>WEB BRAIN</small>
+          </span>
+        </a>
+
+        <div class="top-actions">
+          <span class="privacy-chip" title="Cheia memoriei nu părăsește browserul">
+            <span class="privacy-dot"></span>
+            MEMORIE CRIPTATĂ
+          </span>
+          <button id="connectButton" class="button button-primary" type="button">
+            Conectează AI
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <section class="status-card">
+            <div class="eyebrow">STARE SISTEM</div>
+            <div class="brain-orb" aria-hidden="true">
+              <span class="brain-core"></span>
+              <span class="brain-ring ring-one"></span>
+              <span class="brain-ring ring-two"></span>
+            </div>
+            <h1>Creierul tău extern</h1>
+            <p id="brainSummary">Se verifică memoria criptată…</p>
+
+            <dl class="metrics">
+              <div>
+                <dt>Fișiere</dt>
+                <dd id="documentCount">—</dd>
+              </div>
+              <div>
+                <dt>Fragmente</dt>
+                <dd id="chunkCount">—</dd>
+              </div>
+              <div>
+                <dt>Mod</dt>
+                <dd id="searchMode">BLOCAT</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="security-card">
+            <div class="eyebrow">CONFIDENȚIALITATE</div>
+            <ul>
+              <li>Memoria publicată este AES-256-GCM criptată.</li>
+              <li>Cheia din link nu este trimisă serverului.</li>
+              <li>Cheia AI rămâne doar în sesiunea browserului.</li>
+              <li>Doar fragmentele găsite sunt trimise către OpenRouter.</li>
+            </ul>
+            <button id="copyPrivateLink" class="text-button" type="button" disabled>
+              Copiază linkul privat
+            </button>
+          </section>
+
+          <section class="provider-card">
+            <span id="providerDot" class="provider-dot"></span>
+            <span>
+              <small>FURNIZOR AI</small>
+              <strong id="providerStatus">Neconectat</strong>
+            </span>
+          </section>
+        </aside>
+
+        <section class="chat-panel" aria-label="Conversație JARVIS">
+          <div class="chat-head">
+            <div>
+              <div class="eyebrow">CONVERSAȚIE PRIVATĂ</div>
+              <h2>Întreabă ce știe BRAIN</h2>
+            </div>
+            <button id="clearChat" class="icon-button" type="button" title="Șterge conversația">
+              Șterge
+            </button>
+          </div>
+
+          <div id="messages" class="messages" aria-live="polite">
+            <article class="message message-jarvis">
+              <div class="avatar">J</div>
+              <div class="message-body">
+                <div class="message-meta">JARVIS</div>
+                <div class="message-copy">
+                  Sunt pregătit. Deblochează memoria și conectează OpenRouter, apoi
+                  întreabă-mă în cuvintele tale.
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div id="quickPrompts" class="quick-prompts">
+            <button type="button">Care sunt problemele mele deschise?</button>
+            <button type="button">De ce nu vinde magazinul?</button>
+            <button type="button">Ce am reparat recent?</button>
+          </div>
+
+          <form id="chatForm" class="composer">
+            <textarea
+              id="promptInput"
+              rows="1"
+              maxlength="4000"
+              placeholder="Întreabă JARVIS…"
+              aria-label="Mesaj către JARVIS"
+            ></textarea>
+            <button id="sendButton" class="send-button" type="submit" aria-label="Trimite">
+              <span>Trimite</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 14-7-4 14-3-6-7-1Z"></path>
+              </svg>
+            </button>
+          </form>
+          <div id="composerHint" class="composer-hint">
+            Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser.
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="unlockDialog" class="modal">
+      <form method="dialog" class="modal-card" id="unlockForm">
+        <div class="modal-icon">◇</div>
+        <div class="eyebrow">ACCES PRIVAT</div>
+        <h2>Deblochează memoria</h2>
+        <p>
+          Deschide linkul privat primit sau introdu cheia de 43 de caractere.
+          Cheia nu este trimisă către GitHub.
+        </p>
+        <label>
+          Cheie BRAIN
+          <input id="brainKeyInput" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <div id="unlockError" class="form-error"></div>
+        <div class="modal-actions">
+          <button class="button button-primary" value="default" type="submit">
+            Deblochează
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="providerDialog" class="modal">
+      <form method="dialog" class="modal-card">
+        <div class="modal-icon">◈</div>
+        <div class="eyebrow">OPENROUTER</div>
+        <h2>Conectează inteligența</h2>
+        <p>
+          Autorizarea oficială PKCE creează o cheie controlată de tine. JARVIS o
+          ține numai în această filă.
+        </p>
+        <button id="oauthButton" class="button button-primary button-wide" type="button">
+          Conectează prin OpenRouter
+        </button>
+        <details class="manual-key">
+          <summary>Conectare manuală</summary>
+          <label>
+            Cheie OpenRouter
+            <input id="manualKeyInput" type="password" autocomplete="off" />
+          </label>
+          <button id="manualKeyButton" class="button button-secondary button-wide" type="button">
+            Folosește cheia în această sesiune
+          </button>
+        </details>
+        <button class="text-button close-modal" value="cancel" type="submit">Închide</button>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
