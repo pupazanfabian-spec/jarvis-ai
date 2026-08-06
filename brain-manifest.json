@@ -7,12 +7,12 @@
   "documents": 444,
   "chunks": 1030,
   "sourceUpdatedAt": "2026-08-01T21:40:06.964Z",
-  "packedAt": "2026-08-06T15:25:21.033Z",
+  "packedAt": "2026-08-06T17:03:15.444Z",
   "metaFile": "brain-meta.enc",
   "vectorsFile": "brain-vectors.enc",
   "integrity": {
-    "brain-meta.enc": "75655111a1b905bc02c97b4c8be1a0153d2e7afb2c828cdf6d15df88d0dfd14a",
-    "brain-vectors.enc": "297f4be4035632cf1dab1f90e3f2451e7b1b9582dcf1fb4a4800eb2fd81d2508"
+    "brain-meta.enc": "2627326855e6fb41305cee5dca08051a2ed08867638fb26ac3a0a1df2fc74888",
+    "brain-vectors.enc": "ebf82a6ed42eaaa980e55e0b076f465062210c424efe6df81fb9f3a4133c3eea"
   },
   "source": "brain-index.json"
 }
