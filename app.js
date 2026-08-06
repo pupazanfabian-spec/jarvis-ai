@@ -5,6 +5,7 @@ const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 const CHAT_MODEL = "openrouter/free";
 const STORAGE = {
   brainKey: "jarvis.brain.key.v1",
+  rememberedBrainKey: "jarvis.brain.key.remember.v1",
   openRouterKey: "jarvis.openrouter.key.v1",
   pkceVerifier: "jarvis.openrouter.pkce.v1",
   messages: "jarvis.messages.v1"
@@ -29,6 +30,9 @@ const ui = {
   providerStatus: document.querySelector("#providerStatus"),
   connectButton: document.querySelector("#connectButton"),
   copyPrivateLink: document.querySelector("#copyPrivateLink"),
+  forgetDeviceKey: document.querySelector("#forgetDeviceKey"),
+  forgetSavedKey: document.querySelector("#forgetSavedKey"),
+  rememberDeviceKey: document.querySelector("#rememberDeviceKey"),
   clearChat: document.querySelector("#clearChat"),
   messages: document.querySelector("#messages"),
   quickPrompts: document.querySelector("#quickPrompts"),
@@ -39,6 +43,7 @@ const ui = {
   unlockDialog: document.querySelector("#unlockDialog"),
   unlockForm: document.querySelector("#unlockForm"),
   brainKeyInput: document.querySelector("#brainKeyInput"),
+  rememberBrainKey: document.querySelector("#rememberBrainKey"),
   unlockError: document.querySelector("#unlockError"),
   providerDialog: document.querySelector("#providerDialog"),
   oauthButton: document.querySelector("#oauthButton"),
@@ -46,6 +51,25 @@ const ui = {
   manualKeyButton: document.querySelector("#manualKeyButton"),
   toast: document.querySelector("#toast")
 };
+
+function syncRememberControls(remembered) {
+  ui.rememberBrainKey.checked = remembered;
+  ui.rememberDeviceKey.checked = remembered;
+}
+
+// „Uită cheia" trebuie să fie disponibil ori de câte ori există ceva de uitat — mai ales
+// când cheia memorată nu mai descuie pachetul (rotație de cheie, pachet republicat).
+// Altfel utilizatorul rămâne blocat la fiecare pornire, fără cale de ieșire din interfață.
+function refreshForgetAvailability() {
+  const cheieSalvata = Boolean(localStorage.getItem(STORAGE.rememberedBrainKey));
+  const areCeva =
+    cheieSalvata || Boolean(sessionStorage.getItem(STORAGE.brainKey)) || state.brainReady;
+  ui.forgetDeviceKey.disabled = !areCeva;
+  // Când deblocarea eșuează, dialogul modal acoperă panoul de stare, deci butonul de acolo
+  // nu poate fi apăsat. Fără o cale de ieșire chiar din dialog, o cheie salvată care nu mai
+  // descuie pachetul ar bloca aplicația la fiecare pornire.
+  ui.forgetSavedKey.hidden = !cheieSalvata;
+}
 
 function base64UrlToBytes(value) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -112,11 +136,20 @@ function extractBrainKey() {
   const fragment = new URLSearchParams(location.hash.slice(1));
   const fromUrl = fragment.get("k");
   if (fromUrl) {
-    sessionStorage.setItem(STORAGE.brainKey, fromUrl);
+    sessionStorage.setItem(STORAGE.brainKey, fromUrl.trim());
     history.replaceState(null, "", `${location.pathname}${location.search}`);
-    return fromUrl;
+    return fromUrl.trim();
   }
-  return sessionStorage.getItem(STORAGE.brainKey) || "";
+
+  const fromSession = sessionStorage.getItem(STORAGE.brainKey);
+  if (fromSession) return fromSession;
+
+  const remembered = localStorage.getItem(STORAGE.rememberedBrainKey) || "";
+  if (remembered) {
+    sessionStorage.setItem(STORAGE.brainKey, remembered);
+    syncRememberControls(true);
+  }
+  return remembered;
 }
 
 async function decryptAsset(buffer, keyBytes) {
@@ -181,6 +214,13 @@ async function loadBrain(keyValue) {
   state.vectors = vectors;
   state.brainReady = true;
   sessionStorage.setItem(STORAGE.brainKey, keyValue.trim());
+  if (ui.rememberBrainKey.checked) {
+    localStorage.setItem(STORAGE.rememberedBrainKey, keyValue.trim());
+  } else {
+    localStorage.removeItem(STORAGE.rememberedBrainKey);
+  }
+  syncRememberControls(Boolean(localStorage.getItem(STORAGE.rememberedBrainKey)));
+  ui.rememberDeviceKey.disabled = false;
 
   ui.documentCount.textContent = formatNumber(manifest.documents);
   ui.chunkCount.textContent = formatNumber(manifest.chunks);
@@ -188,6 +228,7 @@ async function loadBrain(keyValue) {
   ui.brainSummary.textContent =
     `${formatNumber(manifest.documents)} fișiere sunt disponibile pentru căutare semantică.`;
   ui.copyPrivateLink.disabled = false;
+  refreshForgetAvailability();
   ui.unlockDialog.close();
 }
 
@@ -535,6 +576,42 @@ async function handleOAuthCallback() {
   showToast("OpenRouter conectat. Cheia rămâne doar în această filă.");
 }
 
+ui.rememberBrainKey.addEventListener("change", () => {
+  ui.rememberDeviceKey.checked = ui.rememberBrainKey.checked;
+  // Debifarea trebuie să aibă efect imediat asupra a ceea ce e deja salvat, altfel
+  // controalele ar arăta „nu ține minte" în timp ce cheia e încă pe dispozitiv.
+  if (!ui.rememberBrainKey.checked) {
+    localStorage.removeItem(STORAGE.rememberedBrainKey);
+    refreshForgetAvailability();
+  }
+});
+
+ui.rememberDeviceKey.addEventListener("change", () => {
+  if (!state.brainReady) return;
+
+  const key = sessionStorage.getItem(STORAGE.brainKey);
+  if (ui.rememberDeviceKey.checked && key) {
+    localStorage.setItem(STORAGE.rememberedBrainKey, key);
+    syncRememberControls(true);
+    showToast("Cheia va fi păstrată pe acest dispozitiv.");
+  } else {
+    localStorage.removeItem(STORAGE.rememberedBrainKey);
+    syncRememberControls(false);
+    showToast("Cheia nu mai este păstrată pe acest dispozitiv.");
+  }
+  refreshForgetAvailability();
+});
+
+ui.forgetSavedKey.addEventListener("click", () => {
+  localStorage.removeItem(STORAGE.rememberedBrainKey);
+  sessionStorage.removeItem(STORAGE.brainKey);
+  syncRememberControls(false);
+  ui.brainKeyInput.value = "";
+  ui.unlockError.textContent = "";
+  refreshForgetAvailability();
+  showToast("Cheia salvată a fost ștearsă de pe acest dispozitiv.");
+});
+
 ui.unlockForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   ui.unlockError.textContent = "";
@@ -568,11 +645,47 @@ ui.manualKeyButton.addEventListener("click", () => {
 });
 
 ui.copyPrivateLink.addEventListener("click", async () => {
-  const key = sessionStorage.getItem(STORAGE.brainKey);
+  const key =
+    sessionStorage.getItem(STORAGE.brainKey) ||
+    localStorage.getItem(STORAGE.rememberedBrainKey);
   if (!key) return;
   const privateUrl = `${location.origin}${location.pathname}#k=${key}`;
   await navigator.clipboard.writeText(privateUrl);
   showToast("Linkul privat a fost copiat. Nu îl publica.");
+});
+
+ui.forgetDeviceKey.addEventListener("click", () => {
+  sessionStorage.removeItem(STORAGE.brainKey);
+  sessionStorage.removeItem(STORAGE.openRouterKey);
+  sessionStorage.removeItem(STORAGE.pkceVerifier);
+  sessionStorage.removeItem(STORAGE.messages);
+  localStorage.removeItem(STORAGE.rememberedBrainKey);
+
+  state.manifest = null;
+  state.chunks = [];
+  state.vectors = null;
+  state.brainReady = false;
+  state.openRouterKey = "";
+  state.history = [];
+
+  ui.brainKeyInput.value = "";
+  syncRememberControls(false);
+  ui.rememberDeviceKey.disabled = true;
+  ui.unlockError.textContent = "";
+  ui.documentCount.textContent = "—";
+  ui.chunkCount.textContent = "—";
+  ui.searchMode.textContent = "BLOCAT";
+  ui.brainSummary.textContent = "Memoria este blocată. Este necesar linkul privat.";
+  ui.copyPrivateLink.disabled = true;
+  refreshForgetAvailability();
+  setProviderConnected(false);
+
+  ui.messages.querySelectorAll(".message").forEach((message, index) => {
+    if (index > 0) message.remove();
+  });
+
+  if (!ui.unlockDialog.open) ui.unlockDialog.showModal();
+  showToast("Cheia și istoricul au fost uitate de pe acest dispozitiv.");
 });
 
 ui.chatForm.addEventListener("submit", (event) => {
@@ -605,7 +718,19 @@ ui.clearChat.addEventListener("click", () => {
   showToast("Conversația din această sesiune a fost ștearsă.");
 });
 
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register("./sw.js");
+  } catch (error) {
+    console.warn("Service worker-ul nu a putut fi înregistrat.", error);
+  }
+}
+
 async function boot() {
+  syncRememberControls(
+    Boolean(localStorage.getItem(STORAGE.rememberedBrainKey))
+  );
   setProviderConnected(Boolean(state.openRouterKey));
   renderStoredHistory();
   try {
@@ -618,6 +743,7 @@ async function boot() {
   const key = extractBrainKey();
   if (!key) {
     ui.brainSummary.textContent = "Memoria este blocată. Este necesar linkul privat.";
+    refreshForgetAvailability();
     ui.unlockDialog.showModal();
     return;
   }
@@ -625,10 +751,32 @@ async function boot() {
     await loadBrain(key);
   } catch (error) {
     sessionStorage.removeItem(STORAGE.brainKey);
+    // Butonul rămâne disponibil chiar și aici: dacă cheia memorată nu mai descuie
+    // pachetul, ea trebuie să poată fi ștearsă, altfel fiecare pornire o reîncearcă.
+    refreshForgetAvailability();
     ui.brainSummary.textContent = "Memoria nu a putut fi deblocată.";
     ui.unlockError.textContent = error.message;
     ui.unlockDialog.showModal();
   }
 }
 
+// Linkul privat lipit într-o filă deja deschisă schimbă doar fragmentul, iar browserul
+// nu reîncarcă documentul — fără asta, nu s-ar întâmpla nimic vizibil.
+window.addEventListener("hashchange", async () => {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  if (!fragment.get("k")) return;
+
+  const key = extractBrainKey();
+  if (!key) return;
+  try {
+    await loadBrain(key);
+    showToast("Memoria BRAIN a fost deblocată.");
+  } catch (error) {
+    sessionStorage.removeItem(STORAGE.brainKey);
+    ui.unlockError.textContent = error.message;
+    if (!ui.unlockDialog.open) ui.unlockDialog.showModal();
+  }
+});
+
+registerServiceWorker();
 boot();

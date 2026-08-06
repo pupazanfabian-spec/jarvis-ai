@@ -351,6 +351,46 @@ button {
   text-overflow: ellipsis;
 }
 
+.status-remember-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 17px;
+  cursor: pointer;
+}
+
+.status-remember-option input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 2px 0 0;
+  accent-color: var(--green);
+}
+
+.status-remember-option:has(input:disabled) {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.status-remember-option input:disabled {
+  cursor: default;
+}
+
+.forget-key {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.forget-saved-key {
+  margin-top: 14px;
+  text-align: center;
+  width: 100%;
+}
+
+.forget-saved-key[hidden] {
+  display: none;
+}
+
 .security-card ul {
   display: grid;
   gap: 10px;
@@ -704,6 +744,38 @@ button {
   outline: 0;
   background: #070c12;
   color: var(--text);
+}
+
+.modal-card .remember-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  cursor: pointer;
+}
+
+.modal-card .remember-option input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 2px 0 0;
+  accent-color: var(--green);
+}
+
+.remember-option strong,
+.remember-option small {
+  display: block;
+}
+
+.remember-option strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.remember-option small {
+  margin-top: 4px;
+  color: var(--faint);
+  line-height: 1.4;
 }
 
 .modal-card input:focus {

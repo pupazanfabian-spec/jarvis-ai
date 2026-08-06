@@ -10,6 +10,7 @@
     />
     <title>JARVIS — Web Brain</title>
     <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -65,6 +66,21 @@
                 <dd id="searchMode">BLOCAT</dd>
               </div>
             </dl>
+            <label class="remember-option status-remember-option">
+              <input id="rememberDeviceKey" type="checkbox" disabled />
+              <span>
+                <strong>Ține minte pe acest dispozitiv</strong>
+                <small>Atenție: oricine are acces poate citi notițele.</small>
+              </span>
+            </label>
+            <button
+              id="forgetDeviceKey"
+              class="text-button forget-key"
+              type="button"
+              disabled
+            >
+              Uită cheia de pe acest dispozitiv
+            </button>
           </section>
 
           <section class="security-card">
@@ -154,12 +170,29 @@
           Cheie BRAIN
           <input id="brainKeyInput" type="password" autocomplete="off" spellcheck="false" />
         </label>
+        <label class="remember-option">
+          <input id="rememberBrainKey" type="checkbox" />
+          <span>
+            <strong>Ține minte pe acest dispozitiv</strong>
+            <small>
+              Atenție: cine are acces la acest dispozitiv poate citi notițele.
+            </small>
+          </span>
+        </label>
         <div id="unlockError" class="form-error"></div>
         <div class="modal-actions">
           <button class="button button-primary" value="default" type="submit">
             Deblochează
           </button>
         </div>
+        <button
+          id="forgetSavedKey"
+          class="text-button forget-saved-key"
+          type="button"
+          hidden
+        >
+          Șterge cheia salvată pe acest dispozitiv
+        </button>
       </form>
     </dialog>
 

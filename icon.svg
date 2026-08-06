@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JARVIS Web Brain">
+  <defs>
+    <radialGradient id="core" cx="50%" cy="42%" r="58%">
+      <stop offset="0%" stop-color="#8ff6dd"/>
+      <stop offset="55%" stop-color="#4cecc2"/>
+      <stop offset="100%" stop-color="#1d8f76"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4cecc2" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#4cecc2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#070b10"/>
+  <circle cx="256" cy="256" r="190" fill="url(#glow)"/>
+
+  <!-- inelele orbitale, ca in interfata -->
+  <ellipse cx="256" cy="256" rx="150" ry="150" fill="none"
+           stroke="#4cecc2" stroke-opacity="0.22" stroke-width="6"/>
+  <ellipse cx="256" cy="256" rx="150" ry="66" fill="none"
+           stroke="#4cecc2" stroke-opacity="0.5" stroke-width="7"
+           transform="rotate(-28 256 256)"/>
+  <ellipse cx="256" cy="256" rx="150" ry="66" fill="none"
+           stroke="#4cecc2" stroke-opacity="0.28" stroke-width="7"
+           transform="rotate(34 256 256)"/>
+
+  <!-- nucleul -->
+  <circle cx="256" cy="256" r="62" fill="url(#core)"/>
+  <circle cx="256" cy="256" r="62" fill="none" stroke="#c8fff0" stroke-opacity="0.45" stroke-width="3"/>
+
+  <!-- noduri semantice -->
+  <circle cx="122" cy="200" r="13" fill="#4cecc2"/>
+  <circle cx="390" cy="312" r="13" fill="#4cecc2"/>
+  <circle cx="300" cy="118" r="10" fill="#4cecc2" fill-opacity="0.75"/>
+  <circle cx="212" cy="394" r="10" fill="#4cecc2" fill-opacity="0.75"/>
+</svg>
