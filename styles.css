@@ -592,13 +592,38 @@ button {
 
 .sources ol {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   margin: 9px 0 0;
   padding-left: 18px;
 }
 
 .sources li {
   overflow-wrap: anywhere;
+}
+
+.source-meta {
+  color: var(--muted);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.source-excerpt {
+  margin-top: 4px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0 7px 7px 0;
+  background: var(--green-soft);
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.message-actions {
+  margin-top: 9px;
+}
+
+.message-connect {
+  text-align: left;
 }
 
 .quick-prompts {

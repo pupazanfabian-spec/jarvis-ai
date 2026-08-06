@@ -116,7 +116,10 @@ function loadHistory() {
 }
 
 function saveHistory() {
-  sessionStorage.setItem(STORAGE.messages, JSON.stringify(state.history.slice(-16)));
+  // Tăiem și în memorie, nu doar la scriere: altfel, într-o filă ținută deschisă mult timp,
+  // state.history creștea nelimitat, chiar dacă în sessionStorage ajungeau doar 16 intrări.
+  if (state.history.length > 16) state.history = state.history.slice(-16);
+  sessionStorage.setItem(STORAGE.messages, JSON.stringify(state.history));
 }
 
 function setProviderConnected(connected) {
@@ -369,7 +372,43 @@ function contextFromResults(results) {
   return blocks.join("\n\n---\n\n");
 }
 
-function appendMessage(role, content = "", sources = []) {
+function excerptFromChunk(text, limit = 200) {
+  // Fiecare fragment începe cu un antet „Source:" / „Section:" care repetă calea și titlul
+  // deja afișate deasupra. Fără el, extrasul arată conținutul real al notiței.
+  // Ancorat la începutul textului, nu pe fiecare linie: altfel o linie legitimă din notiță
+  // care începe cu „Source:" ar dispărea din extras.
+  const body = String(text || "").replace(/^(?:[ \t]*(?:Source|Section):[^\n]*\n?)+/i, "");
+  const normalized = body.replace(/\s+/g, " ").trim();
+  const characters = Array.from(normalized);
+  if (characters.length <= limit) return normalized;
+
+  const candidate = characters.slice(0, limit + 1).join("");
+  const boundary = candidate.lastIndexOf(" ");
+  const excerpt =
+    boundary > 0
+      ? candidate.slice(0, boundary)
+      : characters.slice(0, limit).join("");
+  return `${excerpt.trimEnd()}…`;
+}
+
+function addConnectAction(messageCopy) {
+  const body = messageCopy.closest(".message-body");
+  if (!body || body.querySelector(".message-connect")) return;
+
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  const button = document.createElement("button");
+  button.className = "text-button message-connect";
+  button.type = "button";
+  button.textContent = "Conectează OpenRouter pentru un răspuns compus";
+  button.addEventListener("click", () => {
+    if (!ui.providerDialog.open) ui.providerDialog.showModal();
+  });
+  actions.append(button);
+  body.append(actions);
+}
+
+function appendMessage(role, content = "", sources = [], options = {}) {
   const article = document.createElement("article");
   article.className = `message message-${role === "user" ? "user" : "jarvis"}`;
 
@@ -390,19 +429,28 @@ function appendMessage(role, content = "", sources = []) {
   if (sources.length) {
     const details = document.createElement("details");
     details.className = "sources";
+    details.open = Boolean(options.openSources);
     const summary = document.createElement("summary");
     summary.textContent = `${sources.length} surse din BRAIN`;
     const list = document.createElement("ol");
     for (const item of sources) {
       const row = document.createElement("li");
-      row.textContent = `${item.chunk.path} — ${item.chunk.title} (${Math.round(
+      const sourceMeta = document.createElement("div");
+      sourceMeta.className = "source-meta";
+      sourceMeta.textContent = `${item.chunk.path} — ${item.chunk.title} (${Math.round(
         item.score * 100
       )}%)`;
+      const excerpt = document.createElement("div");
+      excerpt.className = "source-excerpt";
+      excerpt.textContent = excerptFromChunk(item.chunk.text);
+      row.append(sourceMeta, excerpt);
       list.append(row);
     }
     details.append(summary, list);
     body.append(details);
   }
+
+  if (options.showConnect) addConnectAction(copy);
 
   article.append(avatar, body);
   ui.messages.append(article);
@@ -489,23 +537,39 @@ async function sendMessage(question) {
     ui.unlockDialog.showModal();
     return;
   }
-  if (!state.openRouterKey) {
-    ui.providerDialog.showModal();
-    return;
-  }
   if (state.busy) return;
 
+  const hasAiConnection = Boolean(state.openRouterKey);
   appendMessage("user", question);
   state.history.push({ role: "user", content: question });
   saveHistory();
   ui.promptInput.value = "";
   resizePrompt();
-  setBusy(true, "JARVIS caută semantic în BRAIN…");
+  setBusy(
+    true,
+    hasAiConnection
+      ? "JARVIS caută semantic în BRAIN…"
+      : "JARVIS caută local în BRAIN…"
+  );
 
   let results = [];
   let answerTarget;
   try {
     results = await searchBrain(question);
+
+    if (!hasAiConnection) {
+      const localMessage = results.length
+        ? "Am căutat local în notițele tale, fără AI conectat. Fragmentele relevante sunt afișate mai jos. Conectează OpenRouter dacă vrei și un răspuns compus."
+        : "Am căutat local în notițele tale, fără AI conectat, dar nu am găsit fragmente relevante. Conectează OpenRouter dacă vrei și un răspuns compus.";
+      appendMessage("assistant", localMessage, results, {
+        openSources: true,
+        showConnect: true
+      });
+      state.history.push({ role: "assistant", content: localMessage });
+      saveHistory();
+      return;
+    }
+
     answerTarget = appendMessage("assistant", "", results);
     ui.composerHint.textContent = `${results.length} fragmente selectate. JARVIS compune răspunsul…`;
     const answer = await streamAnswer(question, results, answerTarget);
@@ -515,9 +579,23 @@ async function sendMessage(question) {
   } catch (error) {
     if (!answerTarget) answerTarget = appendMessage("assistant");
     answerTarget.classList.remove("streaming");
-    answerTarget.textContent = `Nu am putut finaliza răspunsul: ${error.message}`;
+    answerTarget.textContent = results.length
+      ? `Conectarea AI a eșuat: ${error.message} Fragmentele găsite local rămân disponibile mai jos.`
+      : `Conectarea AI a eșuat: ${error.message} Nu am găsit nici fragmente locale relevante.`;
+    // Salvăm și eșecul în istoric: altfel, după reîncărcare, întrebarea apărea fără niciun
+    // răspuns, iar cererea următoare pornea cu o conversație aparent incompletă.
+    state.history.push({ role: "assistant", content: answerTarget.textContent });
+    saveHistory();
+    const sources = answerTarget
+      .closest(".message-body")
+      ?.querySelector(".sources");
+    if (sources) sources.open = true;
+    addConnectAction(answerTarget);
   } finally {
-    setBusy(false, "Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser.");
+    setBusy(
+      false,
+      "Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser."
+    );
     ui.promptInput.focus();
   }
 }
