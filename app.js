@@ -378,7 +378,12 @@ function excerptFromChunk(text, limit = 200) {
   // Ancorat la începutul textului, nu pe fiecare linie: altfel o linie legitimă din notiță
   // care începe cu „Source:" ar dispărea din extras.
   const body = String(text || "").replace(/^(?:[ \t]*(?:Source|Section):[^\n]*\n?)+/i, "");
-  const normalized = body.replace(/\s+/g, " ").trim();
+  // Notele din vault încep cu frontmatter YAML („tip:", „actualizat:", „tags:"). Pentru cine
+  // citește extrasul, acelea sunt zgomot: vrea primul rând de conținut, nu metadatele.
+  const faraFrontmatter = body.replace(/^\s*---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+  const normalized = (faraFrontmatter.trim() ? faraFrontmatter : body)
+    .replace(/\s+/g, " ")
+    .trim();
   const characters = Array.from(normalized);
   if (characters.length <= limit) return normalized;
 
