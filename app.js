@@ -396,6 +396,264 @@ function excerptFromChunk(text, limit = 200) {
   return `${excerpt.trimEnd()}…`;
 }
 
+async function copyText(value, button, confirmation = "Copiat") {
+  try {
+    await navigator.clipboard.writeText(value);
+    // Reținem eticheta o singură dată. Altfel, la a doua apăsare rapidă, „precedenta" era
+    // deja „Copiat", iar butonul rămânea blocat pe confirmare fără să mai revină.
+    if (button.dataset.label === undefined) button.dataset.label = button.textContent;
+    const previous = button.dataset.label;
+    button.textContent = confirmation;
+    button.classList.add("copied");
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(() => {
+      button.textContent = previous;
+      button.classList.remove("copied");
+    }, 1400);
+  } catch {
+    showToast("Textul nu a putut fi copiat.");
+  }
+}
+
+function appendInlineMarkdown(parent, value) {
+  const pattern =
+    /(`[^`\n]+`|\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_)/g;
+  let cursor = 0;
+
+  for (const match of value.matchAll(pattern)) {
+    if (match.index > cursor) {
+      parent.append(document.createTextNode(value.slice(cursor, match.index)));
+    }
+
+    const token = match[0];
+    if (token.startsWith("`")) {
+      const code = document.createElement("code");
+      code.textContent = token.slice(1, -1);
+      parent.append(code);
+    } else if (token.startsWith("[")) {
+      let url = null;
+      try {
+        const candidate = new URL(match[3]);
+        if (["http:", "https:"].includes(candidate.protocol)) url = candidate;
+      } catch {
+        url = null;
+      }
+
+      if (url) {
+        const link = document.createElement("a");
+        link.href = url.href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        appendInlineMarkdown(link, match[2]);
+        parent.append(link);
+      } else {
+        parent.append(document.createTextNode(token));
+      }
+    } else if (token.startsWith("**") || token.startsWith("__")) {
+      const strong = document.createElement("strong");
+      appendInlineMarkdown(strong, match[4] || match[5]);
+      parent.append(strong);
+    } else {
+      const emphasis = document.createElement("em");
+      appendInlineMarkdown(emphasis, match[6] || match[7]);
+      parent.append(emphasis);
+    }
+
+    cursor = match.index + token.length;
+  }
+
+  if (cursor < value.length) {
+    parent.append(document.createTextNode(value.slice(cursor)));
+  }
+}
+
+function isMarkdownBlockStart(line) {
+  return (
+    /^```/.test(line) ||
+    /^#{2,3}\s+/.test(line) ||
+    /^\s*(?:[-*_]\s*){3,}$/.test(line) ||
+    /^>\s?/.test(line) ||
+    /^\s*[-+*]\s+/.test(line) ||
+    /^\s*\d+[.)]\s+/.test(line)
+  );
+}
+
+function createCodeBlock(codeText, language) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "code-block";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "code-toolbar";
+  const label = document.createElement("span");
+  label.textContent = language || "cod";
+  const button = document.createElement("button");
+  button.className = "code-copy";
+  button.type = "button";
+  button.textContent = "Copiază";
+  button.setAttribute("aria-label", "Copiază blocul de cod");
+  button.addEventListener("click", () => copyText(codeText, button));
+  toolbar.append(label, button);
+
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  if (language) code.dataset.language = language;
+  code.textContent = codeText;
+  pre.append(code);
+  wrapper.append(toolbar, pre);
+  return wrapper;
+}
+
+function renderMarkdown(target, markdown) {
+  const fragment = document.createDocumentFragment();
+  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    const fence = line.match(/^```([\w+-]*)\s*$/);
+    if (fence) {
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      fragment.append(createCodeBlock(codeLines.join("\n"), fence[1]));
+      continue;
+    }
+
+    const heading = line.match(/^(##|###)\s+(.+)$/);
+    if (heading) {
+      const element = document.createElement(heading[1] === "##" ? "h3" : "h4");
+      appendInlineMarkdown(element, heading[2]);
+      fragment.append(element);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(line)) {
+      fragment.append(document.createElement("hr"));
+      index += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quoteLines = [];
+      while (index < lines.length && /^>\s?/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^>\s?/, ""));
+        index += 1;
+      }
+      const quote = document.createElement("blockquote");
+      appendInlineMarkdown(quote, quoteLines.join(" "));
+      fragment.append(quote);
+      continue;
+    }
+
+    const unordered = line.match(/^\s*[-+*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const list = document.createElement(unordered ? "ul" : "ol");
+      const itemPattern = unordered ? /^\s*[-+*]\s+(.+)$/ : /^\s*\d+[.)]\s+(.+)$/;
+      while (index < lines.length) {
+        const itemMatch = lines[index].match(itemPattern);
+        if (!itemMatch) break;
+        const item = document.createElement("li");
+        appendInlineMarkdown(item, itemMatch[1]);
+        list.append(item);
+        index += 1;
+      }
+      fragment.append(list);
+      continue;
+    }
+
+    const paragraphLines = [line];
+    index += 1;
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !isMarkdownBlockStart(lines[index])
+    ) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    const paragraph = document.createElement("p");
+    appendInlineMarkdown(paragraph, paragraphLines.join(" "));
+    fragment.append(paragraph);
+  }
+
+  target.replaceChildren(fragment);
+}
+
+function setAssistantContent(target, content) {
+  // Anulăm orice randare programată: altfel un tact rămas în așteptare de la stream ar putea
+  // rescrie peste conținutul setat aici (de exemplu peste mesajul de eroare).
+  clearTimeout(target.renderTimer);
+  target.renderTimer = null;
+  delete target.dataset.pendingMarkdown;
+  target.dataset.markdown = content;
+  renderMarkdown(target, content);
+}
+
+// În timpul streamului, fiecare fragment primit ar declanșa o reparsare completă a întregului
+// răspuns: cost pătratic și DOM reconstruit de zeci de ori. Limităm la o randare la ~90 ms,
+// păstrând mereu ultimul text primit. Randarea finală se face explicit, ca nimic să nu rămână
+// nedesenat dacă streamul se termină între două tacte.
+function scheduleAssistantContent(target, content) {
+  target.dataset.markdown = content;
+  target.dataset.pendingMarkdown = content;
+  if (target.renderTimer) return;
+  const deseneaza = () => {
+    target.renderTimer = null;
+    const text = target.dataset.pendingMarkdown;
+    if (text === undefined) return;
+    delete target.dataset.pendingMarkdown;
+    renderMarkdown(target, text);
+    ui.messages.scrollTop = ui.messages.scrollHeight;
+  };
+  deseneaza();
+  target.renderTimer = setTimeout(deseneaza, 90);
+}
+
+function flushAssistantContent(target) {
+  clearTimeout(target.renderTimer);
+  target.renderTimer = null;
+  const text = target.dataset.pendingMarkdown;
+  if (text === undefined) return;
+  delete target.dataset.pendingMarkdown;
+  renderMarkdown(target, text);
+}
+
+function addAssistantActions(body, content) {
+  const actions = document.createElement("div");
+  actions.className = "assistant-actions";
+
+  const time = document.createElement("time");
+  time.className = "message-time";
+  time.dateTime = new Date().toISOString();
+  time.textContent = new Intl.DateTimeFormat("ro-RO", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date());
+
+  const button = document.createElement("button");
+  button.className = "message-copy-button";
+  button.type = "button";
+  button.textContent = "Copiază răspunsul";
+  button.addEventListener("click", () => {
+    const messageCopy = body.querySelector(".message-copy");
+    copyText(messageCopy?.dataset.markdown || content, button);
+  });
+
+  actions.append(time, button);
+  body.append(actions);
+}
+
 function addConnectAction(messageCopy) {
   const body = messageCopy.closest(".message-body");
   if (!body || body.querySelector(".message-connect")) return;
@@ -428,7 +686,11 @@ function appendMessage(role, content = "", sources = [], options = {}) {
   meta.textContent = role === "user" ? "FABIAN" : "JARVIS";
   const copy = document.createElement("div");
   copy.className = "message-copy";
-  copy.textContent = content;
+  if (role === "user") {
+    copy.textContent = content;
+  } else {
+    setAssistantContent(copy, content);
+  }
   body.append(meta, copy);
 
   if (sources.length) {
@@ -442,9 +704,20 @@ function appendMessage(role, content = "", sources = [], options = {}) {
       const row = document.createElement("li");
       const sourceMeta = document.createElement("div");
       sourceMeta.className = "source-meta";
-      sourceMeta.textContent = `${item.chunk.path} — ${item.chunk.title} (${Math.round(
-        item.score * 100
-      )}%)`;
+      const sourcePath = document.createElement("span");
+      sourcePath.className = "source-path";
+      sourcePath.textContent = item.chunk.path;
+      const sourceTitle = document.createElement("strong");
+      sourceTitle.className = "source-title";
+      sourceTitle.textContent = item.chunk.title;
+      const sourceScore = document.createElement("span");
+      sourceScore.className = "source-score";
+      sourceScore.textContent = `${Math.round(item.score * 100)}%`;
+      sourceScore.setAttribute(
+        "aria-label",
+        `Scor de relevanță ${Math.round(item.score * 100)}%`
+      );
+      sourceMeta.append(sourcePath, sourceTitle, sourceScore);
       const excerpt = document.createElement("div");
       excerpt.className = "source-excerpt";
       excerpt.textContent = excerptFromChunk(item.chunk.text);
@@ -455,6 +728,7 @@ function appendMessage(role, content = "", sources = [], options = {}) {
     body.append(details);
   }
 
+  if (role !== "user") addAssistantActions(body, content);
   if (options.showConnect) addConnectAction(copy);
 
   article.append(avatar, body);
@@ -509,6 +783,7 @@ async function streamAnswer(question, results, target) {
   }
 
   target.classList.add("streaming");
+  target.closest(".message-body")?.classList.add("streaming-message");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -528,12 +803,13 @@ async function streamAnswer(question, results, target) {
       const text = event?.choices?.[0]?.delta?.content;
       if (typeof text === "string") {
         answer += text;
-        target.textContent = answer;
-        ui.messages.scrollTop = ui.messages.scrollHeight;
+        scheduleAssistantContent(target, answer);
       }
     }
   }
+  flushAssistantContent(target);
   target.classList.remove("streaming");
+  target.closest(".message-body")?.classList.remove("streaming-message");
   return answer.trim();
 }
 
@@ -584,12 +860,14 @@ async function sendMessage(question) {
   } catch (error) {
     if (!answerTarget) answerTarget = appendMessage("assistant");
     answerTarget.classList.remove("streaming");
-    answerTarget.textContent = results.length
+    answerTarget.closest(".message-body")?.classList.remove("streaming-message");
+    const failureMessage = results.length
       ? `Conectarea AI a eșuat: ${error.message} Fragmentele găsite local rămân disponibile mai jos.`
       : `Conectarea AI a eșuat: ${error.message} Nu am găsit nici fragmente locale relevante.`;
+    setAssistantContent(answerTarget, failureMessage);
     // Salvăm și eșecul în istoric: altfel, după reîncărcare, întrebarea apărea fără niciun
     // răspuns, iar cererea următoare pornea cu o conversație aparent incompletă.
-    state.history.push({ role: "assistant", content: answerTarget.textContent });
+    state.history.push({ role: "assistant", content: failureMessage });
     saveHistory();
     const sources = answerTarget
       .closest(".message-body")
