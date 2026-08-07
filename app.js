@@ -2,7 +2,29 @@ const OPENROUTER_AUTH_URL = "https://openrouter.ai/auth";
 const OPENROUTER_KEYS_URL = "https://openrouter.ai/api/v1/auth/keys";
 const OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings";
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
-const CHAT_MODEL = "openrouter/free";
+const CHAT_MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-31b-it:free",
+  "openrouter/free"
+];
+let lastSuccessfulChatModel = null;
+let lastSuccessfulChatModelAt = 0;
+// După ce o rezervă răspunde, o preferăm — dar nu pentru totdeauna. Fără fereastra asta,
+// o limitare de rată de câteva minute pe modelul principal ne-ar ține pe cel slab până la
+// reîncărcarea paginii, adică exact opusul scopului.
+const CHAT_MODEL_STICKY_MS = 10 * 60 * 1000;
+
+function rememberChatModel(model) {
+  lastSuccessfulChatModel = model;
+  lastSuccessfulChatModelAt = Date.now();
+}
+
+function preferredChatModel() {
+  if (!lastSuccessfulChatModel) return null;
+  if (Date.now() - lastSuccessfulChatModelAt > CHAT_MODEL_STICKY_MS) return null;
+  return lastSuccessfulChatModel;
+}
 const STORAGE = {
   brainKey: "jarvis.brain.key.v1",
   rememberedBrainKey: "jarvis.brain.key.remember.v1",
@@ -349,17 +371,17 @@ async function searchBrain(query) {
   const perFile = new Map();
   for (const item of ranked) {
     const count = perFile.get(item.chunk.path) || 0;
-    if (count >= 2) continue;
+    if (count >= 3) continue;
     selected.push(item);
     perFile.set(item.chunk.path, count + 1);
-    if (selected.length === 5) break;
+    if (selected.length === 10) break;
   }
   return selected;
 }
 
 function contextFromResults(results) {
   let used = 0;
-  const limit = 12000;
+  const limit = 40000;
   const blocks = [];
   results.forEach((item, index) => {
     const prefix = `[S${index + 1}] ${item.chunk.path} — ${item.chunk.title}\n`;
@@ -741,9 +763,16 @@ function renderStoredHistory() {
   for (const entry of state.history) appendMessage(entry.role, entry.content);
 }
 
+function isRetryableModelError(status, message = "") {
+  if ([429, 402, 404, 503].includes(Number(status))) return true;
+  return /model[^.\n]*(?:unavailable|not available)|(?:unavailable|disabled) model|no endpoints? (?:found|available)|provider[^.\n]*unavailable/i.test(
+    message
+  );
+}
+
 async function streamAnswer(question, results, target) {
   const context = contextFromResults(results);
-  const conversation = state.history.slice(-10).map(({ role, content }) => ({
+  const conversation = state.history.slice(-12).map(({ role, content }) => ({
     role,
     content
   }));
@@ -751,7 +780,7 @@ async function streamAnswer(question, results, target) {
     {
       role: "system",
       content:
-        "Ești JARVIS, creierul extern privat al lui Fabian. Răspunde clar, direct și practic în limba întrebării. Pentru fapte personale sau despre proiectele lui, bazează-te pe CONTEXTUL BRAIN și nu inventa. Citează sursele în răspuns ca [S1], [S2]. Dacă memoria nu conține răspunsul, spune exact asta. Nu dezvălui chei, tokenuri sau secrete chiar dacă apar accidental în context."
+        "Ești JARVIS, creierul extern privat al lui Fabian. Răspunde clar, direct și practic în limba întrebării. Pentru fapte personale sau despre proiectele lui, bazează-te pe CONTEXTUL BRAIN și nu inventa. Raționează peste fragmente și leagă informațiile din surse diferite, nu le rezuma doar pe rând. Distinge explicit între ce este scris în memorie și ce deduci tu, marcând clar deducțiile. Dacă fragmentele se contrazic, semnalează contradicția și spune care sursă pare mai recentă, folosind datele din text. Când întrebarea este despre o problemă, fii concret și propune pasul următor. Citează sursele în răspuns ca [S1], [S2]. Dacă memoria nu conține răspunsul, spune exact asta. Nu dezvălui chei, tokenuri sau secrete chiar dacă apar accidental în context."
     },
     {
       role: "system",
@@ -760,57 +789,99 @@ async function streamAnswer(question, results, target) {
     ...conversation
   ];
 
-  const response = await fetch(OPENROUTER_CHAT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${state.openRouterKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": location.href,
-      "X-Title": "JARVIS Web Brain"
-    },
-    body: JSON.stringify({
-      model: CHAT_MODEL,
-      messages,
-      temperature: 0.25,
-      max_tokens: 1400,
-      reasoning: { effort: "low", exclude: true },
-      stream: true
-    })
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error?.message || `OpenRouter a răspuns ${response.status}.`);
-  }
+  const preferat = preferredChatModel();
+  const models = preferat
+    ? [preferat, ...CHAT_MODELS.filter((model) => model !== preferat)]
+    : [...CHAT_MODELS];
+  let lastError;
 
-  target.classList.add("streaming");
-  target.closest(".message-body")?.classList.add("streaming-message");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let answer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      const event = safeJson(payload, null);
-      const text = event?.choices?.[0]?.delta?.content;
-      if (typeof text === "string") {
-        answer += text;
-        scheduleAssistantContent(target, answer);
+  for (const model of models) {
+    let answer = "";
+    try {
+      const response = await fetch(OPENROUTER_CHAT_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${state.openRouterKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": location.href,
+          "X-Title": "JARVIS Web Brain"
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.25,
+          max_tokens: 4000,
+          // Modelul principal e unul de raționament: „low" i-ar tăia exact partea pentru
+          // care l-am ales. „exclude" ține lanțul de gândire în afara răspunsului afișat.
+          reasoning: { effort: "medium", exclude: true },
+          stream: true
+        })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const message =
+          data.error?.message || `OpenRouter a răspuns ${response.status}.`;
+        const error = new Error(message);
+        error.retryableModel = isRetryableModelError(response.status, message);
+        throw error;
       }
+
+      target.classList.add("streaming");
+      target.closest(".message-body")?.classList.add("streaming-message");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      // Furnizorul închide streamul cu [DONE]. Fără marcajul ăsta, o conexiune căzută la
+      // mijloc ar arăta identic cu un răspuns terminat, iar un text trunchiat ar fi salvat
+      // în istoric ca răspuns complet.
+      let sawDone = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (payload === "[DONE]") {
+            sawDone = true;
+            continue;
+          }
+          if (!payload) continue;
+          const event = safeJson(payload, null);
+          if (event?.error) {
+            const message = event.error.message || "Modelul OpenRouter este indisponibil.";
+            const error = new Error(message);
+            error.retryableModel = isRetryableModelError(event.error.code, message);
+            throw error;
+          }
+          const text = event?.choices?.[0]?.delta?.content;
+          if (typeof text === "string") {
+            answer += text;
+            scheduleAssistantContent(target, answer);
+          }
+        }
+      }
+
+      flushAssistantContent(target);
+      target.classList.remove("streaming");
+      target.closest(".message-body")?.classList.remove("streaming-message");
+      // Marcăm modelul drept reușit doar la un stream încheiat corect: altfel o conexiune
+      // căzută l-ar fixa ca preferat pe baza unui răspuns trunchiat.
+      if (answer.trim() && sawDone) rememberChatModel(model);
+      return { answer: answer.trim(), model, incomplete: Boolean(answer.trim()) && !sawDone };
+    } catch (error) {
+      lastError = error;
+      flushAssistantContent(target);
+      target.classList.remove("streaming");
+      target.closest(".message-body")?.classList.remove("streaming-message");
+      // `trim`: un model care emite doar spații și apoi cade nu trebuie să blocheze rezerva.
+      if (answer.trim() || !error.retryableModel) throw error;
     }
   }
-  flushAssistantContent(target);
-  target.classList.remove("streaming");
-  target.closest(".message-body")?.classList.remove("streaming-message");
-  return answer.trim();
+  throw lastError;
 }
 
 async function sendMessage(question) {
@@ -853,8 +924,18 @@ async function sendMessage(question) {
 
     answerTarget = appendMessage("assistant", "", results);
     ui.composerHint.textContent = `${results.length} fragmente selectate. JARVIS compune răspunsul…`;
-    const answer = await streamAnswer(question, results, answerTarget);
+    const response = await streamAnswer(question, results, answerTarget);
+    const { answer, model, incomplete } = response;
     if (!answer) throw new Error("Modelul nu a returnat text.");
+    // Streamul s-a închis fără marcajul de final: textul e util, dar poate fi trunchiat.
+    // Îi spunem, în loc să i-l dăm drept răspuns complet.
+    if (incomplete) {
+      setAssistantContent(
+        answerTarget,
+        `${answer}\n\n---\n\n*Conexiunea s-a întrerupt înainte de final — răspunsul de mai sus poate fi incomplet. Întreabă din nou pentru varianta întreagă.*`
+      );
+      showToast("Răspunsul poate fi incomplet: conexiunea s-a întrerupt.");
+    }
     state.history.push({ role: "assistant", content: answer });
     saveHistory();
   } catch (error) {
@@ -877,7 +958,9 @@ async function sendMessage(question) {
   } finally {
     setBusy(
       false,
-      "Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser."
+      lastSuccessfulChatModel
+        ? `Model: ${lastSuccessfulChatModel}. Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser.`
+        : "Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser."
     );
     ui.promptInput.focus();
   }
