@@ -1,3 +1,7 @@
 .unlock-key
 brain-index.json
 
+
+# Creierul criptat nu mai sta pe un site public: il serveste Worker-ul Cloudflare, care cere token.
+brain-meta.enc
+brain-vectors.enc
