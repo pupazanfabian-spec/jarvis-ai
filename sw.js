@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "jarvis-";
-const STATIC_CACHE = `${CACHE_PREFIX}static-v1`;
+const STATIC_CACHE = `${CACHE_PREFIX}static-v2`;
 const STATIC_ASSETS = [
   "./",
   "./index.html",

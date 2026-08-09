@@ -39,6 +39,8 @@ const state = {
   vectors: null,
   brainReady: false,
   openRouterKey: sessionStorage.getItem(STORAGE.openRouterKey) || "",
+  activeProvider: "",
+  activeModel: "",
   busy: false,
   history: loadHistory()
 };
@@ -144,9 +146,20 @@ function saveHistory() {
   sessionStorage.setItem(STORAGE.messages, JSON.stringify(state.history));
 }
 
-function setProviderConnected(connected) {
+function setProviderConnected(connected, provider = "", model = "") {
+  const labels = {
+    anthropic: "Claude activ",
+    openai: "GPT activ",
+    openrouter: "OpenRouter activ",
+    groq: "Groq activ"
+  };
+
+  if (provider) state.activeProvider = provider;
+  if (model) state.activeModel = model;
   ui.providerDot.classList.toggle("connected", connected);
-  ui.providerStatus.textContent = connected ? "OpenRouter conectat" : "Neconectat";
+  ui.providerStatus.textContent = connected
+    ? labels[state.activeProvider] || "JARVIS AI conectat"
+    : "Neconectat";
   ui.connectButton.textContent = connected ? "AI conectat" : "Conectează AI";
 }
 
@@ -826,6 +839,10 @@ async function streamAnswer(question, results, target) {
         throw error;
       }
 
+      const provider = response.headers.get("X-Jarvis-Provider") || "openrouter";
+      const activeModel = response.headers.get("X-Jarvis-Model") || model;
+      setProviderConnected(true, provider, activeModel);
+
       target.classList.add("streaming");
       target.closest(".message-body")?.classList.add("streaming-message");
       const reader = response.body.getReader();
@@ -871,7 +888,12 @@ async function streamAnswer(question, results, target) {
       // Marcăm modelul drept reușit doar la un stream încheiat corect: altfel o conexiune
       // căzută l-ar fixa ca preferat pe baza unui răspuns trunchiat.
       if (answer.trim() && sawDone) rememberChatModel(model);
-      return { answer: answer.trim(), model, incomplete: Boolean(answer.trim()) && !sawDone };
+      return {
+        answer: answer.trim(),
+        model: activeModel,
+        provider,
+        incomplete: Boolean(answer.trim()) && !sawDone
+      };
     } catch (error) {
       lastError = error;
       flushAssistantContent(target);
@@ -958,8 +980,8 @@ async function sendMessage(question) {
   } finally {
     setBusy(
       false,
-      lastSuccessfulChatModel
-        ? `Model: ${lastSuccessfulChatModel}. Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser.`
+      state.activeModel
+        ? `Motor: ${state.activeProvider || "AI"} · Model: ${state.activeModel}. Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser.`
         : "Memoria și cheia AI sunt păstrate numai în sesiunea acestui browser."
     );
     ui.promptInput.focus();
@@ -1110,6 +1132,8 @@ ui.forgetDeviceKey.addEventListener("click", () => {
   state.vectors = null;
   state.brainReady = false;
   state.openRouterKey = "";
+  state.activeProvider = "";
+  state.activeModel = "";
   state.history = [];
 
   ui.brainKeyInput.value = "";
